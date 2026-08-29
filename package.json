@@ -1,0 +1,16 @@
+{
+  "name": "filmong-softlight",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bo xu ly hau ky Soft Light cho dslrBooth, goi qua Triggers tren may booth",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "selftest": "node src/cli.js --selftest",
+    "preview": "node src/cli.js --preview",
+    "bench": "node src/cli.js --bench"
+  },
+  "dependencies": {
+    "sharp": "^0.34.2"
+  }
+}

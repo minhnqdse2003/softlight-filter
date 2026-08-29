@@ -1,0 +1,60 @@
+{
+  "_doc": "Tham so hieu ung Soft Light. Sua truc tiep file nay roi chup thu, khong can build lai. Chay `npm run preview -- <anh.jpg>` de xem truoc ma khong ghi de.",
+  "enabled": true,
+
+  "softFocus": {
+    "_doc": "Lam mo NHE ban kinh nho - day la tang giam do net that su, lam min da va soi toc. radiusPct tinh theo canh dai cua anh.",
+    "amount": 0.2,
+    "radiusPct": 0.22
+  },
+
+  "clarity": {
+    "_doc": "Giam do net / do tuong phan cuc bo. amount = ty le pha lop mo ban kinh lon vao anh goc.",
+    "amount": 0.35,
+    "radiusPct": 2.2
+  },
+
+  "glow": {
+    "_doc": "Soft focus / bong bong. Lop mo duoc cat nguong chi giu vung sang roi screen len anh, nen quang sang bam theo cho bat sang cua tung anh.",
+    "amount": 0.65,
+    "radiusPct": 2.2,
+    "threshold": 0.46
+  },
+
+  "tone": {
+    "_doc": "contrast am = giam tuong phan tong the. lift = nang vung den (0..0.1), tao cam giac bac mau ethereal.",
+    "contrast": -0.08,
+    "lift": 0.09
+  },
+
+  "warm": {
+    "_doc": "temp duong = am hon (tang do, giam lam). highlightWarmth phu them mau am len vung sang bang blend soft-light.",
+    "temp": 0.08,
+    "tint": 0.015,
+    "highlightWarmth": 0.08,
+    "highlightColor": "#ffd9a8"
+  },
+
+  "output": {
+    "_doc": "Chat luong JPEG ghi de. 4:4:4 giu mau vien toc/moi sac net hon 4:2:0.",
+    "quality": 95,
+    "chromaSubsampling": "4:4:4"
+  },
+
+  "backup": {
+    "_doc": "Anh goc duoc chep vao thu muc con nay truoc khi ghi de. Su ton tai cua ban backup CHINH LA dau hieu 'da xu ly' - nho vay trigger co ban hai lan cung khong xu ly chong.",
+    "enabled": true,
+    "folder": "_original"
+  },
+
+  "skip": {
+    "_doc": "Bo qua nhung file co duong dan chua mot trong cac chuoi nay. Dung khi dslrBooth goi ca tren file template da ghep - lam mem ca to in se nhoe luon khung va logo. Vi du: [\"\\prints\\\\\", \"_final\"]",
+    "pathContains": []
+  },
+
+  "limits": {
+    "_doc": "Bo qua anh nho hon minEdge px (thumbnail cua dslrBooth). maxMs chi de canh bao trong log khi xu ly qua cham so voi nhip chup.",
+    "minEdge": 400,
+    "maxMs": 1500
+  }
+}

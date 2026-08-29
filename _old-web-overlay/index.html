@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Filmong · Soft Light Overlay</title>
+</head>
+<body>
+<header class="top">
+  <div class="brand">Filmong <span>Soft Light Overlay</span></div>
+  <div class="hint">Tạo overlay PNG alpha cho dslrBooth</div>
+</header>
+
+<main class="layout">
+  <!-- ============ CỘT TRÁI ============ -->
+  <aside class="panel">
+
+    <div class="modebar" id="modebar">
+      <button data-m="soft" class="active">Soft light</button>
+      <button data-m="bake">Bake từ ảnh mẫu</button>
+    </div>
+
+    <!-- ─────────── CHẾ ĐỘ SOFT LIGHT ─────────── -->
+    <div id="pane-soft">
+      <section class="step">
+        <h2><i>1</i> Kiểu</h2>
+        <select id="slPreset"></select>
+      </section>
+
+      <section class="step hero">
+        <h2><i>2</i> Cường độ</h2>
+        <div class="bigval" id="o-sl-strength">100%</div>
+        <input type="range" id="sl-strength" class="big" min="0" max="200" value="100" step="1" />
+        <div class="ticks"><span>0</span><span>50</span><span>100</span><span>150</span><span>200</span></div>
+        <p class="note">Nhân toàn bộ độ mờ của lớp phủ. Đây là thứ duy nhất cần chỉnh trong đa số trường hợp.</p>
+      </section>
+
+      <section class="step">
+        <h2><i>3</i> Tinh chỉnh</h2>
+        <details id="tune">
+          <summary>Mở bảng chi tiết</summary>
+
+          <div class="grp">
+            <div class="grp-h">Màn sáng</div>
+            <label class="slider">Độ mờ <output id="o-haze">11.0%</output>
+              <input type="range" id="haze" min="0" max="35" value="11" step="0.5" />
+            </label>
+            <label class="rowc">Màu <input type="color" id="hazeColor" value="#fff6f1" /></label>
+          </div>
+
+          <div class="grp">
+            <div class="grp-h">Quầng sáng</div>
+            <label class="slider">Độ mạnh <output id="o-glow">0.90×</output>
+              <input type="range" id="glow" min="0" max="250" value="90" step="5" />
+            </label>
+            <label class="slider">Bán kính <output id="o-radius">1.25</output>
+              <input type="range" id="radius" min="20" max="300" value="125" step="5" />
+            </label>
+            <label class="rowc">Màu <input type="color" id="glowColor" value="#fffbf7" /></label>
+            <div class="posbox">
+              <div class="grp-h">Vị trí nguồn sáng</div>
+              <canvas id="posPad" class="pospad"></canvas>
+              <p class="note">Kéo chấm để đổi vị trí, hoặc bấm thẳng lên ảnh xem trước.</p>
+            </div>
+          </div>
+
+          <div class="grp">
+            <div class="grp-h">Tối góc</div>
+            <label class="slider">Độ mạnh <output id="o-vig">0%</output>
+              <input type="range" id="vignette" min="0" max="60" value="0" step="1" />
+            </label>
+            <label class="slider">Bán kính <output id="o-vigr">0.70</output>
+              <input type="range" id="vignetteRadius" min="10" max="120" value="70" step="5" />
+            </label>
+          </div>
+
+          <div class="grp">
+            <div class="grp-h">Hạt film</div>
+            <label class="slider">Độ mạnh <output id="o-sl-grain">1.02/255</output>
+              <input type="range" id="sl-grain" min="0" max="60" value="10" step="1" />
+            </label>
+            <label class="slider">Kích thước <output id="o-sl-gsize">1.6px</output>
+              <input type="range" id="sl-gsize" min="5" max="80" value="16" step="1" />
+            </label>
+          </div>
+
+          <button class="ghost" id="slReset">Đặt lại về kiểu đang chọn</button>
+        </details>
+      </section>
+    </div>
+
+    <!-- ─────────── CHẾ ĐỘ BAKE TỪ ẢNH MẪU ─────────── -->
+    <div id="pane-bake" class="hidden">
+      <section class="step">
+        <h2><i>1</i> Cặp ảnh gốc / đã filter</h2>
+        <div id="drop" class="drop">
+          <strong>Kéo thả ảnh vào đây</strong>
+          <span>Theo thứ tự: <b>gốc</b> rồi <b>đã filter</b>. Thả nhiều file sẽ tự ghép từng đôi.</span>
+          <button class="ghost" id="pick">Chọn file…</button>
+          <input type="file" id="file" accept="image/*" multiple hidden />
+        </div>
+        <div id="pairs" class="pairs"></div>
+      </section>
+
+      <section class="step">
+        <h2><i>2</i> Bake</h2>
+        <div class="row">
+          <label>Độ mượt
+            <select id="degree">
+              <option value="2">Bậc 2</option>
+              <option value="3">Bậc 3</option>
+              <option value="4" selected>Bậc 4</option>
+              <option value="5">Bậc 5</option>
+              <option value="6">Bậc 6</option>
+            </select>
+          </label>
+          <label class="chk"><input type="checkbox" id="radial" checked /> Vignette</label>
+        </div>
+        <button class="primary" id="bake" disabled>Bake overlay</button>
+        <div id="diag" class="diag hidden"></div>
+      </section>
+
+      <section class="step">
+        <h2><i>3</i> Tinh chỉnh</h2>
+        <label class="slider">Cường độ <output id="o-strength">100%</output>
+          <input type="range" id="strength" min="0" max="200" value="100" step="1" />
+        </label>
+        <label>Hạt
+          <select id="grainMode">
+            <option value="procedural" selected>Sinh lại procedural</option>
+            <option value="original">Giữ nguyên từ ảnh mẫu</option>
+            <option value="off">Tắt</option>
+          </select>
+        </label>
+        <label class="slider">Độ mạnh hạt <output id="o-gamt">100%</output>
+          <input type="range" id="grainAmount" min="0" max="300" value="100" step="5" />
+        </label>
+        <label class="slider">Kích thước hạt <output id="o-gsc">1.00×</output>
+          <input type="range" id="grainScale" min="25" max="400" value="100" step="5" />
+        </label>
+      </section>
+    </div>
+
+    <!-- ─────────── DÙNG CHUNG ─────────── -->
+    <section class="step">
+      <h2><i>4</i> Canvas &amp; ô ảnh</h2>
+      <label>Kích thước xuất <select id="canvasPreset"></select></label>
+      <div class="row tight">
+        <label>Rộng<input type="number" id="cw" min="16" max="12000" /></label>
+        <label>Cao<input type="number" id="ch" min="16" max="12000" /></label>
+        <label>DPI<input type="number" id="dpi" min="36" max="1200" /></label>
+      </div>
+      <div class="row">
+        <label class="chk"><input type="radio" name="apply" value="sheet" checked /> Trải cả tờ</label>
+        <label class="chk"><input type="radio" name="apply" value="cells" /> Theo từng ô</label>
+      </div>
+      <div id="cellBox" class="cellbox hidden">
+        <label>Bố cục dựng sẵn <select id="layoutPreset"></select></label>
+        <canvas id="cellCanvas" class="cellcanvas"></canvas>
+        <div class="row">
+          <button class="ghost" id="addCell">+ Thêm ô</button>
+          <button class="ghost" id="delCell" disabled>Xoá ô</button>
+        </div>
+        <p class="note">Kéo giữa ô để di chuyển, kéo ô vuông góc phải-dưới để đổi kích thước.</p>
+      </div>
+    </section>
+
+    <section class="step">
+      <h2><i>5</i> Xuất</h2>
+      <button class="primary" id="export">Tải overlay PNG</button>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="savePreset">Lưu preset</button>
+        <button class="ghost" id="loadPreset">Nạp preset</button>
+        <input type="file" id="presetFile" accept="application/json,.json" hidden />
+      </div>
+      <div id="exportInfo" class="note"></div>
+    </section>
+  </aside>
+
+  <!-- ============ CỘT PHẢI ============ -->
+  <section class="stage">
+    <div class="tabs" id="tabs">
+      <button data-mode="result" class="active">Kết quả</button>
+      <button data-mode="split">Trước / sau</button>
+      <button data-mode="target" data-bakeonly>So với ảnh đích</button>
+      <button data-mode="heat" data-bakeonly>Sai lệch</button>
+      <button data-mode="alpha">Overlay</button>
+      <button data-mode="canvas">Canvas xuất</button>
+    </div>
+    <div class="viewport">
+      <canvas id="view"></canvas>
+      <div id="empty" class="empty"></div>
+    </div>
+    <div class="stagefoot">
+      <label class="slider wide" id="splitWrap">Vị trí chia <input type="range" id="split" min="0" max="100" value="50" /></label>
+      <div class="testpick">
+        <label>Ảnh xem trước <select id="testSel"></select></label>
+        <button class="ghost" id="pickTest">+ Thêm ảnh</button>
+        <input type="file" id="testFile" accept="image/*" hidden />
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="busy" class="busy hidden"><div class="spin"></div><span id="busyText">Đang xử lý…</span></div>
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
