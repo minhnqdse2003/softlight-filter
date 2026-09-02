@@ -8,22 +8,38 @@ trên cả bản in lẫn bản digital.
 
 ## Hiệu ứng gồm những gì
 
-Năm tầng, chạy theo đúng thứ tự này:
+Tầng chính là **bloom có mặt nạ da** — dựng lại đúng thuật toán của bản tham
+chiếu `instagram-soft-light-1.html`:
 
-| # | Tầng | Làm gì | Tham số |
-|---|---|---|---|
-| 1 | **Soft focus** | Pha lớp mờ **bán kính nhỏ** → giảm độ nét thật sự, da mịn, tóc mềm | `softFocus.amount`, `softFocus.radiusPct` |
-| 2 | **Clarity** | Pha lớp mờ **bán kính lớn** → hạ tương phản dải tần trung, ảnh bớt gắt | `clarity.amount`, `clarity.radiusPct` |
-| 3 | **Soft glow** | Lớp mờ **cắt ngưỡng chỉ giữ vùng sáng** rồi screen lên ảnh → quầng "bong bóng" | `glow.amount`, `glow.threshold` |
-| 4 | **Tone** | Giảm contrast quanh điểm giữa + nâng vùng đen → bạc màu, ethereal | `tone.contrast`, `tone.lift` |
-| 5 | **Ấm** | Lệch gain giữa các kênh + phủ soft-light màu ấm lên vùng sáng | `warm.*` |
+> Ảnh **gốc** giữ nguyên nét làm nền. Một bản sao được lọc chỉ còn pixel tông
+> da (và bỏ luôn pixel quá sáng), làm mờ thật mạnh, tăng sáng rồi `screen` đè
+> lên nền. Da phát sáng mềm mại, còn phông nền — chấm bi, hoa văn, chữ trên
+> backdrop — vẫn sắc nét nguyên vẹn.
 
-Ba tầng mờ dùng **ba bán kính khác hẳn nhau** và đó là chủ ý — mỗi tầng ăn vào
-một dải tần số riêng. Gộp chúng lại sẽ mất đúng đặc trưng soft focus: ảnh chỉ
-trông nhạt màu chứ không mềm.
+Các tầng còn lại **mặc định tắt** (`amount: 0`), giữ lại để nêm thêm khi cần:
 
-Tầng 3 đọc ngưỡng từ chính ảnh, nên quầng sáng nở ra đúng chỗ bắt sáng của từng
-khuôn mặt.
+| # | Tầng | Làm gì | Tham số | Mặc định |
+|---|---|---|---|---|
+| 1 | Soft focus | Pha lớp mờ **bán kính nhỏ** vào toàn ảnh → da mịn, tóc mềm, nhưng phông cũng mềm theo | `softFocus.amount`, `softFocus.radiusPct` | tắt |
+| 2 | Clarity | Pha lớp mờ **bán kính lớn** vào toàn ảnh → hạ tương phản dải tần trung | `clarity.amount`, `clarity.radiusPct` | tắt |
+| 3 | **Bloom trên vùng da** | **Tầng chính**, mô tả ở trên | `bloom.*` | **bật, 0.7** |
+| 4 | Tone | Giảm contrast quanh điểm giữa + nâng vùng đen → bạc màu, ethereal | `tone.contrast`, `tone.lift` | tắt |
+| 5 | Ấm | Lệch gain giữa các kênh + phủ soft-light màu ấm lên vùng sáng | `warm.*` | tắt |
+
+### Vì sao cắt theo màu da chứ không theo độ sáng
+
+Cách cũ cắt lớp mờ theo **ngưỡng độ sáng**: chỉ giữ vùng sáng hơn `threshold`
+rồi screen lên ảnh. Nghe hợp lý, nhưng trong booth thì chỗ **sáng nhất** khung
+hình lại chính là chấm bi trắng, đèn và mảng cháy sáng của phông — nên phông
+loè lên trước cả khuôn mặt.
+
+Bây giờ mặt nạ cắt theo **màu**: `r > 80 && g > 35 && b > 20 && r − g > 10 &&
+r > b` bắt được da người châu Á lẫn ánh tóc nâu đỏ, và pixel sáng hơn
+`bloom.highlightCutoff` (mặc định 0,863 ≈ 220/255) bị **loại**, tức là ngược
+hẳn logic cũ.
+
+`--selftest` đo thẳng điều này: mức thay đổi trên vùng da phải gấp ít nhất 3
+lần mức thay đổi trên phông.
 
 ---
 
@@ -130,7 +146,8 @@ Nếu quá chậm, xử lý theo thứ tự hiệu quả giảm dần:
 1. Hạ độ phân giải chụp trong dslrBooth — đòn bẩy mạnh nhất, thời gian tỉ lệ
    thẳng với số điểm ảnh.
 2. Hạ `output.quality` xuống 90.
-3. Đặt `softFocus.amount` hoặc `clarity.amount` về 0 để bớt một tầng mờ.
+3. Giữ `softFocus.amount` và `clarity.amount` ở 0 (mặc định) — mỗi tầng bật
+   thêm là một lượt làm mờ toàn ảnh nữa.
 
 ---
 
@@ -143,9 +160,10 @@ kết quả trên chính tấm ảnh đó, rồi bấm **Sao chép** để lấy
 `softlight.config.json` đầy đủ — dán đè lên file cũ là xong.
 
 Toàn bộ chạy trong trình duyệt, ảnh không đi đâu cả. Trang này dựng lại đúng
-năm tầng của `src/pipeline.js`, kể cả chi tiết libvips nhân alpha vào lớp phủ
-trước khi blend; đối chiếu với `sharp` thật thì sai lệch trung bình 2,1/255
-(0,8%) ở bộ tham số đang dùng.
+năm tầng của `src/pipeline.js`, kể cả cách ghép tay lớp bloom (bỏ nhân alpha
+trước khi áp brightness/contrast); đối chiếu với `sharp` thật thì sai lệch
+trung bình 2,2/255 (0,9%) ở bộ tham số đang dùng — phần dư đến từ box blur xấp
+xỉ Gauss và từ việc pipeline làm mờ ở độ phân giải rút gọn.
 
 Sửa `web/tuner.html` xong thì chạy `node web/build-offline.mjs` để dựng lại bản
 bấm đúp.
@@ -168,19 +186,25 @@ node src\cli.js --selftest
 ```
 
 In ra bảng năm chỉ số kèm diễn biến qua từng tầng. Quy tắc đọc quan trọng nhất:
-**độ nét (tần cao) phải giảm nhiều hơn tương phản tổng thể**. Nếu ngược lại thì
-ảnh sẽ trông nhạt và đục chứ không mềm — tăng `softFocus.amount`.
+**mức thay đổi trên vùng da phải lớn hơn hẳn mức thay đổi trên phông** — dòng
+cuối bảng in thẳng tỉ lệ đó, cần ít nhất 3 lần. Nếu tỉ lệ tụt xuống thì phông
+đang bị loè cùng với da: kiểm tra `bloom.skinOnly` và hạ `bloom.highlightCutoff`.
 
-Với cấu hình mặc định: độ nét −49%, clarity −38%, tương phản tổng thể −11%,
-độ ấm +9%.
+Những chỉ số chỉ có nghĩa khi tầng tương ứng được bật (độ nét, clarity, độ ấm)
+sẽ hiện dấu `—` ở cột kết quả thay vì chấm đạt / không đạt.
+
+Với cấu hình mặc định: độ sáng +32%, tương phản tổng thể −27%, mức thay đổi
+trên da gấp ~10 lần trên phông.
 
 ### Muốn mạnh hơn / nhẹ hơn
 
 | Muốn gì | Sửa gì |
 |---|---|
-| Mềm hơn, da mịn hơn | `softFocus.amount` ↑ (0.22 → 0.32) |
-| Quầng sáng rõ hơn | `glow.amount` ↑ và/hoặc `glow.threshold` ↓ |
-| Quầng nở rộng hơn | `glow.radiusPct` ↑ |
+| Da sáng và mịn hơn | `bloom.amount` ↑ (0.7 → 0.85) |
+| Quầng nở rộng hơn | `bloom.radiusPct` ↑ (tính theo **chiều ngang** ảnh) |
+| Da bừng sáng hơn | `bloom.brightness` ↑ (1.35 → 1.5) |
+| Phông vẫn bị loè | `bloom.highlightCutoff` ↓ (0.863 → 0.8) |
+| Mềm cả khung hình, kể cả phông | `softFocus.amount` ↑ từ 0 (thử 0.2) |
 | Ethereal hơn, bạc màu hơn | `tone.lift` ↑, `tone.contrast` âm hơn |
 | Ấm hơn | `warm.temp` ↑ |
 | Tắt hẳn hiệu ứng | `"enabled": false` |
@@ -301,7 +325,8 @@ Nếu lệnh này chạy được mà qua dslrBooth thì không, khả năng cao
 nằm trong PATH của tiến trình dslrBooth → tạo `node-path.txt`.
 
 **Ảnh bị mờ quá / đục**
-`--restore`, hạ `softFocus.amount` và `clarity.amount`, rồi `--preview` lại.
+`--restore`, hạ `bloom.amount` (và `softFocus.amount` / `clarity.amount` nếu bạn
+đã bật chúng), rồi `--preview` lại.
 
 **Khung và logo trên tờ in bị mờ**
 dslrBooth đang gọi cả trên file template. Dùng `skip.pathContains` ở trên.

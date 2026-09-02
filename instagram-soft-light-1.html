@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Instagram Soft Light Pro - Ultimate Solution</title>
+    <style>
+        body { font-family: system-ui, sans-serif; background: #111; color: #fff; text-align: center; padding: 15px; margin: 0; }
+        .wrapper { display: flex; flex-direction: column; align-items: center; gap: 15px; }
+        .canvas-container { position: relative; width: 100%; max-width: 500px; display: none; border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5); background: #000; }
+        canvas { width: 100%; height: auto; display: block; }
+        .panel { background: #222; padding: 15px; border-radius: 20px; width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 10px; box-sizing: border-box; }
+        .upload-btn { background: #ff557f; color: white; padding: 14px 28px; border-radius: 25px; font-weight: bold; cursor: pointer; display: inline-block; font-size: 16px; }
+        input[type="file"] { display: none; }
+        #status { font-size: 14px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <h2>Hiệu Ứng Instagram Soft Light Chuyên Nghiệp</h2>
+    
+    <div class="wrapper">
+        <label class="upload-btn" id="uploadLabel">
+            Chọn ảnh từ máy
+            <input type="file" id="imageLoader" accept="image/*">
+        </label>
+        <div id="status"></div>
+
+        <div class="panel" id="controls" style="display: none;">
+            <label>Độ mịn / Phát sáng: <input type="range" id="opacitySlider" min="0" max="100" value="70">%</label>
+        </div>
+
+        <div class="canvas-container" id="container">
+            <!-- Canvas chính hiển thị kết quả hòa trộn -->
+            <canvas id="mainCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const imageLoader = document.getElementById('imageLoader');
+        const container = document.getElementById('container');
+        const controls = document.getElementById('controls');
+        const canvas = document.getElementById('mainCanvas');
+        const ctx = canvas.getContext('2d');
+        const opacitySlider = document.getElementById('opacitySlider');
+        const uploadLabel = document.getElementById('uploadLabel');
+        const status = document.getElementById('status');
+
+        let originalImg = null;
+
+        // Xử lý sự kiện tải ảnh bằng FileReader (Vượt qua 100% bảo mật Android)
+        imageLoader.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            status.innerText = "Đang xử lý ảnh...";
+            const reader = new FileReader();
+            
+            reader.onload = (event) => {
+                originalImg = new Image();
+                originalImg.onload = () => {
+                    status.innerText = "";
+                    renderEffect();
+                };
+                originalImg.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+
+            // Cập nhật trạng thái nút bấm
+            container.style.display = "block";
+            controls.style.display = "flex";
+            uploadLabel.style.padding = "8px 16px";
+            uploadLabel.style.fontSize = "14px";
+            uploadLabel.textContent = "Đổi ảnh khác";
+        });
+
+        opacitySlider.addEventListener('input', renderEffect);
+
+        function renderEffect() {
+            if (!originalImg) return;
+
+            // Đặt kích thước canvas chuẩn theo ảnh
+            canvas.width = originalImg.naturalWidth;
+            canvas.height = originalImg.naturalHeight;
+            
+            // Bước 1: Vẽ ảnh gốc sắc nét hoàn toàn xuống dưới cùng làm nền (Giữ nét toàn bộ chi tiết và chấm bi)
+            ctx.drawImage(originalImg, 0, 0);
+
+            // Bước 2: Tạo một canvas đệm ẩn để tách lọc thuật toán màu da nâng cao
+            const maskCanvas = document.createElement('canvas');
+            maskCanvas.width = canvas.width;
+            maskCanvas.height = canvas.height;
+            const mCtx = maskCanvas.getContext('2d');
+            mCtx.drawImage(originalImg, 0, 0);
+
+            const imgData = mCtx.getImageData(0, 0, canvas.width, canvas.height);
+            const pixels = imgData.data;
+
+            for (let i = 0; i < pixels.length; i += 4) {
+                let r = pixels[i];
+                let g = pixels[i+1];
+                let b = pixels[i+2];
+
+                // Thuật toán nhận diện màu ấm (Tông màu da người châu Á và ánh tóc nâu đỏ)
+                let isSkinTone = (r > 80 && g > 35 && b > 20 && (r - g) > 10 && r > b);
+                let luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+
+                // LOẠI TRỪ CHẤM BI NỀN: Nếu không phải da người hoặc pixel quá sáng thuộc về chấm bi trắng (luminance > 220)
+                if (!isSkinTone || luminance > 220) {
+                    pixels[i] = 0;     // Biến pixel mờ nhòe này thành màu đen trong suốt
+                    pixels[i+1] = 0;
+                    pixels[i+2] = 0;
+                    pixels[i+3] = 0;   // Đặt alpha về 0 luôn để triệt tiêu hoàn toàn
+                }
+            }
+            
+            // Đưa dữ liệu đã lọc sạch phông nền chấm bi trở lại canvas phụ
+            mCtx.putImageData(imgData, 0, 0);
+
+            // Bước 3: Đè lớp sáng mịn siêu mạnh (Bloom) lên da mặt, phông nền chấm bi bên dưới không bị ảnh hưởng
+            ctx.save();
+            // Độ mờ nhòe tự co giãn theo kích thước ảnh thật để không bị mất hiệu ứng
+            const dynamicBlur = Math.max(16, Math.round(canvas.width / 40)); 
+            
+            // Áp bộ lọc khuếch tán mạnh mẽ tăng độ sáng vùng da (brightness 1.35)
+            ctx.filter = `blur(${dynamicBlur}px) brightness(1.35) contrast(0.95)`;
+            ctx.globalAlpha = opacitySlider.value / 100;
+            ctx.globalCompositeOperation = 'screen'; // Chế độ hòa trộn màn ảnh phát sáng chuẩn Instagram
+            
+            ctx.drawImage(maskCanvas, 0, 0);
+            ctx.restore();
+        }
+    </script>
+</body>
+</html>

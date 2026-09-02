@@ -232,7 +232,9 @@ async function cmdDoctor() {
  * Ảnh tổng hợp để đo hiệu ứng. Thành phần được chọn có chủ ý:
  *  - ba lưới sin ở ba tần số khác nhau, để tách được tầng soft focus (tần cao)
  *    khỏi tầng clarity (tần trung);
- *  - một vùng cực sáng, để thấy quầng glow có nở ra hay không;
+ *  - một vùng cực sáng, đóng vai chấm bi phông booth: `bloom.highlightCutoff`
+ *    phải loại được nó ra khỏi lớp mờ;
+ *  - một dải ô tông da, để mặt nạ của tầng bloom có chỗ bám;
  *  - nền chuyển sắc hồng và các ô tông da, giống điều kiện phông booth.
  * Mã hoá ở chất lượng 100 / 4:4:4 để nhiễu nén JPEG không lẫn vào dải tần cao.
  */
@@ -272,6 +274,58 @@ async function makeTestImage(w = 3000, h = 2000) {
     .toBuffer();
 }
 
+/**
+ * Kiểm chứng đặc trưng cốt lõi của tầng bloom: DA sáng lên, PHÔNG gần như
+ * không đổi. Đây là thứ phân biệt cách làm hiện tại với cách cắt ngưỡng theo
+ * độ sáng cũ — cách cũ đánh mạnh nhất đúng vào chỗ sáng nhất của phông.
+ *
+ * Vùng ngay sát da vẫn đổi chút ít vì quầng sáng loang ra, nên tiêu chí là tỉ
+ * lệ chứ không phải bằng 0 tuyệt đối.
+ */
+async function reportSkinSplit(beforeJpeg, afterJpeg) {
+  const sharp = (await import('sharp')).default;
+  const { isSkin } = await import('./pipeline.js');
+  const [x, y] = await Promise.all(
+    [beforeJpeg, afterJpeg].map((buf) =>
+      sharp(buf).toColourspace('srgb').raw().toBuffer({ resolveWithObject: true }),
+    ),
+  );
+  const n = x.info.width * x.info.height;
+  let skinSum = 0;
+  let skinN = 0;
+  let bgSum = 0;
+  let bgN = 0;
+
+  for (let i = 0, k = 0; i < n; i++, k += 3) {
+    const d =
+      (Math.abs(y.data[k] - x.data[k]) +
+        Math.abs(y.data[k + 1] - x.data[k + 1]) +
+        Math.abs(y.data[k + 2] - x.data[k + 2])) /
+      3;
+    if (isSkin(x.data[k], x.data[k + 1], x.data[k + 2])) {
+      skinSum += d;
+      skinN++;
+    } else {
+      bgSum += d;
+      bgN++;
+    }
+  }
+
+  const skin = skinN ? skinSum / skinN : 0;
+  const bg = bgN ? bgSum / bgN : 0;
+  const ratio = bg > 0.01 ? skin / bg : Infinity;
+
+  console.log(
+    `\n  Mức thay đổi trên vùng DA ${skin.toFixed(1)}/255 · trên PHÔNG ${bg.toFixed(1)}/255` +
+      `  (gấp ${Number.isFinite(ratio) ? ratio.toFixed(1) : '∞'} lần)`,
+  );
+  console.log(
+    ratio >= 3
+      ? '  → Đúng đặc trưng: hiệu ứng ăn vào da, phông nền giữ nguyên nét.'
+      : '  → CẢNH BÁO: phông nền bị ảnh hưởng gần bằng da. Kiểm tra bloom.skinOnly và bloom.highlightCutoff.',
+  );
+}
+
 async function cmdSelftest(cfg) {
   const { renderSoftLight, measure } = await import('./pipeline.js');
   const tmp = join(ROOT, 'logs', '_selftest.jpg');
@@ -293,33 +347,27 @@ async function cmdSelftest(cfg) {
     return (d >= 0 ? '+' : '') + d.toFixed(1) + '%';
   };
   const row = (name, x, y, want, note) => {
-    const ok = want === '+' ? y > x : y < x;
+    // want = null: chỉ báo cáo, không chấm đạt / không đạt. Dùng cho những chỉ
+    // số chỉ có nghĩa khi tầng tương ứng được bật trong cấu hình.
+    const verdict = want === null ? '—' : (want === '+' ? y > x : y < x) ? 'ĐẠT' : 'KHÔNG ĐẠT';
     console.log(
-      `  ${name.padEnd(22)}${x.toFixed(2).padStart(8)} →${y.toFixed(2).padStart(8)}${pct(x, y).padStart(9)}   ${(ok ? 'ĐẠT' : 'KHÔNG ĐẠT').padEnd(10)}${note}`,
+      `  ${name.padEnd(22)}${x.toFixed(2).padStart(8)} →${y.toFixed(2).padStart(8)}${pct(x, y).padStart(9)}   ${verdict.padEnd(10)}${note}`,
     );
   };
+
+  const soft = cfg.softFocus.amount > 0.001 || cfg.clarity.amount > 0.001;
+  const warmer = cfg.warm.temp > 0 || cfg.warm.highlightWarmth > 0.001;
 
   console.log(`\nẢnh kiểm ${width}×${height} · xử lý ${ms}ms\n`);
   console.log('  chỉ số                  trước       sau   thay đổi   kết quả    kỳ vọng');
   console.log('  ' + '─'.repeat(78));
-  row('Độ sáng trung bình', a.mean, b.mean, '+', 'lift nâng vùng tối');
-  row('Độ nét (tần cao)', a.fine, b.fine, '-', 'soft focus làm mềm');
-  row('Clarity (tần trung)', a.mid, b.mid, '-', 'bớt gắt');
+  row('Độ sáng trung bình', a.mean, b.mean, '+', 'bloom nâng sáng vùng da');
+  row('Độ nét (tần cao)', a.fine, b.fine, soft ? '-' : null, soft ? 'soft focus làm mềm' : 'softFocus/clarity đang tắt');
+  row('Clarity (tần trung)', a.mid, b.mid, soft ? '-' : null, soft ? 'bớt gắt' : 'softFocus/clarity đang tắt');
   row('Tương phản tổng thể', a.global, b.global, '-', 'dịu lại');
-  row('Độ ấm (đỏ − lam)', a.warmth, b.warmth, '+', 'ấm hơn');
+  row('Độ ấm (đỏ − lam)', a.warmth, b.warmth, warmer ? '+' : null, warmer ? 'ấm hơn' : 'tầng warm đang tắt');
 
-  const fineDrop = 1 - b.fine / a.fine;
-  const globalDrop = 1 - b.global / a.global;
-  console.log(
-    fineDrop > globalDrop
-      ? `\n  Độ nét giảm ${(fineDrop * 100).toFixed(1)}% > tương phản tổng thể giảm ${(globalDrop * 100).toFixed(1)}%`
-      : `\n  CẢNH BÁO: độ nét chỉ giảm ${(fineDrop * 100).toFixed(1)}% trong khi tương phản tổng thể giảm ${(globalDrop * 100).toFixed(1)}%`,
-  );
-  console.log(
-    fineDrop > globalDrop
-      ? '  → Đúng đặc trưng soft focus: ảnh mềm đi chứ không phải chỉ bị nhạt màu.'
-      : '  → Ảnh sẽ trông nhạt/đục thay vì mềm. Tăng softFocus.amount trong cấu hình.',
-  );
+  await reportSkinSplit(original, jpeg);
 
   if (stages.length) {
     console.log('\n  Diễn biến qua từng tầng:');

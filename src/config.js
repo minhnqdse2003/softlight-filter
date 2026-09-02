@@ -5,31 +5,40 @@ import { fileURLToPath } from "node:url";
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CONFIG_PATH = join(ROOT, "softlight.config.json");
 
-/** Giá trị mặc định — file cấu hình chỉ cần ghi đè phần muốn đổi. */
+/**
+ * Giá trị mặc định — file cấu hình chỉ cần ghi đè phần muốn đổi.
+ *
+ * Mặc định ở đây tái hiện đúng bản tham chiếu `instagram-soft-light-1.html`:
+ * chỉ tầng `bloom` hoạt động, mọi tầng khác để 0 nên ảnh nền giữ nguyên nét.
+ */
 const DEFAULTS = {
   enabled: true,
   softFocus: {
-    amount: 0.5, // Tăng từ 0.22 lên 0.38 để tạo độ mềm mờ nền rõ rệt
+    amount: 0, // Tắt: bản tham chiếu giữ toàn ảnh sắc nét, độ mềm đến từ bloom
     radiusPct: 0.22,
   },
   clarity: {
-    amount: 0.1, // Giảm từ 0.28 xuống 0.10 để không cản trở quầng sáng
+    amount: 0, // Tắt, cùng lý do trên
     radiusPct: 2.0,
   },
-  glow: {
-    amount: 0.45, // Tăng lên ~0.42 - 0.45 (chuẩn mức 42% Instagram)
-    radiusPct: 2.2, // Tăng bán kính tỏa sáng giúp ánh sáng loang tự nhiên
-    threshold: 0.48, // Hạ từ 0.6 xuống 0.48 để ánh sáng bắt đầu tỏa từ mid-tones
+  bloom: {
+    amount: 0.7, // = thanh trượt "Độ mịn / Phát sáng" 70% của bản HTML
+    radiusPct: 2.5, // canvas.width / 40
+    minRadiusPx: 16, // sàn tuyệt đối, để ảnh nhỏ vẫn có quầng
+    brightness: 1.35, // filter: brightness(1.35)
+    contrast: 0.95, // filter: contrast(0.95)
+    skinOnly: true, // chỉ phát sáng vùng tông da
+    highlightCutoff: 0.863, // luminance 220/255 — trên mức này bị loại (chấm bi, đèn)
   },
   tone: {
-    contrast: -0.08, // Giảm bớt độ gắt, làm sáng đều
-    lift: 0.5, // Tăng từ 0.022 lên 0.055 để nâng sáng vùng tối (sáng bừng tổng thể)
+    contrast: 0,
+    lift: 0,
   },
   warm: {
     temp: 0,
-    tint: 0.015,
-    highlightWarmth: 0.08,
-    highlightColor: "#00f135",
+    tint: 0,
+    highlightWarmth: 0,
+    highlightColor: "#ffd9a8",
   },
   output: { quality: 95, chromaSubsampling: "4:4:4" },
   backup: { enabled: true, folder: "_original" },
@@ -60,7 +69,7 @@ export function loadConfig(path = CONFIG_PATH) {
   const d = DEFAULTS;
   const sf = { ...d.softFocus, ...raw.softFocus };
   const c = { ...d.clarity, ...raw.clarity };
-  const g = { ...d.glow, ...raw.glow };
+  const bl = { ...d.bloom, ...raw.bloom };
   const t = { ...d.tone, ...raw.tone };
   const w = { ...d.warm, ...raw.warm };
   const o = { ...d.output, ...raw.output };
@@ -78,10 +87,14 @@ export function loadConfig(path = CONFIG_PATH) {
       amount: num(c.amount, 0, 0.9, d.clarity.amount),
       radiusPct: num(c.radiusPct, 0.1, 10, d.clarity.radiusPct),
     },
-    glow: {
-      amount: num(g.amount, 0, 1, d.glow.amount),
-      radiusPct: num(g.radiusPct, 0.1, 10, d.glow.radiusPct),
-      threshold: num(g.threshold, 0, 0.95, d.glow.threshold),
+    bloom: {
+      amount: num(bl.amount, 0, 1, d.bloom.amount),
+      radiusPct: num(bl.radiusPct, 0.1, 10, d.bloom.radiusPct),
+      minRadiusPx: num(bl.minRadiusPx, 0, 200, d.bloom.minRadiusPx),
+      brightness: num(bl.brightness, 0.5, 3, d.bloom.brightness),
+      contrast: num(bl.contrast, 0.2, 2, d.bloom.contrast),
+      skinOnly: bl.skinOnly !== false,
+      highlightCutoff: num(bl.highlightCutoff, 0.2, 1, d.bloom.highlightCutoff),
     },
     tone: {
       contrast: num(t.contrast, -0.6, 0.6, d.tone.contrast),

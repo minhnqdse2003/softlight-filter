@@ -3,35 +3,39 @@
   "enabled": true,
 
   "softFocus": {
-    "_doc": "Lam mo NHE ban kinh nho - day la tang giam do net that su, lam min da va soi toc. radiusPct tinh theo canh dai cua anh.",
-    "amount": 0.2,
+    "_doc": "Lam mo NHE ban kinh nho tren TOAN anh - lam min da va soi toc nhung cung lam mem ca phong nen. De 0 de giu phong nen (cham bi, chu, hoa van) sac net nhu ban tham chieu.",
+    "amount": 0,
     "radiusPct": 0.22
   },
 
   "clarity": {
-    "_doc": "Giam do net / do tuong phan cuc bo. amount = ty le pha lop mo ban kinh lon vao anh goc.",
-    "amount": 0.35,
-    "radiusPct": 2.2
+    "_doc": "Giam do net / do tuong phan cuc bo tren TOAN anh. De 0 vi cung ly do voi softFocus.",
+    "amount": 0,
+    "radiusPct": 2
   },
 
-  "glow": {
-    "_doc": "Soft focus / bong bong. Lop mo duoc cat nguong chi giu vung sang roi screen len anh, nen quang sang bam theo cho bat sang cua tung anh.",
-    "amount": 0.65,
-    "radiusPct": 2.2,
-    "threshold": 0.46
+  "bloom": {
+    "_doc": "TANG CHINH. Tach rieng vung tong da, lam mo that manh, tang sang roi screen len anh GOC con nguyen net. Vi mat na cat theo MAU DA chu khong theo do sang, phong nen khong bi loe. amount = do manh (0..1), radiusPct tinh theo chieu ngang anh, highlightCutoff loai vung sang hon muc nay (cham bi trang, den).",
+    "amount": 0.7,
+    "radiusPct": 2.5,
+    "minRadiusPx": 16,
+    "brightness": 1.35,
+    "contrast": 0.95,
+    "skinOnly": true,
+    "highlightCutoff": 0.863
   },
 
   "tone": {
-    "_doc": "contrast am = giam tuong phan tong the. lift = nang vung den (0..0.1), tao cam giac bac mau ethereal.",
-    "contrast": -0.08,
-    "lift": 0.09
+    "_doc": "contrast am = giam tuong phan tong the. lift = nang vung den (0..0.2), tao cam giac bac mau ethereal. Ban tham chieu khong dung tang nay.",
+    "contrast": 0,
+    "lift": 0
   },
 
   "warm": {
-    "_doc": "temp duong = am hon (tang do, giam lam). highlightWarmth phu them mau am len vung sang bang blend soft-light.",
-    "temp": 0.08,
-    "tint": 0.015,
-    "highlightWarmth": 0.08,
+    "_doc": "temp duong = am hon (tang do, giam lam). highlightWarmth phu them mau am len vung sang bang blend soft-light. Ban tham chieu khong dung tang nay.",
+    "temp": 0,
+    "tint": 0,
+    "highlightWarmth": 0,
     "highlightColor": "#ffd9a8"
   },
 
@@ -48,7 +52,7 @@
   },
 
   "skip": {
-    "_doc": "Bo qua nhung file co duong dan chua mot trong cac chuoi nay. Dung khi dslrBooth goi ca tren file template da ghep - lam mem ca to in se nhoe luon khung va logo. Vi du: [\"\\prints\\\\\", \"_final\"]",
+    "_doc": "Bo qua nhung file co duong dan chua mot trong cac chuoi nay. Dung khi dslrBooth goi ca tren file template da ghep - lam mem ca to in se nhoe luon khung va logo. Vi du: [\"\\\\prints\\\\\", \"_final\"]",
     "pathContains": []
   },
 

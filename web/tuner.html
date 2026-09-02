@@ -503,11 +503,11 @@
     /* Đúng những gì đang nằm trong softlight.config.json của bạn */
     current: {
       enabled: true,
-      softFocus: { amount: 0.2, radiusPct: 0.22 },
-      clarity:   { amount: 0.35, radiusPct: 2.2 },
-      glow:      { amount: 0.65, radiusPct: 2.2, threshold: 0.46 },
-      tone:      { contrast: -0.08, lift: 0.09 },
-      warm:      { temp: 0.08, tint: 0.015, highlightWarmth: 0.08, highlightColor: "#ffd9a8" },
+      softFocus: { amount: 0, radiusPct: 0.22 },
+      clarity:   { amount: 0, radiusPct: 2.0 },
+      bloom:     { amount: 0.7, radiusPct: 2.5, minRadiusPx: 16, brightness: 1.35, contrast: 0.95, skinOnly: true, highlightCutoff: 0.863 },
+      tone:      { contrast: 0, lift: 0 },
+      warm:      { temp: 0, tint: 0, highlightWarmth: 0, highlightColor: "#ffd9a8" },
       output:    { quality: 95, chromaSubsampling: "4:4:4" },
       backup:    { enabled: true, folder: "_original" },
       skip:      { pathContains: [] },
@@ -516,11 +516,11 @@
     /* DEFAULTS trong src/config.js, đã kẹp về miền hợp lệ */
     code: {
       enabled: true,
-      softFocus: { amount: 0.5, radiusPct: 0.22 },
-      clarity:   { amount: 0.1, radiusPct: 2.0 },
-      glow:      { amount: 0.45, radiusPct: 2.2, threshold: 0.48 },
-      tone:      { contrast: -0.08, lift: 0.2 },
-      warm:      { temp: 0, tint: 0.015, highlightWarmth: 0.08, highlightColor: "#00f135" },
+      softFocus: { amount: 0, radiusPct: 0.22 },
+      clarity:   { amount: 0, radiusPct: 2.0 },
+      bloom:     { amount: 0.7, radiusPct: 2.5, minRadiusPx: 16, brightness: 1.35, contrast: 0.95, skinOnly: true, highlightCutoff: 0.863 },
+      tone:      { contrast: 0, lift: 0 },
+      warm:      { temp: 0, tint: 0, highlightWarmth: 0, highlightColor: "#ffd9a8" },
       output:    { quality: 95, chromaSubsampling: "4:4:4" },
       backup:    { enabled: true, folder: "_original" },
       skip:      { pathContains: [] },
@@ -530,7 +530,7 @@
       enabled: true,
       softFocus: { amount: 0, radiusPct: 0.22 },
       clarity:   { amount: 0, radiusPct: 2.2 },
-      glow:      { amount: 0, radiusPct: 2.2, threshold: 0.46 },
+      bloom:     { amount: 0, radiusPct: 2.5, minRadiusPx: 16, brightness: 1.35, contrast: 0.95, skinOnly: true, highlightCutoff: 0.863 },
       tone:      { contrast: 0, lift: 0 },
       warm:      { temp: 0, tint: 0, highlightWarmth: 0, highlightColor: "#ffd9a8" },
       output:    { quality: 95, chromaSubsampling: "4:4:4" },
@@ -552,9 +552,12 @@
     { g: "softFocus", k: "radiusPct",       label: "Bán kính",   min: 0.02, max: 3,    step: 0.01,  unit: "%", hint: "% cạnh dài. 0,22% trên ảnh 6000px ≈ 13px — cỡ lỗ chân lông." },
     { g: "clarity",   k: "amount",          label: "Cường độ",   min: 0,    max: 0.9,  step: 0.01,  hint: "Càng cao ảnh càng bớt gắt, nhưng cao quá thì đục và mất khối." },
     { g: "clarity",   k: "radiusPct",       label: "Bán kính",   min: 0.1,  max: 10,   step: 0.05,  unit: "%", hint: "Dải tần trung — quyết định “khối” của khuôn mặt." },
-    { g: "glow",      k: "amount",          label: "Cường độ",   min: 0,    max: 1,    step: 0.01,  hint: "Mức screen quầng sáng lên ảnh. Đây là thứ tạo cảm giác bong bóng." },
-    { g: "glow",      k: "radiusPct",       label: "Bán kính",   min: 0.1,  max: 10,   step: 0.05,  unit: "%", hint: "Quầng loang rộng bao nhiêu quanh chỗ bắt sáng." },
-    { g: "glow",      k: "threshold",       label: "Ngưỡng",     min: 0,    max: 0.95, step: 0.01,  hint: "Chỉ vùng sáng hơn mức này mới phát quầng. Hạ xuống → mid-tone cũng sáng lên." },
+    { g: "bloom",     k: "amount",          label: "Cường độ",   min: 0,    max: 1,    step: 0.01,  hint: "Mức screen quầng sáng lên da. Bằng đúng thanh “Độ mịn / Phát sáng” của bản tham chiếu." },
+    { g: "bloom",     k: "radiusPct",       label: "Bán kính",   min: 0.1,  max: 10,   step: 0.05,  unit: "%", hint: "% CHIỀU NGANG ảnh. 2,5% = width/40, đúng bản tham chiếu." },
+    { g: "bloom",     k: "minRadiusPx",     label: "Bán kính tối thiểu", min: 0, max: 200, step: 1, unit: "px", hint: "Sàn tuyệt đối, để ảnh nhỏ vẫn có quầng. Bản tham chiếu dùng 16px." },
+    { g: "bloom",     k: "brightness",      label: "Tăng sáng lớp mờ", min: 0.5, max: 3, step: 0.01, hint: "Nhân độ sáng lớp mờ trước khi screen. Càng cao da càng bừng sáng." },
+    { g: "bloom",     k: "contrast",        label: "Tương phản lớp mờ", min: 0.2, max: 2, step: 0.01, hint: "Dưới 1 làm lớp mờ dịu và đều hơn." },
+    { g: "bloom",     k: "highlightCutoff", label: "Ngưỡng loại vùng sáng", min: 0.2, max: 1, step: 0.005, hint: "Pixel sáng hơn mức này bị loại khỏi lớp mờ — chấm bi trắng, đèn, mảng cháy sáng. Hạ xuống nếu phông vẫn bị loè." },
     { g: "tone",      k: "contrast",        label: "Tương phản", min: -0.6, max: 0.6,  step: 0.01,  hint: "Số âm = giảm tương phản, cho cảm giác bạc màu." },
     { g: "tone",      k: "lift",            label: "Nâng vùng đen", min: 0, max: 0.2,  step: 0.005, hint: "Kéo vùng tối lên khỏi 0 — vệt “sương mù” đặc trưng của phim." },
     { g: "warm",      k: "temp",            label: "Nhiệt độ màu", min: -0.4, max: 0.4, step: 0.005, hint: "Dương = ấm hơn (tăng đỏ, giảm lam). Âm = lạnh hơn." },
@@ -563,9 +566,9 @@
   ];
 
   var GROUPS = [
-    { g: "softFocus", step: 1, title: "Soft focus", why: "Lớp mờ bán kính nhỏ pha vào ảnh. Không có tầng này thì ảnh chỉ nhạt đi chứ không mềm." },
-    { g: "clarity",   step: 2, title: "Giảm clarity", why: "Lớp mờ bán kính lớn, hạ tương phản dải tần trung. Ảnh bớt gắt mà bố cục vẫn nguyên." },
-    { g: "glow",      step: 3, title: "Soft glow", why: "Lớp mờ được cắt ngưỡng chỉ giữ vùng sáng rồi screen lên ảnh. Quầng bám theo đúng chỗ bắt sáng của từng khuôn mặt. Lưu ý: libvips nhân alpha vào lớp phủ trước khi screen, nên cường độ ăn vào ảnh là amount², không phải amount." },
+    { g: "softFocus", step: 1, title: "Soft focus (tuỳ chọn)", why: "Lớp mờ bán kính nhỏ pha vào TOÀN ảnh. Mặc định tắt: bản tham chiếu giữ phông nền sắc nét, mọi độ mềm đều đến từ tầng bloom." },
+    { g: "clarity",   step: 2, title: "Giảm clarity (tuỳ chọn)", why: "Lớp mờ bán kính lớn, hạ tương phản dải tần trung trên TOÀN ảnh. Mặc định tắt, cùng lý do trên." },
+    { g: "bloom",     step: 3, title: "Bloom trên vùng da", why: "TẦNG CHÍNH. Tách riêng pixel tông da, loại pixel quá sáng, làm mờ thật mạnh rồi screen lên ảnh gốc còn nguyên nét. Vì mặt nạ cắt theo MÀU DA chứ không theo độ sáng, phông nền — chấm bi, chữ, hoa văn — không bị loè." },
     { g: "tone",      step: 4, title: "Tông", why: "Biến đổi affine quanh điểm giữa, cộng lift nâng vùng đen." },
     { g: "warm",      step: 5, title: "Tông ấm", why: "Gain lệch giữa các kênh, cộng một lớp soft-light màu ấm phủ lên vùng sáng." }
   ];
@@ -646,24 +649,83 @@
   }
   function dropBlurCache() { blurCache = []; }
 
-  /** Lớp mờ cho một tầng: 3 kênh, tuỳ chọn cắt ngưỡng giữ vùng sáng. */
-  function blurLayer(planes, w, h, sigma, threshold) {
-    var cached = cachedBlur(planes, w, h, sigma);
-    if (!(threshold > 0)) return cached;
-    var out = [new Float32Array(cached[0]), new Float32Array(cached[1]), new Float32Array(cached[2])];
-    if (threshold > 0) {
-      // Kéo giãn tuyến tính: mức `threshold` về 0, mức 1 giữ nguyên 1.
-      // Giá trị dưới ngưỡng thành âm rồi bị kẹp về 0 — chính là phép cắt mềm.
-      var a = 1 / (1 - threshold);
-      for (var c = 0; c < 3; c++) {
-        var p = out[c];
-        for (var i = 0; i < p.length; i++) {
-          var v = (p[i] - threshold) * a;
-          p[i] = v < 0 ? 0 : (v > 1 ? 1 : v);
-        }
+  /** Lớp mờ cho tầng soft focus / clarity: 3 kênh, không cắt gì cả. */
+  function blurLayer(planes, w, h, sigma) {
+    return cachedBlur(planes, w, h, sigma);
+  }
+
+  /**
+   * Nhận diện tông da — đúng ngưỡng của src/pipeline.js và của bản tham chiếu:
+   * đỏ trội hơn lục một khoảng rõ rệt và trội hơn lam.
+   */
+  function isSkin(r, g, b) {
+    return r > 80 / 255 && g > 35 / 255 && b > 20 / 255 && r - g > 10 / 255 && r > b;
+  }
+
+  /* Tách mặt nạ da rồi làm mờ nó — phần đắt nhất của vòng vẽ, mà kéo thanh
+     cường độ / tăng sáng thì mặt nạ không đổi. Giữ lại kết quả gần nhất. */
+  var bloomCache = null;
+  function dropBloomCache() { bloomCache = null; }
+
+  /**
+   * Lớp bloom: màu vùng da ĐÃ NHÂN ALPHA cùng mặt nạ của nó, cả hai đã làm mờ.
+   * Nhân alpha trước khi mờ là bắt buộc — nếu làm mờ màu thô rồi mới nhân mặt
+   * nạ, viền vùng da sẽ kéo màu phông vào trong quầng sáng.
+   * Trả về null khi ảnh không có pixel da nào.
+   */
+  function bloomLayer(planes, w, h, c, scale) {
+    var sigma = Math.max(c.minRadiusPx * scale, c.radiusPct / 100 * w);
+    var key = [sigma.toFixed(3), c.skinOnly ? 1 : 0, c.highlightCutoff.toFixed(4)].join("|");
+    if (bloomCache && bloomCache.key === key) return bloomCache.layer;
+
+    var n = w * h;
+    var pm = [new Float32Array(n), new Float32Array(n), new Float32Array(n)];
+    var mk = new Float32Array(n), kept = 0;
+    for (var i = 0; i < n; i++) {
+      var r = planes[0][i], g = planes[1][i], b = planes[2][i];
+      if (c.skinOnly && !isSkin(r, g, b)) continue;
+      // Loại vùng quá sáng: chấm bi trắng, đèn, mảng cháy sáng.
+      if (0.299 * r + 0.587 * g + 0.114 * b > c.highlightCutoff) continue;
+      pm[0][i] = r; pm[1][i] = g; pm[2][i] = b; mk[i] = 1; kept++;
+    }
+
+    var layer = kept ? {
+      colour: [blurPlane(pm[0], w, h, sigma),
+               blurPlane(pm[1], w, h, sigma),
+               blurPlane(pm[2], w, h, sigma)],
+      mask: blurPlane(mk, w, h, sigma)
+    } : null;
+    bloomCache = { key: key, layer: layer };
+    return layer;
+  }
+
+  /**
+   * Screen lớp bloom lên nền, sửa `base` tại chỗ. Bỏ nhân alpha trước rồi mới
+   * áp brightness / contrast — đúng thứ tự chuỗi filter của canvas:
+   *
+   *     out = base + (mask · amount) · layer · (1 − base)
+   *
+   * Lưu ý: pipeline.js cũng ghép tay chứ không nhờ libvips, vì với mọi blend
+   * khác `over` libvips đưa màu ĐÃ nhân alpha vào hàm blend rồi mới pha lại
+   * theo alpha, làm cường độ thật thành amount² thay vì amount.
+   */
+  function screenBloom(base, layer, c) {
+    var br = c.brightness, ct = c.contrast, ctOff = 0.5 * (1 - ct);
+    var mask = layer.mask, n = mask.length;
+    for (var ch = 0; ch < 3; ch++) {
+      var bp = base[ch], cp = layer.colour[ch];
+      for (var i = 0; i < n; i++) {
+        var m = mask[i];
+        if (m <= 0.0001) continue;
+        var s = cp[i] / m;                 // bỏ nhân alpha
+        if (s > 1) s = 1;
+        s = s * br;                        // brightness()
+        s = s * ct + ctOff;                // contrast()
+        s = s < 0 ? 0 : (s > 1 ? 1 : s);
+        var b = bp[i];
+        bp[i] = b + m * c.amount * s * (1 - b);
       }
     }
-    return out;
   }
 
   /** source-over với alpha hằng, nền đục: out = a·layer + (1−a)·base */
@@ -672,25 +734,6 @@
     for (var c = 0; c < 3; c++) {
       var b = base[c], l = layer[c];
       for (var i = 0; i < b.length; i++) b[i] = a * l[i] + ia * b[i];
-    }
-  }
-
-  /**
-   * screen với alpha hằng.
-   *
-   * Chú ý: với mọi blend KHÁC `over`, libvips đưa màu ĐÃ NHÂN ALPHA vào hàm
-   * blend rồi mới pha lại theo alpha — nên kết quả là
-   *     out = a·f(base, a·layer) + (1−a)·base
-   * Với screen, rút gọn còn base + a²·layer·(1−base). Số mũ hai đó không phải
-   * lỗi gõ: đo trực tiếp trên sharp cho sai lệch 0,6/255, còn công thức
-   * screen "sách vở" lệch tới 22/255. Quầng sáng thật vì vậy dịu hơn nhiều so
-   * với những gì con số `glow.amount` gợi ra.
-   */
-  function compScreen(base, layer, a) {
-    var aa = a * a;
-    for (var c = 0; c < 3; c++) {
-      var b = base[c], l = layer[c];
-      for (var i = 0; i < b.length; i++) b[i] = b[i] + aa * l[i] * (1 - b[i]);
     }
   }
 
@@ -709,23 +752,28 @@
 
   /**
    * Chạy đủ năm tầng. `planes` là ảnh gốc (0..1), trả về ba kênh kết quả.
-   * Ba lớp mờ đều dựng từ ảnh GỐC rồi ghép chồng lần lượt — giống hệt
-   * cách pipeline.js gộp chúng vào một lượt composite.
+   * `scale` là tỉ lệ khung xem so với ảnh thật — chỉ dùng để quy đổi
+   * `bloom.minRadiusPx`, vốn là một con số pixel tuyệt đối.
+   *
+   * Mọi lớp mờ đều dựng từ ảnh GỐC rồi ghép chồng lần lượt — giống hệt
+   * cách pipeline.js làm.
    */
-  function process(planes, w, h, c) {
+  function process(planes, w, h, c, scale) {
     var out = [new Float32Array(planes[0]), new Float32Array(planes[1]), new Float32Array(planes[2])];
     if (!c.enabled) return out;
 
     var longEdge = Math.max(w, h);
 
     if (c.softFocus.amount > 0.001) {
-      compOver(out, blurLayer(planes, w, h, c.softFocus.radiusPct / 100 * longEdge, 0), c.softFocus.amount);
+      compOver(out, blurLayer(planes, w, h, c.softFocus.radiusPct / 100 * longEdge), c.softFocus.amount);
     }
     if (c.clarity.amount > 0.001) {
-      compOver(out, blurLayer(planes, w, h, c.clarity.radiusPct / 100 * longEdge, 0), c.clarity.amount);
+      compOver(out, blurLayer(planes, w, h, c.clarity.radiusPct / 100 * longEdge), c.clarity.amount);
     }
-    if (c.glow.amount > 0.001) {
-      compScreen(out, blurLayer(planes, w, h, c.glow.radiusPct / 100 * longEdge, c.glow.threshold), c.glow.amount);
+    // Mặt nạ đọc từ ảnh GỐC: hai tầng trên có thể đã làm nhoè ranh giới da / phông.
+    if (c.bloom.amount > 0.001) {
+      var bl = bloomLayer(planes, w, h, c.bloom, scale || 1);
+      if (bl) screenBloom(out, bl, c.bloom);
     }
 
     // Tầng 4 + 5 gộp thành một phép affine, đúng như pipeline.js.
@@ -812,8 +860,9 @@
       planes[1][i] = img.data[k + 1] / 255;
       planes[2][i] = img.data[k + 2] / 255;
     }
-    work = { w: w, h: h, planes: planes, srcW: iw, srcH: ih };
+    work = { w: w, h: h, planes: planes, srcW: iw, srcH: ih, scale: w / iw };
     dropBlurCache();
+    dropBloomCache();
 
     cvA.width = w; cvA.height = h;
     cvB.width = w; cvB.height = h;
@@ -824,7 +873,7 @@
   function paint() {
     if (!work) return;
     var t0 = performance.now();
-    var out = process(work.planes, work.w, work.h, cfg);
+    var out = process(work.planes, work.w, work.h, cfg, work.scale);
     var img = ctxA.createImageData(work.w, work.h);
     var n = work.w * work.h;
     for (var i = 0, k = 0; i < n; i++, k += 4) {
@@ -980,7 +1029,8 @@
     x.fillStyle = face;
     x.beginPath(); x.ellipse(w * 0.42, h * 0.5, h * 0.30, h * 0.40, 0, 0, 6.3); x.fill();
 
-    // chấm sáng nhỏ — nơi quầng glow sẽ nở
+    // chấm sáng nhỏ — đóng vai chấm bi của phông booth. Ngưỡng highlightCutoff
+    // phải loại được chúng, nếu không chúng sẽ loè lên trước cả khuôn mặt.
     [[0.74, 0.28, 46], [0.83, 0.62, 30], [0.66, 0.75, 22], [0.36, 0.30, 16]].forEach(function (p) {
       var gr = x.createRadialGradient(w * p[0], h * p[1], 0, w * p[0], h * p[1], p[2]);
       gr.addColorStop(0, "rgba(255,255,250,1)"); gr.addColorStop(1, "rgba(255,255,250,0)");
@@ -1097,6 +1147,22 @@
       sec.appendChild(el("p", "why", grp.why));
       SLIDERS.filter(function (s) { return s.g === grp.g; })
              .forEach(function (s) { buildSlider(s, sec); });
+
+      if (grp.g === "bloom") {
+        sec.appendChild(field("Chỉ vùng da", "bloom.skinOnly", function () {
+          var w = el("label", "switch");
+          var cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.bloom.skinOnly;
+          cb.addEventListener("change", function () {
+            cfg.bloom.skinOnly = cb.checked;
+            dropBloomCache(); schedule(); writeJson(); remember();
+          });
+          w.appendChild(cb);
+          w.appendChild(el("span", null, "lọc mặt nạ theo tông da"));
+          sliderRefs.push(function () { cb.checked = cfg.bloom.skinOnly; });
+          return w;
+        }));
+        sec.appendChild(el("p", "why", "Tắt đi thì cả ảnh phát sáng, chỉ còn ngưỡng loại vùng sáng chặn bớt — thường không phải thứ bạn muốn."));
+      }
 
       if (grp.g === "warm") {
         var f = el("div", "field");
@@ -1278,11 +1344,11 @@
 
   var DOC = {
     file: "Tham so hieu ung Soft Light. Sua truc tiep file nay roi chup thu, khong can build lai. Chay `npm run preview -- <anh.jpg>` de xem truoc ma khong ghi de.",
-    softFocus: "Lam mo NHE ban kinh nho - day la tang giam do net that su, lam min da va soi toc. radiusPct tinh theo canh dai cua anh.",
-    clarity: "Giam do net / do tuong phan cuc bo. amount = ty le pha lop mo ban kinh lon vao anh goc.",
-    glow: "Soft focus / bong bong. Lop mo duoc cat nguong chi giu vung sang roi screen len anh, nen quang sang bam theo cho bat sang cua tung anh.",
-    tone: "contrast am = giam tuong phan tong the. lift = nang vung den (0..0.1), tao cam giac bac mau ethereal.",
-    warm: "temp duong = am hon (tang do, giam lam). highlightWarmth phu them mau am len vung sang bang blend soft-light.",
+    softFocus: "Lam mo NHE ban kinh nho tren TOAN anh - lam min da va soi toc nhung cung lam mem ca phong nen. De 0 de giu phong nen (cham bi, chu, hoa van) sac net nhu ban tham chieu.",
+    clarity: "Giam do net / do tuong phan cuc bo tren TOAN anh. De 0 vi cung ly do voi softFocus.",
+    bloom: "TANG CHINH. Tach rieng vung tong da, lam mo that manh, tang sang roi screen len anh GOC con nguyen net. Vi mat na cat theo MAU DA chu khong theo do sang, phong nen khong bi loe. amount = do manh (0..1), radiusPct tinh theo chieu ngang anh, highlightCutoff loai vung sang hon muc nay (cham bi trang, den).",
+    tone: "contrast am = giam tuong phan tong the. lift = nang vung den (0..0.2), tao cam giac bac mau ethereal. Ban tham chieu khong dung tang nay.",
+    warm: "temp duong = am hon (tang do, giam lam). highlightWarmth phu them mau am len vung sang bang blend soft-light. Ban tham chieu khong dung tang nay.",
     output: "Chat luong JPEG ghi de. 4:4:4 giu mau vien toc/moi sac net hon 4:2:0.",
     backup: "Anh goc duoc chep vao thu muc con nay truoc khi ghi de. Su ton tai cua ban backup CHINH LA dau hieu 'da xu ly' - nho vay trigger co ban hai lan cung khong xu ly chong.",
     skip: "Bo qua nhung file co duong dan chua mot trong cac chuoi nay. Dung khi dslrBooth goi ca tren file template da ghep - lam mem ca to in se nhoe luon khung va logo. Vi du: [\"\\prints\\\\\", \"_final\"]",
@@ -1307,11 +1373,15 @@
     L.push('    "radiusPct": ' + nf(c.clarity.radiusPct));
     L.push("  },");
     L.push("");
-    L.push('  "glow": {');
-    L.push('    "_doc": ' + js(DOC.glow) + ",");
-    L.push('    "amount": ' + nf(c.glow.amount) + ",");
-    L.push('    "radiusPct": ' + nf(c.glow.radiusPct) + ",");
-    L.push('    "threshold": ' + nf(c.glow.threshold));
+    L.push('  "bloom": {');
+    L.push('    "_doc": ' + js(DOC.bloom) + ",");
+    L.push('    "amount": ' + nf(c.bloom.amount) + ",");
+    L.push('    "radiusPct": ' + nf(c.bloom.radiusPct) + ",");
+    L.push('    "minRadiusPx": ' + nf(c.bloom.minRadiusPx) + ",");
+    L.push('    "brightness": ' + nf(c.bloom.brightness) + ",");
+    L.push('    "contrast": ' + nf(c.bloom.contrast) + ",");
+    L.push('    "skinOnly": ' + (c.bloom.skinOnly ? "true" : "false") + ",");
+    L.push('    "highlightCutoff": ' + nf(c.bloom.highlightCutoff));
     L.push("  },");
     L.push("");
     L.push('  "tone": {');
@@ -1456,7 +1526,7 @@
       return clamp(x, lo, hi);
     };
     var g = function (name) { return (raw[name] && typeof raw[name] === "object") ? raw[name] : {}; };
-    var sf = g("softFocus"), cl = g("clarity"), gl = g("glow"), tn = g("tone"),
+    var sf = g("softFocus"), cl = g("clarity"), bl = g("bloom"), tn = g("tone"),
         wm = g("warm"), ou = g("output"), bk = g("backup"), sk = g("skip"), li = g("limits");
 
     o.enabled = raw.enabled !== false;
@@ -1464,9 +1534,13 @@
     o.softFocus.radiusPct = n(sf.radiusPct, 0.02, 3, d.softFocus.radiusPct);
     o.clarity.amount = n(cl.amount, 0, 0.9, d.clarity.amount);
     o.clarity.radiusPct = n(cl.radiusPct, 0.1, 10, d.clarity.radiusPct);
-    o.glow.amount = n(gl.amount, 0, 1, d.glow.amount);
-    o.glow.radiusPct = n(gl.radiusPct, 0.1, 10, d.glow.radiusPct);
-    o.glow.threshold = n(gl.threshold, 0, 0.95, d.glow.threshold);
+    o.bloom.amount = n(bl.amount, 0, 1, d.bloom.amount);
+    o.bloom.radiusPct = n(bl.radiusPct, 0.1, 10, d.bloom.radiusPct);
+    o.bloom.minRadiusPx = n(bl.minRadiusPx, 0, 200, d.bloom.minRadiusPx);
+    o.bloom.brightness = n(bl.brightness, 0.5, 3, d.bloom.brightness);
+    o.bloom.contrast = n(bl.contrast, 0.2, 2, d.bloom.contrast);
+    o.bloom.skinOnly = bl.skinOnly !== false;
+    o.bloom.highlightCutoff = n(bl.highlightCutoff, 0.2, 1, d.bloom.highlightCutoff);
     o.tone.contrast = n(tn.contrast, -0.6, 0.6, d.tone.contrast);
     o.tone.lift = n(tn.lift, 0, 0.2, d.tone.lift);
     o.warm.temp = n(wm.temp, -0.4, 0.4, d.warm.temp);
