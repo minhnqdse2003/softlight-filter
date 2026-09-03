@@ -121,12 +121,17 @@ async function processLocked(path, cfg, { via, started, backupDir, backupPath })
 /* ═══════════════════════ các chế độ thủ công ═══════════════════════ */
 
 async function cmdPreview(path, cfg) {
-  const { renderComparison } = await import('./pipeline.js');
+  const { renderComparison, renderSoftLight } = await import('./pipeline.js');
   const out = path.replace(/\.(jpe?g)$/i, '') + '.SO-SANH.jpg';
   const started = Date.now();
   writeFileSync(out, await renderComparison(path, cfg));
   console.log(`Đã ghi ảnh so sánh trái=gốc / phải=đã xử lý (${Date.now() - started}ms):\n  ${out}`);
   console.log('Ảnh gốc KHÔNG bị đụng tới. Sửa softlight.config.json rồi chạy lại để so.');
+
+  // Bảng hài hoà đo trên ẢNH THẬT có ý nghĩa hơn hẳn so với đo trên ảnh kiểm
+  // tổng hợp của --selftest, vốn cố tình chứa cả mảng đen kịt lẫn đốm cháy sáng.
+  const { jpeg } = await renderSoftLight(path, cfg);
+  await reportHarmony(jpeg);
 }
 
 async function cmdDir(dir, cfg, force) {
@@ -260,6 +265,10 @@ async function makeTestImage(w = 3000, h = 2000) {
         // Dải ô tông da, giữ nguyên hoa văn tần cao để đo độ mịn trên da.
         const c = skin[Math.min(skin.length - 1, Math.floor(gx * 5))];
         [r, g, b] = [c[0] + fine, c[1] + fine, c[2] + fine];
+      } else if (band === 4 && gx < 0.25) {
+        // Mảng đen kịt, để đo được đầu dưới của đường cong đáp ứng hạt.
+        const v = 14 * (gx / 0.25) + fine * 0.2;
+        [r, g, b] = [v, v, v];
       } else {
         const base = 70 + 105 * gx + 35 * gy + 160 * spot + fine + mid + coarse;
         [r, g, b] = [base + 28, base - 3, base - 18];
@@ -326,6 +335,99 @@ async function reportSkinSplit(beforeJpeg, afterJpeg) {
   );
 }
 
+/**
+ * Kiểm chứng đường cong đáp ứng của tầng hạt. Dựng lại chính ảnh đó với
+ * `grain.amount = 0` rồi đo độ lệch chuẩn của phần chênh nhau, chia theo ba
+ * dải sáng. Hạt giả rải đều cả ba dải; hạt phim phải đậm ở trung gian và tắt
+ * hẳn ở đen kịt lẫn cháy sáng.
+ */
+async function reportGrain(testPath, cfg) {
+  const sharp = (await import('sharp')).default;
+  const { renderSoftLight } = await import('./pipeline.js');
+  // Mã hoá không tổn hao cho phép đo: ở chất lượng thường, nhiễu lượng tử của
+  // JPEG lấn át đúng cái ta muốn đo ở hai đầu dải, nơi hạt gần bằng 0.
+  const lossless = (c) => ({ ...c, output: { quality: 100, chromaSubsampling: '4:4:4' } });
+  const plain = JSON.parse(JSON.stringify(cfg));
+  plain.grain.amount = 0;
+
+  const [{ jpeg: withG }, { jpeg: noG }] = await Promise.all([
+    renderSoftLight(testPath, lossless(cfg)),
+    renderSoftLight(testPath, lossless(plain)),
+  ]);
+  const [x, y] = await Promise.all(
+    [noG, withG].map((b) => sharp(b).toColourspace('srgb').raw().toBuffer({ resolveWithObject: true })),
+  );
+
+  // Chỉ lấy ba dải HẸP ở nơi đường cong đáp ứng nói rõ phải bằng 0, bằng 1 rồi
+  // lại bằng 0 — dải rộng sẽ trộn lẫn phần chuyển tiếp và làm nhoè kết luận.
+  const sq = [0, 0, 0];
+  const cnt = [0, 0, 0];
+  const n = x.info.width * x.info.height;
+
+  for (let i = 0, k = 0; i < n; i++, k += 3) {
+    const lum = (x.data[k] * 77 + x.data[k + 1] * 150 + x.data[k + 2] * 29) >> 8;
+    let band = -1;
+    if (lum <= 3) band = 0;
+    else if (lum >= 60 && lum <= 180) band = 1;
+    else if (lum >= 250) band = 2;
+    if (band < 0) continue;
+    for (let c = 0; c < 3; c++) sq[band] += (y.data[k + c] - x.data[k + c]) ** 2;
+    cnt[band] += 3;
+  }
+
+  const sd = sq.map((s, i) => (cnt[i] ? Math.sqrt(s / cnt[i]) : 0));
+  const name = ['đen kịt (≤3)', 'trung gian', 'cháy sáng (≥250)'];
+  console.log('\n  Biên độ hạt theo dải sáng (độ lệch chuẩn so với bản không hạt):');
+  for (let i = 0; i < 3; i++) {
+    console.log(
+      `    ${name[i].padEnd(18)}${sd[i].toFixed(2).padStart(6)}/255` +
+        (cnt[i] ? '' : '   (ảnh kiểm không có dải này)'),
+    );
+  }
+  const ok = sd[1] > 0.5 && sd[1] > sd[0] * 2 && sd[1] > sd[2] * 2;
+  console.log(
+    ok
+      ? '  → Đúng đặc trưng hạt phim: đậm ở trung gian, cuộn về 0 ở hai đầu dải.'
+      : '  → CẢNH BÁO: hạt rải gần như đều khắp dải sáng, sẽ đọc ra như nhiễu số.\n' +
+          '    Kiểm tra grain.shadowRolloff và grain.highlightRolloff.',
+  );
+}
+
+/**
+ * Bảng chấm độ hài hoà của ảnh ĐẦU RA. Khác với bảng chỉ số ở trên — vốn chỉ
+ * nói ảnh đổi thế nào — bảng này nói ảnh có dùng được hay không, và sai thì
+ * xoay tham số nào.
+ */
+async function reportHarmony(jpeg) {
+  const { harmonyOf, harmonyVerdicts, HARMONY } = await import('./pipeline.js');
+  const m = await harmonyOf(jpeg);
+  const v = harmonyVerdicts(m);
+  const H = HARMONY;
+
+  const row = (label, value, target, verdict) => {
+    console.log(
+      `  ${label.padEnd(24)}${value.padStart(11)}   ${target.padEnd(15)}` +
+        `${(verdict.ok ? 'ĐẠT' : 'CẢNH BÁO').padEnd(11)}${verdict.note}`,
+    );
+  };
+
+  console.log('\n  ĐỘ HÀI HOÀ CỦA ẢNH ĐẦU RA');
+  console.log('  chỉ số                       giá trị   ngưỡng         kết quả');
+  console.log('  ' + '─'.repeat(94));
+  row('Bết đen (Y < 4)', m.crushedPct.toFixed(2) + '%', `≤ ${H.crushedPct.max}%`, v.crushed);
+  row('Cháy sáng (Y > 251)', m.blownPct.toFixed(2) + '%', `≤ ${H.blownPct.max}%`, v.blown);
+  row(
+    'Da so với phông',
+    `${m.skinMean.toFixed(0)} / ${m.bgMean.toFixed(0)}`,
+    'da ≥ phông',
+    v.subject,
+  );
+  row('Độ ấm (R − B)', m.warmth.toFixed(1), `${H.warmth.min}…${H.warmth.max}`, v.warmth);
+  row('Sắc da G−(R+B)/2', m.skinTint.toFixed(1), `${H.skinTint.min}…+${H.skinTint.max}`, v.tint);
+  console.log(`\n  Vùng da chiếm ${m.skinShare.toFixed(1)}% khung hình.`);
+  return m;
+}
+
 async function cmdSelftest(cfg) {
   const { renderSoftLight, measure } = await import('./pipeline.js');
   const tmp = join(ROOT, 'logs', '_selftest.jpg');
@@ -340,7 +442,6 @@ async function cmdSelftest(cfg) {
 
   const a = await measure(original);
   const b = await measure(jpeg);
-  unlinkSync(tmp);
 
   const pct = (x, y) => {
     const d = (y / x - 1) * 100;
@@ -368,6 +469,14 @@ async function cmdSelftest(cfg) {
   row('Độ ấm (đỏ − lam)', a.warmth, b.warmth, warmer ? '+' : null, warmer ? 'ấm hơn' : 'tầng warm đang tắt');
 
   await reportSkinSplit(original, jpeg);
+  if (cfg.grain.amount > 0.0005) await reportGrain(tmp, cfg);
+  unlinkSync(tmp);
+  await reportHarmony(jpeg);
+  console.log(
+    '  Lưu ý: ảnh kiểm cố tình có cả mảng đen kịt lẫn đốm cháy sáng để đo được\n' +
+      '  hai đầu dải, nên hai dòng đầu bảng trên hầu như luôn cảnh báo. Chấm trên\n' +
+      '  ảnh thật bằng: node src/cli.js --preview <ảnh.jpg>',
+  );
 
   if (stages.length) {
     console.log('\n  Diễn biến qua từng tầng:');

@@ -25,6 +25,7 @@ Các tầng còn lại **mặc định tắt** (`amount: 0`), giữ lại để 
 | 3 | **Bloom trên vùng da** | **Tầng chính**, mô tả ở trên | `bloom.*` | **bật, 0.7** |
 | 4 | Tone | Giảm contrast quanh điểm giữa + nâng vùng đen → bạc màu, ethereal | `tone.contrast`, `tone.lift` | tắt |
 | 5 | Ấm | Lệch gain giữa các kênh + phủ soft-light màu ấm lên vùng sáng | `warm.*` | tắt |
+| 6 | **Nhiễu hạt** | Hạt phim: nhiễu trắng **kết cụm**, rải theo đường cong sắc độ, tách ba lớp màu | `grain.*` | **bật, 0.014** |
 
 ### Vì sao cắt theo màu da chứ không theo độ sáng
 
@@ -41,6 +42,32 @@ hẳn logic cũ.
 `--selftest` đo thẳng điều này: mức thay đổi trên vùng da phải gấp ít nhất 3
 lần mức thay đổi trên phông.
 
+### Hạt phim, không phải nhiễu cảm biến
+
+Rải nhiễu trắng đều khắp khung là cách nhanh nhất để ảnh trông như chụp thiếu
+sáng bằng điện thoại. Tầng 6 giải bốn điểm khiến hạt phim khác hẳn nhiễu số:
+
+| Đặc tính | Cách làm | Tham số |
+|---|---|---|
+| Hạt có **kích thước** — tinh thể muối bạc kết tụ thành cụm rồi còn nhoè thêm qua quang học | nhiễu trắng rồi **làm mờ**, không phải nhiễu từng pixel | `grain.sizePx` |
+| Hạt **phụ thuộc sắc độ** — phản ứng hoá học bão hoà ở vùng cháy sáng, chưa xảy ra ở vùng đen kịt | đường cong smoothstep cuộn về 0 ở hai đầu dải, tra bảng 256 mức | `grain.shadowRolloff`, `grain.highlightRolloff` |
+| Ba lớp thuốc nhuộm **độc lập, khác cỡ** — lớp lam trên cùng thô nhất, lớp đỏ mịn nhất | ba lớp nhiễu riêng, cỡ R/G/B = 0,8 / 1,0 / 1,4 và cường độ 0,75 / 1,0 / 1,75 | `grain.chroma`, `grain.mono` |
+| Cỡ hạt phải **theo độ phân giải** | `sizePx` neo ở ảnh cạnh dài 4000px, nhân theo `cạnh dài / 4000` | — |
+
+Hai điểm dễ vấp:
+
+- **Làm mờ nuốt mất phương sai.** Sau khi làm mờ, độ lệch chuẩn của lớp nhiễu
+  tụt mạnh và mức tụt còn phụ thuộc việc ép về 8-bit. Nên phải **đo** rồi chuẩn
+  hoá `(giá trị − trung bình) / độ lệch chuẩn`, chứ không suy ra bằng công thức.
+  Đo trên mảnh 640×640 là đủ — nhiễu là dừng nên ước lượng sai dưới 0,5%.
+- **`chroma = 1` không phải "chuẩn nhất".** Bộ số 0,75 / 1,0 / 1,75 vốn dành cho
+  không gian tuyến tính dải rộng; đổ nguyên vào sRGB 8-bit thì phần lệch kênh
+  đọc ra thành đốm màu kiểu nhiễu cảm biến. Mặc định `0.5` lấy một nửa độ lệch.
+
+Hạt cộng **sau cùng**, sau mọi tầng khác — quy tắc "khử trước, thêm hạt sau".
+Nó cũng đóng vai dither: một lượng hạt rất nhỏ đủ phá vệt đứt dải (banding) trên
+nền chuyển sắc mượt của phông booth.
+
 ---
 
 ## Cài đặt trên máy booth
@@ -54,8 +81,11 @@ build-exe.bat
 node src\cli.js --selftest
 ```
 
-`--selftest` phải in ra **ĐẠT** ở cả năm dòng. Nếu không, dừng lại và xử lý
-trước khi cắm vào dslrBooth.
+`--selftest` in ra bốn bảng. Cần thấy: hai dòng có chấm điểm ở bảng đầu đều
+**ĐẠT** (những dòng ứng với tầng đang tắt hiện `—`), tỉ lệ da/phông ít nhất
+3 lần, và biên độ hạt đậm ở trung gian rồi cuộn về 0 ở hai đầu dải. Bảng hài
+hoà cuối cùng đo trên ảnh kiểm tổng hợp nên hai dòng đầu hầu như luôn cảnh báo
+— chấm thật bằng `--preview` trên ảnh chụp thật.
 
 `build-exe.bat` tạo ra `softlight.exe` (6KB) bằng trình biên dịch C# đi kèm
 Windows — không cần cài thêm gì. Chỉ phải chạy một lần; sửa
@@ -135,18 +165,25 @@ dslrBooth gọi tới lúc `softlight.exe` thoát:
 
 | Độ phân giải | Xử lý ảnh | Khởi động Node + sharp | **Tổng** |
 |---|---|---|---|
-| 24MP (6000×4000) | ~930ms | ~460ms | **~1.4s** |
-| 20MP (5472×3648) | ~880ms | ~460ms | ~1.3s |
-| 12MP (4000×3000) | ~550ms | ~460ms | **~1.0s** |
+| 24MP (6000×4000) | ~1,61s | ~460ms | **~2,1s** |
+| 11MP (4000×2667) | ~750ms | ~460ms | **~1,2s** |
 
 Đo trên máy booth của bạn: `node src\cli.js --bench <ảnh thật>`
 
-Nếu quá chậm, xử lý theo thứ tự hiệu quả giảm dần:
+Tầng hạt chiếm khoảng **420ms** trong số đó trên ảnh 24MP, và làm **file JPEG
+phình từ 5,1 MB lên 8,8 MB** — nhiễu vốn rất khó nén. Với một sự kiện 500 ảnh
+thì chênh khoảng 1,9 GB, đáng cân nhắc nếu ổ đĩa máy booth chật.
+
+Nếu quá chậm hoặc quá nặng, xử lý theo thứ tự hiệu quả giảm dần:
 
 1. Hạ độ phân giải chụp trong dslrBooth — đòn bẩy mạnh nhất, thời gian tỉ lệ
    thẳng với số điểm ảnh.
-2. Hạ `output.quality` xuống 90.
-3. Giữ `softFocus.amount` và `clarity.amount` ở 0 (mặc định) — mỗi tầng bật
+2. Đặt `grain.mono: true` — bớt ~80ms và kéo file về ~6,2 MB, hạt vẫn giữ chất
+   phim, chỉ mất phần lệch màu giữa ba lớp.
+3. Hạ `output.quality` xuống 90.
+4. Đặt `grain.amount: 0` nếu vẫn chật — nhưng nhớ rằng lúc đó vệt đứt dải trên
+   nền chuyển sắc của phông sẽ hiện lại.
+5. Giữ `softFocus.amount` và `clarity.amount` ở 0 (mặc định) — mỗi tầng bật
    thêm là một lượt làm mờ toàn ảnh nữa.
 
 ---
@@ -159,11 +196,23 @@ Bấm đúp `web/softlight-tuner.html`. Thả một tấm ảnh vào, kéo slide
 kết quả trên chính tấm ảnh đó, rồi bấm **Sao chép** để lấy về đúng
 `softlight.config.json` đầy đủ — dán đè lên file cũ là xong.
 
+Sidebar gom thành **năm tấm gập được**, chỉ tầng chính mở sẵn; mỗi tấm đang gập
+vẫn hiện dòng tóm tắt bên phải (`0.70`, `0.014`, `tắt`…) nên biết ngay mục đó
+có tác động gì không mà không phải mở ra. Trạng thái gập/mở được nhớ lại giữa
+các lần mở trang.
+
+Dưới khung xem có **bốn thẻ chấm độ hài hoà** (xanh = đạt, đỏ = cảnh báo), đo
+thẳng trên ảnh đã lọc và nói luôn phải xoay tham số nào — xem mục dưới.
+
 Toàn bộ chạy trong trình duyệt, ảnh không đi đâu cả. Trang này dựng lại đúng
-năm tầng của `src/pipeline.js`, kể cả cách ghép tay lớp bloom (bỏ nhân alpha
-trước khi áp brightness/contrast); đối chiếu với `sharp` thật thì sai lệch
-trung bình 2,2/255 (0,9%) ở bộ tham số đang dùng — phần dư đến từ box blur xấp
-xỉ Gauss và từ việc pipeline làm mờ ở độ phân giải rút gọn.
+sáu tầng của `src/pipeline.js`, kể cả cách ghép tay lớp bloom (bỏ nhân alpha
+trước khi áp brightness/contrast) và đường cong đáp ứng của tầng hạt; đối chiếu
+với `sharp` thật thì sai lệch trung bình 2,2/255 (0,9%) ở bộ tham số đang dùng —
+phần dư đến từ box blur xấp xỉ Gauss và từ việc pipeline làm mờ ở độ phân giải
+rút gọn. Biên độ hạt lệch dưới 5%, các thước đo hài hoà lệch dưới 1%.
+
+Một khác biệt cố ý: khung xem dựng hạt ở **đúng cỡ pixel của ảnh thật**, nên nó
+cho thấy hạt khi soi 100%. In ra hoặc xem thu nhỏ cả khung thì hạt sẽ dịu hơn.
 
 Sửa `web/tuner.html` xong thì chạy `node web/build-offline.mjs` để dựng lại bản
 bấm đúp.
@@ -185,7 +234,7 @@ Kiểm chứng bằng số đo thay vì bằng mắt:
 node src\cli.js --selftest
 ```
 
-In ra bảng năm chỉ số kèm diễn biến qua từng tầng. Quy tắc đọc quan trọng nhất:
+In ra bảng chỉ số kèm diễn biến qua từng tầng. Quy tắc đọc quan trọng nhất:
 **mức thay đổi trên vùng da phải lớn hơn hẳn mức thay đổi trên phông** — dòng
 cuối bảng in thẳng tỉ lệ đó, cần ít nhất 3 lần. Nếu tỉ lệ tụt xuống thì phông
 đang bị loè cùng với da: kiểm tra `bloom.skinOnly` và hạ `bloom.highlightCutoff`.
@@ -193,8 +242,34 @@ cuối bảng in thẳng tỉ lệ đó, cần ít nhất 3 lần. Nếu tỉ l�
 Những chỉ số chỉ có nghĩa khi tầng tương ứng được bật (độ nét, clarity, độ ấm)
 sẽ hiện dấu `—` ở cột kết quả thay vì chấm đạt / không đạt.
 
+Bảng thứ hai chấm **đường cong đáp ứng của tầng hạt**: biên độ hạt ở trung gian
+phải lớn hơn hẳn ở đen kịt và cháy sáng, ít nhất 2 lần mỗi bên. Rải đều là dấu
+hiệu hạt đang đọc ra như nhiễu số.
+
 Với cấu hình mặc định: độ sáng +32%, tương phản tổng thể −27%, mức thay đổi
 trên da gấp ~10 lần trên phông.
+
+### Bảng chấm độ hài hoà
+
+Khác với các chỉ số ở trên — vốn chỉ nói ảnh **đổi** thế nào — bảng này chấm ảnh
+đầu ra có **dùng được** không, và sai thì xoay tham số nào. Hiện ở cả
+`--selftest`, `--preview` và bốn thẻ dưới khung xem của tuner, dùng chung một
+bộ ngưỡng nên không bao giờ nói hai điều khác nhau.
+
+| Chỉ số | Đo gì | Đạt khi | Sai thì sửa |
+|---|---|---|---|
+| Bết đen | % điểm ảnh có Y < 4/255 | ≤ 1,0% | `tone.lift` ↑ hoặc `tone.contrast` bớt âm |
+| Cháy sáng | % điểm ảnh có Y > 251/255 | ≤ 0,8% | `bloom.brightness` ↓, `bloom.amount` ↓, `bloom.highlightCutoff` ↓ |
+| Tương quan da / nền | độ sáng trung bình vùng da so với phần còn lại | da ≥ phông | hạ sáng phông, hoặc `bloom.amount` ↑ |
+| Độ ấm | trung bình (đỏ − lam) toàn ảnh | 10…35 | < 5 lạnh → `warm.temp` ↑; > 45 ngả gạch → `warm.temp` ↓ |
+| Sắc da | trung bình (lục − trung bình đỏ/lam) **chỉ trên vùng da** | −10…+5 | > +8 ám lục → `warm.tint` ↓; < −15 ám tím → `warm.tint` ↑ |
+
+Sắc da đo riêng trên vùng da chứ không trên cả khung: phông xanh hay backdrop
+màu sẽ kéo lệch hẳn con số nếu tính cả ảnh.
+
+Lưu ý khi đọc `--selftest`: ảnh kiểm tổng hợp **cố tình** chứa cả mảng đen kịt
+lẫn đốm cháy sáng để đo được hai đầu dải, nên hai dòng đầu hầu như luôn cảnh
+báo. Muốn chấm thật thì chạy `--preview` trên một tấm ảnh chụp thật.
 
 ### Muốn mạnh hơn / nhẹ hơn
 
@@ -207,6 +282,11 @@ trên da gấp ~10 lần trên phông.
 | Mềm cả khung hình, kể cả phông | `softFocus.amount` ↑ từ 0 (thử 0.2) |
 | Ethereal hơn, bạc màu hơn | `tone.lift` ↑, `tone.contrast` âm hơn |
 | Ấm hơn | `warm.temp` ↑ |
+| Hạt rõ hơn | `grain.amount` ↑ (0.014 → 0.025; trên 0.03 bắt đầu ra đốm màu) |
+| Hạt to / thô hơn (chất 8mm) | `grain.sizePx` ↑ (1.4 → 3) |
+| Hạt hết đốm màu | `grain.chroma` ↓, hoặc `grain.mono: true` |
+| Hạt lấn cả vùng tối | `grain.shadowRolloff` ↑ |
+| Chỉ cần chống đứt dải, không cần thấy hạt | `grain.amount` ≈ 0.006 |
 | Tắt hẳn hiệu ứng | `"enabled": false` |
 
 ### Nếu dslrBooth gọi cả trên file template đã ghép
@@ -350,7 +430,7 @@ dong-goi.bat              tạo thư mục _deploy để chép sang máy booth
 kiem-tra.bat              bấm đúp trên máy booth: kiểm tra môi trường
 tools/Launcher.cs         nguồn của launcher
 src/config.js             đọc + kẹp cấu hình về miền an toàn
-src/pipeline.js           năm tầng hiệu ứng + các phép đo kiểm chứng
+src/pipeline.js           sáu tầng hiệu ứng + các phép đo kiểm chứng
 src/cli.js                điều phối lời gọi và các lệnh thủ công
 logs/softlight.log        nhật ký, dùng để kiểm chứng
 web/tuner.html            bảng chỉnh tham số trong trình duyệt (nguồn)

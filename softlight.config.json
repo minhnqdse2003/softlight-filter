@@ -39,6 +39,17 @@
     "highlightColor": "#ffd9a8"
   },
 
+  "grain": {
+    "_doc": "Nhieu hat kieu phim nhua, cong SAU CUNG. Nhieu trang duoc lam mo de ket cum (sizePx quy chieu o anh canh dai 4000px), roi rai theo duong cong sac do - dam nhat o trung gian, cuon ve 0 o vung den kit (shadowRolloff) va vung chay sang (highlightRolloff). Ba kenh mau co co hat khac nhau nhu ba lop thuoc nhuom cua phim: lam tho nhat, do min nhat. Dat mono=true de duoc hat xam khong lech mau. seed=0 la ngau nhien moi anh. amount=0 de tat.",
+    "amount": 0.014,
+    "sizePx": 1.4,
+    "chroma": 0.5,
+    "mono": false,
+    "shadowRolloff": 0.06,
+    "highlightRolloff": 0.85,
+    "seed": 0
+  },
+
   "output": {
     "_doc": "Chat luong JPEG ghi de. 4:4:4 giu mau vien toc/moi sac net hon 4:2:0.",
     "quality": 95,
@@ -59,6 +70,6 @@
   "limits": {
     "_doc": "Bo qua anh nho hon minEdge px (thumbnail cua dslrBooth). maxMs chi de canh bao trong log khi xu ly qua cham so voi nhip chup.",
     "minEdge": 400,
-    "maxMs": 1500
+    "maxMs": 2500
   }
 }

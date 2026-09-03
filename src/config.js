@@ -40,10 +40,19 @@ const DEFAULTS = {
     highlightWarmth: 0,
     highlightColor: "#ffd9a8",
   },
+  grain: {
+    amount: 0.014, // độ lệch chuẩn hạt ở trung gian, kênh lục (0 = tắt)
+    sizePx: 1.4, // cỡ cụm hạt, quy chiếu ở ảnh cạnh dài 4000px
+    chroma: 0.5, // 0 = ba kênh giống hệt nhau, 1 = đủ độ lệch ba lớp thuốc nhuộm
+    mono: false, // true = hạt xám, không tách theo kênh màu
+    shadowRolloff: 0.06, // dưới mức này hạt cuộn về 0 (đen kịt thì không có hạt)
+    highlightRolloff: 0.85, // trên mức này hạt cuộn về 0 (cháy sáng thì hết hạt)
+    seed: 0, // 0 = ngẫu nhiên mỗi ảnh
+  },
   output: { quality: 95, chromaSubsampling: "4:4:4" },
   backup: { enabled: true, folder: "_original" },
   skip: { pathContains: [] },
-  limits: { minEdge: 400, maxMs: 1500 },
+  limits: { minEdge: 400, maxMs: 2500 },
 };
 
 const num = (v, lo, hi, dflt) => {
@@ -72,6 +81,7 @@ export function loadConfig(path = CONFIG_PATH) {
   const bl = { ...d.bloom, ...raw.bloom };
   const t = { ...d.tone, ...raw.tone };
   const w = { ...d.warm, ...raw.warm };
+  const gr = { ...d.grain, ...raw.grain };
   const o = { ...d.output, ...raw.output };
   const b = { ...d.backup, ...raw.backup };
   const sk = { ...d.skip, ...raw.skip };
@@ -107,6 +117,15 @@ export function loadConfig(path = CONFIG_PATH) {
       highlightColor: /^#[0-9a-fA-F]{6}$/.test(w.highlightColor)
         ? w.highlightColor
         : d.warm.highlightColor,
+    },
+    grain: {
+      amount: num(gr.amount, 0, 0.15, d.grain.amount),
+      sizePx: num(gr.sizePx, 0.3, 6, d.grain.sizePx),
+      chroma: num(gr.chroma, 0, 1, d.grain.chroma),
+      mono: gr.mono === true,
+      shadowRolloff: num(gr.shadowRolloff, 0.001, 0.5, d.grain.shadowRolloff),
+      highlightRolloff: num(gr.highlightRolloff, 0.5, 0.999, d.grain.highlightRolloff),
+      seed: Math.round(num(gr.seed, 0, 4294967295, d.grain.seed)),
     },
     output: {
       quality: Math.round(num(o.quality, 60, 100, d.output.quality)),

@@ -23,6 +23,10 @@
     --accent-ink:#8c4a10;
     --accent-soft: rgba(178, 95, 24, .13);
     --on-accent: #fdf7f0;
+    --good:      #1f7a4d;
+    --good-soft: rgba(31, 122, 77, .12);
+    --warn:      #b23a1f;
+    --warn-soft: rgba(178, 58, 31, .12);
     --stage:     #6b7076;
     --shadow:    0 1px 2px rgba(20,28,38,.10), 0 8px 24px rgba(20,28,38,.07);
     --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
@@ -44,6 +48,10 @@
       --accent-ink:#f0b878;
       --accent-soft: rgba(224, 154, 75, .15);
       --on-accent: #14181e;
+      --good:      #5fc98d;
+      --good-soft: rgba(95, 201, 141, .14);
+      --warn:      #f08268;
+      --warn-soft: rgba(240, 130, 104, .14);
       --stage:     #4a4e54;
       --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
     }
@@ -62,6 +70,10 @@
     --accent-ink:#f0b878;
     --accent-soft: rgba(224, 154, 75, .15);
     --on-accent: #14181e;
+    --good:      #5fc98d;
+    --good-soft: rgba(95, 201, 141, .14);
+    --warn:      #f08268;
+    --warn-soft: rgba(240, 130, 104, .14);
     --stage:     #4a4e54;
     --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
   }
@@ -273,6 +285,31 @@
   .metric .d { font-size: 11px; font-family: var(--mono); color: var(--text-dim); }
   .metric .d.up { color: var(--accent-ink); }
 
+  /* ── thẻ chấm độ hài hoà ────────────────────────────────
+     Khác với hàng chỉ số trên: hàng kia nói ảnh ĐỔI thế nào, hàng này chấm ảnh
+     đầu ra có dùng được không, nên mỗi thẻ mang màu đạt/cảnh báo và câu sửa. */
+  .harmony {
+    display: grid; grid-template-columns: repeat(4, minmax(0,1fr));
+    gap: 1px; background: var(--line-soft); border-top: 1px solid var(--line);
+  }
+  @media (max-width: 720px) { .harmony { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  .hcard { background: var(--surface); padding: 9px 14px 10px; border-left: 3px solid transparent; }
+  .hcard.ok { border-left-color: var(--good); background: var(--good-soft); }
+  .hcard.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .hcard .k {
+    font-family: var(--disp); font-weight: 600;
+    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-mute);
+  }
+  .hcard .v {
+    font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums;
+    margin-top: 2px; display: flex; align-items: baseline; gap: 7px;
+  }
+  .hcard.ok .v { color: var(--good); }
+  .hcard.warn .v { color: var(--warn); }
+  .hcard .v .lim { font-size: 11px; color: var(--text-mute); }
+  .hcard .n { font-size: 11px; color: var(--text-dim); margin-top: 1px; line-height: 1.35; }
+
   /* ── rail ──────────────────────────────────────────────── */
   .rail {
     display: flex; flex-direction: column;
@@ -295,6 +332,41 @@
   }
   .panel { overflow-y: auto; flex: 1; padding: 4px 0 40px; }
   .panel[hidden] { display: none; }
+
+  /* Tấm gập được. Mười tám thanh trượt đổ ra cùng lúc thì không tìm nổi cái
+     mình cần, nên chỉ tầng chính mở sẵn; dòng tóm tắt bên phải cho biết mục
+     đang gập có tác động gì không. */
+  .sect { border-bottom: 1px solid var(--line-soft); }
+  .sect > summary {
+    display: flex; align-items: center; gap: 9px;
+    padding: 12px 18px; cursor: pointer; list-style: none; user-select: none;
+  }
+  .sect > summary::-webkit-details-marker { display: none; }
+  .sect > summary::before {
+    content: ""; flex: none; width: 6px; height: 6px; margin: -2px 1px 0 1px;
+    border-right: 1.5px solid var(--text-mute); border-bottom: 1.5px solid var(--text-mute);
+    transform: rotate(-45deg); transition: transform .15s ease;
+  }
+  .sect[open] > summary::before { transform: rotate(45deg) translate(-1px, -1px); }
+  .sect > summary:hover { background: var(--sunken); }
+  .sect > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .sect-title { font-family: var(--disp); font-size: 13.5px; font-weight: 600; letter-spacing: -.005em; }
+  .sect-tag {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--accent-ink); background: var(--accent-soft);
+    border-radius: 3px; padding: 2px 5px;
+  }
+  .sect-state {
+    margin-left: auto; font-family: var(--mono); font-size: 11px;
+    color: var(--text-mute); font-variant-numeric: tabular-nums;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%;
+  }
+  .sect-state.off { opacity: .5; }
+  .sect-body { padding: 0 18px 16px; }
+  .sect-body > .group { border-bottom: 0; padding: 0; }
+  .sect-body > .group + .group {
+    margin-top: 15px; padding-top: 14px; border-top: 1px dashed var(--line-soft);
+  }
 
   .group { border-bottom: 1px solid var(--line-soft); padding: 14px 18px 16px; }
   .group > header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 3px; }
@@ -468,6 +540,13 @@
         <div class="metric"><div class="k">Tương phản tổng</div><div class="v" id="m-global">—</div><div class="d" id="d-global"></div></div>
         <div class="metric"><div class="k">Độ ấm (R−B)</div><div class="v" id="m-warmth">—</div><div class="d" id="d-warmth"></div></div>
       </div>
+
+      <div class="harmony" id="harmony" title="Chấm trên ảnh ĐÃ LỌC: có dùng được không, sai thì xoay tham số nào">
+        <div class="hcard" id="h-crushed"></div>
+        <div class="hcard" id="h-blown"></div>
+        <div class="hcard" id="h-subject"></div>
+        <div class="hcard" id="h-skin"></div>
+      </div>
     </section>
 
     <!-- ══ bảng chỉnh ══ -->
@@ -514,10 +593,11 @@
       bloom:     { amount: 0.7, radiusPct: 2.5, minRadiusPx: 16, brightness: 1.35, contrast: 0.95, skinOnly: true, highlightCutoff: 0.863 },
       tone:      { contrast: 0, lift: 0 },
       warm:      { temp: 0, tint: 0, highlightWarmth: 0, highlightColor: "#ffd9a8" },
+      grain:     { amount: 0.014, sizePx: 1.4, chroma: 0.5, mono: false, shadowRolloff: 0.06, highlightRolloff: 0.85, seed: 0 },
       output:    { quality: 95, chromaSubsampling: "4:4:4" },
       backup:    { enabled: true, folder: "_original" },
       skip:      { pathContains: [] },
-      limits:    { minEdge: 400, maxMs: 1500 }
+      limits:    { minEdge: 400, maxMs: 2500 }
     },
     /* DEFAULTS trong src/config.js, đã kẹp về miền hợp lệ */
     code: {
@@ -527,10 +607,11 @@
       bloom:     { amount: 0.7, radiusPct: 2.5, minRadiusPx: 16, brightness: 1.35, contrast: 0.95, skinOnly: true, highlightCutoff: 0.863 },
       tone:      { contrast: 0, lift: 0 },
       warm:      { temp: 0, tint: 0, highlightWarmth: 0, highlightColor: "#ffd9a8" },
+      grain:     { amount: 0.014, sizePx: 1.4, chroma: 0.5, mono: false, shadowRolloff: 0.06, highlightRolloff: 0.85, seed: 0 },
       output:    { quality: 95, chromaSubsampling: "4:4:4" },
       backup:    { enabled: true, folder: "_original" },
       skip:      { pathContains: [] },
-      limits:    { minEdge: 400, maxMs: 1500 }
+      limits:    { minEdge: 400, maxMs: 2500 }
     },
     off: {
       enabled: true,
@@ -539,10 +620,11 @@
       bloom:     { amount: 0, radiusPct: 2.5, minRadiusPx: 16, brightness: 1.35, contrast: 0.95, skinOnly: true, highlightCutoff: 0.863 },
       tone:      { contrast: 0, lift: 0 },
       warm:      { temp: 0, tint: 0, highlightWarmth: 0, highlightColor: "#ffd9a8" },
+      grain:     { amount: 0, sizePx: 1.4, chroma: 0.5, mono: false, shadowRolloff: 0.06, highlightRolloff: 0.85, seed: 0 },
       output:    { quality: 95, chromaSubsampling: "4:4:4" },
       backup:    { enabled: true, folder: "_original" },
       skip:      { pathContains: [] },
-      limits:    { minEdge: 400, maxMs: 1500 }
+      limits:    { minEdge: 400, maxMs: 2500 }
     }
   };
 
@@ -568,15 +650,64 @@
     { g: "tone",      k: "lift",            label: "Nâng vùng đen", min: 0, max: 0.2,  step: 0.005, hint: "Kéo vùng tối lên khỏi 0 — vệt “sương mù” đặc trưng của phim." },
     { g: "warm",      k: "temp",            label: "Nhiệt độ màu", min: -0.4, max: 0.4, step: 0.005, hint: "Dương = ấm hơn (tăng đỏ, giảm lam). Âm = lạnh hơn." },
     { g: "warm",      k: "tint",            label: "Sắc lục / tím", min: -0.4, max: 0.4, step: 0.005, hint: "Dương = ngả lục, âm = ngả tím. Thường chỉ cần nhích rất nhẹ." },
-    { g: "warm",      k: "highlightWarmth", label: "Ấm vùng sáng", min: 0,  max: 0.5,  step: 0.005, hint: "Phủ màu ấm bằng soft-light — chỉ ăn vào trung gian và vùng sáng." }
+    { g: "warm",      k: "highlightWarmth", label: "Ấm vùng sáng", min: 0,  max: 0.5,  step: 0.005, hint: "Phủ màu ấm bằng soft-light — chỉ ăn vào trung gian và vùng sáng." },
+    { g: "grain",     k: "amount",          label: "Cường độ",   min: 0,    max: 0.15, step: 0.001, hint: "Độ lệch chuẩn của hạt ở vùng trung gian. 0,014 ≈ 3,6/255 — đủ để phá vệt đứt dải mà chưa thấy rõ là hạt." },
+    { g: "grain",     k: "sizePx",          label: "Cỡ cụm hạt", min: 0.3,  max: 6,    step: 0.05,  unit: "px", hint: "Quy chiếu ở ảnh cạnh dài 4000px; ảnh to hơn thì cụm to lên theo. Nhỏ = 65mm mịn, lớn = 8mm thô." },
+    { g: "grain",     k: "chroma",          label: "Lệch kênh màu", min: 0, max: 1,    step: 0.05,  hint: "0 = ba kênh giống hệt nhau. 1 = đủ độ lệch ba lớp thuốc nhuộm (lam thô nhất). Đẩy cao quá thì ra đốm màu kiểu nhiễu cảm biến chứ không ra chất phim." },
+    { g: "grain",     k: "shadowRolloff",   label: "Cuộn vùng đen", min: 0.001, max: 0.5, step: 0.005, hint: "Dưới mức sáng này hạt cuộn dần về 0. Đen kịt thì phản ứng hoá học chưa xảy ra nên không có hạt." },
+    { g: "grain",     k: "highlightRolloff", label: "Cuộn vùng sáng", min: 0.5, max: 0.999, step: 0.005, hint: "Trên mức sáng này hạt cuộn dần về 0. Cháy sáng thì phản ứng bão hoà nên hạt biến mất." }
   ];
 
   var GROUPS = [
-    { g: "softFocus", step: 1, title: "Soft focus (tuỳ chọn)", why: "Lớp mờ bán kính nhỏ pha vào TOÀN ảnh. Mặc định tắt: bản tham chiếu giữ phông nền sắc nét, mọi độ mềm đều đến từ tầng bloom." },
-    { g: "clarity",   step: 2, title: "Giảm clarity (tuỳ chọn)", why: "Lớp mờ bán kính lớn, hạ tương phản dải tần trung trên TOÀN ảnh. Mặc định tắt, cùng lý do trên." },
-    { g: "bloom",     step: 3, title: "Bloom trên vùng da", why: "TẦNG CHÍNH. Tách riêng pixel tông da, loại pixel quá sáng, làm mờ thật mạnh rồi screen lên ảnh gốc còn nguyên nét. Vì mặt nạ cắt theo MÀU DA chứ không theo độ sáng, phông nền — chấm bi, chữ, hoa văn — không bị loè." },
+    { g: "softFocus", step: 1, title: "Soft focus", why: "Lớp mờ bán kính nhỏ pha vào TOÀN ảnh. Mặc định tắt: bản tham chiếu giữ phông nền sắc nét, mọi độ mềm đều đến từ tầng bloom." },
+    { g: "clarity",   step: 2, title: "Giảm clarity", why: "Lớp mờ bán kính lớn, hạ tương phản dải tần trung trên TOÀN ảnh. Mặc định tắt, cùng lý do trên." },
+    { g: "bloom",     step: 3, title: "Bloom trên vùng da", why: "Tách riêng pixel tông da, loại pixel quá sáng, làm mờ thật mạnh rồi screen lên ảnh gốc còn nguyên nét. Vì mặt nạ cắt theo MÀU DA chứ không theo độ sáng, phông nền — chấm bi, chữ, hoa văn — không bị loè." },
     { g: "tone",      step: 4, title: "Tông", why: "Biến đổi affine quanh điểm giữa, cộng lift nâng vùng đen." },
-    { g: "warm",      step: 5, title: "Tông ấm", why: "Gain lệch giữa các kênh, cộng một lớp soft-light màu ấm phủ lên vùng sáng." }
+    { g: "warm",      step: 5, title: "Tông ấm", why: "Gain lệch giữa các kênh, cộng một lớp soft-light màu ấm phủ lên vùng sáng." },
+    { g: "grain",     step: 6, title: "Nhiễu hạt", why: "Nhiễu trắng được làm mờ để KẾT CỤM, rồi rải theo đường cong sắc độ — đậm ở trung gian, cuộn về 0 ở đen kịt và cháy sáng. Ba kênh màu có cỡ hạt khác nhau như ba lớp thuốc nhuộm của phim. Cộng sau cùng, nên nó vừa tạo chất phim vừa đóng vai dither phá vệt đứt dải." }
+  ];
+
+  /**
+   * Sidebar chia thành mấy tấm gập được. Chỉ tầng chính mở sẵn — mười tám
+   * thanh trượt đổ ra cùng lúc thì không ai tìm được cái mình cần.
+   *
+   * `state` trả về một dòng tóm tắt hiện ngay trên đầu mục kể cả khi đang gập,
+   * để biết mục đó có đang tác động gì không mà không phải mở ra xem.
+   */
+  var SECTIONS = [
+    {
+      id: "bloom", title: "Bloom trên vùng da", tag: "tầng chính", groups: ["bloom"], open: true,
+      state: function () { return cfg.bloom.amount > 0.001 ? fmt(cfg.bloom.amount, 2) : "tắt"; }
+    },
+    {
+      id: "grain", title: "Nhiễu hạt phim", groups: ["grain"], open: false,
+      state: function () {
+        if (!(cfg.grain.amount > 0.0005)) return "tắt";
+        return fmt(cfg.grain.amount, 3) + (cfg.grain.mono ? " · mono" : "");
+      }
+    },
+    {
+      id: "soften", title: "Làm mềm toàn ảnh", tag: "tuỳ chọn", groups: ["softFocus", "clarity"], open: false,
+      state: function () {
+        var on = [];
+        if (cfg.softFocus.amount > 0.001) on.push("soft focus");
+        if (cfg.clarity.amount > 0.001) on.push("clarity");
+        return on.length ? on.join(" + ") : "tắt";
+      }
+    },
+    {
+      id: "color", title: "Tông & màu", tag: "tuỳ chọn", groups: ["tone", "warm"], open: false,
+      state: function () {
+        var on = [];
+        if (cfg.tone.contrast !== 0 || cfg.tone.lift !== 0) on.push("tông");
+        if (cfg.warm.temp !== 0 || cfg.warm.tint !== 0 || cfg.warm.highlightWarmth > 0.001) on.push("ấm");
+        return on.length ? on.join(" + ") : "tắt";
+      }
+    },
+    {
+      id: "file", title: "Ghi file & bỏ qua", groups: [], open: false,
+      state: function () { return "JPEG " + cfg.output.quality + (cfg.backup.enabled ? " · có backup" : " · KHÔNG backup"); }
+    }
   ];
 
   /* ═══════════════════════════════════════════════════════════════
@@ -743,6 +874,102 @@
     }
   }
 
+  /* ── nhiễu hạt (film grain), bám sát addGrain() trong pipeline.js ── */
+
+  var GRAIN_SIZE = [0.8, 1.0, 1.4];   // R, G, B — cỡ cụm tương đối
+  var GRAIN_AMT  = [0.75, 1.0, 1.75]; // R, G, B — cường độ tương đối
+  var GRAIN_REF_EDGE = 4000;
+  /* Khung xem dùng hạt cố định: kéo slider mà hạt nhảy loạn thì không so được
+     hai giá trị cạnh nhau. Ảnh thật vẫn ngẫu nhiên mỗi tấm khi seed = 0. */
+  var GRAIN_PREVIEW_SEED = 0x5eed1234;
+
+  /* xorshift32 giữ `s` ở nguyên int32 suốt vòng lặp: không chèn `s >>>= 0`,
+     vì phép đó cho ra giá trị vượt 2³¹ nên số rơi khỏi dạng số nguyên của JIT.
+     `>>> 17` thì an toàn — dịch phải ít nhất một bit nên kết quả luôn dưới 2³¹. */
+  function whiteNoise(n, seed) {
+    var out = new Float32Array(n), s = (seed | 0) || (0x9e3779b9 | 0);
+    for (var i = 0; i < n; i++) {
+      s ^= s << 13;
+      s ^= s >>> 17;
+      s ^= s << 5;
+      out[i] = (Math.imul(s, 0x2545f491) >>> 9) / 8388608;
+    }
+    return out;
+  }
+
+  /** Một lớp hạt đã kết cụm, kèm trung bình và độ lệch chuẩn đo được. */
+  function grainPlane(n, w, h, sigma, seed) {
+    var p = whiteNoise(n, seed);
+    if (sigma >= 0.3) p = blurPlane(p, w, h, sigma);
+    var sum = 0, i;
+    for (i = 0; i < n; i++) sum += p[i];
+    var mean = sum / n, sq = 0;
+    for (i = 0; i < n; i++) { var d = p[i] - mean; sq += d * d; }
+    return { data: p, mean: mean, stdev: Math.sqrt(sq / n) || 1 };
+  }
+
+  var grainCache = null;
+  function dropGrainCache() { grainCache = null; }
+
+  function grainPlanes(n, w, h, c) {
+    var scale = Math.max(w, h) / GRAIN_REF_EDGE;
+    var key = [n, c.sizePx, c.chroma, c.mono ? 1 : 0].join("|");
+    if (grainCache && grainCache.key === key) return grainCache.planes;
+
+    var mix = function (tbl, i) { return 1 + c.chroma * (tbl[i] - 1); };
+    var planes;
+    if (c.mono) {
+      var one = grainPlane(n, w, h, c.sizePx * scale, GRAIN_PREVIEW_SEED);
+      planes = [one, one, one];
+    } else {
+      planes = [];
+      for (var i = 0; i < 3; i++) {
+        planes.push(grainPlane(n, w, h, c.sizePx * scale * mix(GRAIN_SIZE, i),
+                               GRAIN_PREVIEW_SEED + i * 0x6d2b79f5));
+      }
+    }
+    grainCache = { key: key, planes: planes };
+    return planes;
+  }
+
+  /** Cuộn mượt về 0 ở hai đầu dải sáng — smoothstep lên rồi xuống. */
+  function grainResponse(lum, lo, hi) {
+    var t;
+    if (lum <= 0) return 0;
+    if (lum < lo) t = lum / lo;
+    else if (lum > hi) t = (1 - lum) / (1 - hi);
+    else return 1;
+    if (t <= 0) return 0;
+    return t * t * (3 - 2 * t);
+  }
+
+  /** Cộng hạt vào ba kênh kết quả, sửa tại chỗ. */
+  function addGrain(out, w, h, c) {
+    var n = w * h;
+    var planes = grainPlanes(n, w, h, c);
+    var rel = c.mono ? [1, 1, 1]
+                     : [0, 1, 2].map(function (i) { return 1 + c.chroma * (GRAIN_AMT[i] - 1); });
+    var lo = c.shadowRolloff, hi = c.highlightRolloff;
+
+    // Đường cong đáp ứng chỉ phụ thuộc độ sáng → tra bảng 256 mức, đúng như
+    // pipeline.js, thay vì tính smoothstep cho từng điểm ảnh.
+    var wOf = new Float32Array(256), l;
+    for (l = 0; l < 256; l++) wOf[l] = grainResponse(l / 255, lo, hi);
+
+    var r = out[0], g = out[1], b = out[2];
+    var k = [0, 1, 2].map(function (i) { return c.amount * rel[i] / planes[i].stdev; });
+    var p0 = planes[0], p1 = planes[1], p2 = planes[2];
+
+    for (var i = 0; i < n; i++) {
+      var lum = 0.299 * r[i] + 0.587 * g[i] + 0.114 * b[i];
+      var wt = wOf[lum <= 0 ? 0 : (lum >= 1 ? 255 : (lum * 255) | 0)];
+      if (wt === 0) continue;
+      var v = r[i] + wt * k[0] * (p0.data[i] - p0.mean); r[i] = v < 0 ? 0 : (v > 1 ? 1 : v);
+      v = g[i] + wt * k[1] * (p1.data[i] - p1.mean);     g[i] = v < 0 ? 0 : (v > 1 ? 1 : v);
+      v = b[i] + wt * k[2] * (p2.data[i] - p2.mean);     b[i] = v < 0 ? 0 : (v > 1 ? 1 : v);
+    }
+  }
+
   /** soft-light theo đúng công thức PDF/W3C mà libvips dùng. */
   function softLight(cb, cs) {
     if (cs <= 0.5) return cb - (1 - 2 * cs) * cb * (1 - cb);
@@ -757,7 +984,7 @@
   }
 
   /**
-   * Chạy đủ năm tầng. `planes` là ảnh gốc (0..1), trả về ba kênh kết quả.
+   * Chạy đủ sáu tầng. `planes` là ảnh gốc (0..1), trả về ba kênh kết quả.
    * `scale` là tỉ lệ khung xem so với ảnh thật — chỉ dùng để quy đổi
    * `bloom.minRadiusPx`, vốn là một con số pixel tuyệt đối.
    *
@@ -803,7 +1030,73 @@
         for (var j = 0; j < q.length; j++) q[j] = a * softLight(q[j], s) + ia * q[j];
       }
     }
+
+    // 6. Hạt — sau cùng, không có ngoại lệ.
+    if (c.grain.amount > 0.0005) addGrain(out, w, h, c.grain);
     return out;
+  }
+
+  /* ── thước đo độ hài hoà, bám sát harmony() trong pipeline.js ──
+     Ngưỡng phải trùng khít với HARMONY bên đó, nếu không bảng trong tuner và
+     bảng của --selftest sẽ nói hai điều khác nhau về cùng một tấm ảnh. */
+  var HARMONY = {
+    crushedPct: { max: 1.0, fix: "tăng tone.lift hoặc giảm tone.contrast" },
+    blownPct: { max: 0.8, fix: "hạ bloom.brightness, bloom.amount hoặc bloom.highlightCutoff" },
+    warmth: { min: 10, max: 35, cold: 5, hot: 45 },
+    skinTint: { min: -10, max: 5, green: 8, magenta: -15 }
+  };
+
+  function harmony(planes, w, h) {
+    var n = w * h, r = planes[0], g = planes[1], b = planes[2];
+    var crushed = 0, blown = 0, sumRB = 0, skinY = 0, skinN = 0, bgY = 0, tint = 0;
+    for (var i = 0; i < n; i++) {
+      var R = r[i] * 255, G = g[i] * 255, B = b[i] * 255;
+      var y = (R * 77 + G * 150 + B * 29) / 256;
+      if (y < 4) crushed++;
+      else if (y > 251) blown++;
+      sumRB += R - B;
+      if (isSkin(r[i], g[i], b[i])) { skinY += y; skinN++; tint += G - (R + B) / 2; }
+      else bgY += y;
+    }
+    var bgN = n - skinN;
+    return {
+      crushedPct: crushed / n * 100,
+      blownPct: blown / n * 100,
+      skinMean: skinN ? skinY / skinN : 0,
+      bgMean: bgN ? bgY / bgN : 0,
+      skinShare: skinN / n * 100,
+      warmth: sumRB / n,
+      skinTint: skinN ? tint / skinN : 0
+    };
+  }
+
+  function harmonyVerdicts(m) {
+    var H = HARMONY, o = {};
+
+    o.crushed = m.crushedPct <= H.crushedPct.max
+      ? { ok: true, note: "giữ được chi tiết vùng tối" }
+      : { ok: false, note: "bết đen — " + H.crushedPct.fix };
+
+    o.blown = m.blownPct <= H.blownPct.max
+      ? { ok: true, note: "vùng sáng còn mượt" }
+      : { ok: false, note: "cháy sáng — " + H.blownPct.fix };
+
+    if (m.skinShare < 0.5) o.subject = { ok: true, note: "ảnh gần như không có vùng da để so" };
+    else if (m.skinMean >= m.bgMean) o.subject = { ok: true, note: "chủ thể sáng hơn phông, mắt bị hút vào mặt" };
+    else o.subject = { ok: false, note: "phông sáng hơn da — hạ sáng phông hoặc tăng bloom.amount" };
+
+    if (m.warmth < H.warmth.cold) o.warmth = { ok: false, note: "lạnh / nhợt — tăng warm.temp" };
+    else if (m.warmth > H.warmth.hot) o.warmth = { ok: false, note: "quá đỏ, da ngả gạch nung — hạ warm.temp" };
+    else if (m.warmth < H.warmth.min || m.warmth > H.warmth.max) o.warmth = { ok: true, note: "chấp nhận được, khoảng đẹp là 10…35" };
+    else o.warmth = { ok: true, note: "đúng khoảng ấm của da chân dung" };
+
+    if (m.skinShare < 0.5) o.tint = { ok: true, note: "không đủ vùng da để đo" };
+    else if (m.skinTint > H.skinTint.green) o.tint = { ok: false, note: "da ám lục — giảm warm.tint" };
+    else if (m.skinTint < H.skinTint.magenta) o.tint = { ok: false, note: "da ám tím — tăng warm.tint" };
+    else if (m.skinTint > H.skinTint.max || m.skinTint < H.skinTint.min) o.tint = { ok: true, note: "hơi lệch nhưng còn trong ngưỡng" };
+    else o.tint = { ok: true, note: "màu da tinh khiết" };
+
+    return o;
   }
 
   /* ── số đo, cùng tinh thần với measureRaw() trong pipeline.js ── */
@@ -869,6 +1162,7 @@
     work = { w: w, h: h, planes: planes, srcW: iw, srcH: ih, scale: w / iw };
     dropBlurCache();
     dropBloomCache();
+    dropGrainCache();
 
     cvA.width = w; cvA.height = h;
     cvB.width = w; cvB.height = h;
@@ -892,6 +1186,7 @@
     var ms = performance.now() - t0;
 
     showMetrics(work.baseMetrics, measure(out, work.w, work.h));
+    showHarmony(harmony(out, work.w, work.h));
     $("status").textContent =
       work.srcW + "×" + work.srcH + " → xem ở " + work.w + "×" + work.h +
       " · " + Math.round(ms) + " ms";
@@ -916,6 +1211,33 @@
                        "  (" + (pct >= 0 ? "+" : "−") + fmt(Math.abs(pct), 0) + "%)";
       el.className = "d" + (Math.abs(pct) > 2 ? " up" : "");
     });
+  }
+
+  /** Bốn thẻ chấm: giá trị, ngưỡng, và câu sửa nếu lệch. */
+  function showHarmony(m) {
+    var v = harmonyVerdicts(m), H = HARMONY;
+
+    var card = function (id, label, value, limit, verdict) {
+      var e = $(id);
+      e.className = "hcard " + (verdict.ok ? "ok" : "warn");
+      e.innerHTML =
+        '<div class="k">' + label + "</div>" +
+        '<div class="v">' + value + '<span class="lim">' + limit + "</span></div>" +
+        '<div class="n">' + verdict.note + "</div>";
+    };
+
+    card("h-crushed", "Mất chi tiết tối", fmt(m.crushedPct, 2) + "%", "≤ " + H.crushedPct.max + "%", v.crushed);
+    card("h-blown", "Cháy sáng", fmt(m.blownPct, 2) + "%", "≤ " + H.blownPct.max + "%", v.blown);
+    card("h-subject", "Tương quan da / nền",
+      fmt(m.skinMean, 0) + " / " + fmt(m.bgMean, 0),
+      "da " + fmt(m.skinShare, 0) + "% khung", v.subject);
+
+    // Thẻ tông da gộp hai phép đo; cảnh báo nào nặng hơn thì hiện ra trước.
+    var skin = v.warmth.ok ? v.tint : v.warmth;
+    card("h-skin", "Cân bằng tông da",
+      (m.warmth >= 0 ? "+" : "−") + fmt(Math.abs(m.warmth), 1),
+      "ấm " + H.warmth.min + "…" + H.warmth.max +
+        " · sắc " + fmt(m.skinTint, 1), skin);
   }
 
   var rafId = 0;
@@ -1013,7 +1335,7 @@
   });
 
   /** Ảnh mẫu dựng bằng canvas: có da, có chỗ bắt sáng, có vùng tối, có sợi mảnh —
-      đủ để cả năm tầng đều thấy được tác dụng. */
+      đủ để cả sáu tầng đều thấy được tác dụng. */
   function makeSample() {
     var w = 1400, h = 933;
     var c = document.createElement("canvas");
@@ -1140,65 +1462,106 @@
     sliderRefs.push(sync);
   }
 
-  function buildPanel() {
-    var host = $("panelParams");
-    host.innerHTML = "";
+  /* Trạng thái gập/mở được nhớ lại: người chỉnh thường quay lại đúng mục hôm
+     qua họ đang làm dở. */
+  function openState() {
+    try { return JSON.parse(localStorage.getItem("sl.open") || "{}") || {}; }
+    catch (e) { return {}; }
+  }
+  function rememberOpen(id, on) {
+    try {
+      var m = openState(); m[id] = on;
+      localStorage.setItem("sl.open", JSON.stringify(m));
+    } catch (e) {}
+  }
 
-    GROUPS.forEach(function (grp) {
-      var sec = el("section", "group");
+  /* Dòng tóm tắt trên đầu mỗi tấm. Gọi lại sau mọi thay đổi — writeJson() chạy
+     trên đúng mọi đường commit nên hook vào đó là đủ, không sót nhánh nào. */
+  var stateRefs = [];
+  function refreshStates() { stateRefs.forEach(function (f) { f(); }); }
+
+  /** Dựng một nhóm tham số (một mục trong GROUPS) vào phần tử cha cho trước. */
+  /**
+   * Dựng một nhóm tham số (một mục trong GROUPS) vào phần tử cha cho trước.
+   * `titled = false` khi tấm chỉ chứa đúng một nhóm — lúc đó tiêu đề trên
+   * summary đã nói rồi, lặp lại chỉ tổ rối.
+   */
+  function buildGroup(grp, host, titled) {
+    var sec = el("section", "group");
+    if (titled) {
       var head = el("header");
       head.appendChild(el("span", "step", String(grp.step)));
       head.appendChild(el("h3", null, grp.title));
       sec.appendChild(head);
-      sec.appendChild(el("p", "why", grp.why));
-      SLIDERS.filter(function (s) { return s.g === grp.g; })
-             .forEach(function (s) { buildSlider(s, sec); });
+    }
+    sec.appendChild(el("p", "why", grp.why));
+    SLIDERS.filter(function (s) { return s.g === grp.g; })
+           .forEach(function (s) { buildSlider(s, sec); });
 
-      if (grp.g === "bloom") {
-        sec.appendChild(field("Chỉ vùng da", "bloom.skinOnly", function () {
-          var w = el("label", "switch");
-          var cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.bloom.skinOnly;
-          cb.addEventListener("change", function () {
-            cfg.bloom.skinOnly = cb.checked;
-            dropBloomCache(); schedule(); writeJson(); remember();
-          });
-          w.appendChild(cb);
-          w.appendChild(el("span", null, "lọc mặt nạ theo tông da"));
-          sliderRefs.push(function () { cb.checked = cfg.bloom.skinOnly; });
-          return w;
-        }));
-        sec.appendChild(el("p", "why", "Tắt đi thì cả ảnh phát sáng, chỉ còn ngưỡng loại vùng sáng chặn bớt — thường không phải thứ bạn muốn."));
+    if (grp.g === "grain") {
+      sec.appendChild(field("Hạt xám", "grain.mono", function () {
+        var w = el("label", "switch");
+        var cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.grain.mono;
+        cb.addEventListener("change", function () {
+          cfg.grain.mono = cb.checked;
+          dropGrainCache(); schedule(); writeJson(); remember();
+        });
+        w.appendChild(cb);
+        w.appendChild(el("span", null, "một lớp hạt dùng chung ba kênh"));
+        sliderRefs.push(function () { cb.checked = cfg.grain.mono; });
+        return w;
+      }));
+      sec.appendChild(el("p", "why",
+        "Khung xem dựng hạt ở đúng cỡ pixel của ảnh thật, nên nó cho thấy hạt khi soi 100% — " +
+        "in ra hoặc xem thu nhỏ cả khung thì hạt sẽ dịu hơn thế này. Hạt trong khung xem cố định " +
+        "để so được hai giá trị cạnh nhau; ảnh thật vẫn ngẫu nhiên mỗi tấm khi <code>seed</code> = 0."));
+    }
+
+    if (grp.g === "bloom") {
+      sec.appendChild(field("Chỉ vùng da", "bloom.skinOnly", function () {
+        var w = el("label", "switch");
+        var cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.bloom.skinOnly;
+        cb.addEventListener("change", function () {
+          cfg.bloom.skinOnly = cb.checked;
+          dropBloomCache(); schedule(); writeJson(); remember();
+        });
+        w.appendChild(cb);
+        w.appendChild(el("span", null, "lọc mặt nạ theo tông da"));
+        sliderRefs.push(function () { cb.checked = cfg.bloom.skinOnly; });
+        return w;
+      }));
+      sec.appendChild(el("p", "why", "Tắt đi thì cả ảnh phát sáng, chỉ còn ngưỡng loại vùng sáng chặn bớt — thường không phải thứ bạn muốn."));
+    }
+
+    if (grp.g === "warm") {
+      var f = el("div", "field");
+      f.appendChild(el("label", null, "Màu phủ vùng sáng"));
+      f.appendChild(el("span", "key", "warm.highlightColor"));
+      var ctl = el("div", "ctl");
+      var col = el("input"); col.type = "color"; col.value = cfg.warm.highlightColor;
+      var hex = el("input", null); hex.type = "text"; hex.value = cfg.warm.highlightColor;
+      hex.style.width = "92px"; hex.style.marginLeft = "8px";
+      function setColor(v) {
+        if (!/^#[0-9a-fA-F]{6}$/.test(v)) return;
+        cfg.warm.highlightColor = v.toLowerCase();
+        col.value = cfg.warm.highlightColor;
+        hex.value = cfg.warm.highlightColor;
+        schedule(); writeJson(); remember();
       }
+      col.addEventListener("input", function () { setColor(col.value); });
+      hex.addEventListener("change", function () { setColor(hex.value.trim()); });
+      ctl.appendChild(col); ctl.appendChild(hex);
+      f.appendChild(ctl);
+      sec.appendChild(f);
+      sliderRefs.push(function () { col.value = cfg.warm.highlightColor; hex.value = cfg.warm.highlightColor; });
+    }
 
-      if (grp.g === "warm") {
-        var f = el("div", "field");
-        f.appendChild(el("label", null, "Màu phủ vùng sáng"));
-        f.appendChild(el("span", "key", "warm.highlightColor"));
-        var ctl = el("div", "ctl");
-        var col = el("input"); col.type = "color"; col.value = cfg.warm.highlightColor;
-        var hex = el("input", null); hex.type = "text"; hex.value = cfg.warm.highlightColor;
-        hex.style.width = "92px"; hex.style.marginLeft = "8px";
-        function setColor(v) {
-          if (!/^#[0-9a-fA-F]{6}$/.test(v)) return;
-          cfg.warm.highlightColor = v.toLowerCase();
-          col.value = cfg.warm.highlightColor;
-          hex.value = cfg.warm.highlightColor;
-          schedule(); writeJson(); remember();
-        }
-        col.addEventListener("input", function () { setColor(col.value); });
-        hex.addEventListener("change", function () { setColor(hex.value.trim()); });
-        ctl.appendChild(col); ctl.appendChild(hex);
-        f.appendChild(ctl);
-        sec.appendChild(f);
-        sliderRefs.push(function () { col.value = cfg.warm.highlightColor; hex.value = cfg.warm.highlightColor; });
-      }
+  host.appendChild(sec);
+  }
 
-      host.appendChild(sec);
-    });
-
-    /* ── nhóm không ảnh hưởng khung xem ── */
+  /** Nhóm "Ghi file & bỏ qua" — không tác động gì lên khung xem. */
+  function buildMisc(host) {
     var misc = el("section", "group plain");
-    misc.appendChild(el("h3", null, "Ghi file & bỏ qua"));
     misc.appendChild(el("p", "why", "Những mục này không đổi gì trên khung xem, nhưng vẫn phải có trong file cấu hình."));
 
     misc.appendChild(field("Bật hiệu ứng", "enabled", function () {
@@ -1286,10 +1649,15 @@
     sliderRefs.push(function () { ta.value = cfg.skip.pathContains.join("\n"); });
     sk.appendChild(ta);
     misc.appendChild(sk);
-
     host.appendChild(misc);
+  }
 
-    /* ── preset ── */
+  function buildPanel() {
+    var host = $("panelParams");
+    host.innerHTML = "";
+    stateRefs = [];
+
+    /* ── preset: để trên cùng vì đây là chỗ bắt đầu mỗi lần chỉnh ── */
     var pre = el("section", "group plain");
     pre.appendChild(el("h3", null, "Bộ giá trị dựng sẵn"));
     pre.appendChild(el("p", "why", "Nạp một mốc để so, rồi chỉnh tiếp từ đó."));
@@ -1304,15 +1672,51 @@
     pre.appendChild(bar);
     host.appendChild(pre);
 
+    var saved = openState();
+
+    SECTIONS.forEach(function (S) {
+      var d = el("details", "sect");
+      d.open = typeof saved[S.id] === "boolean" ? saved[S.id] : S.open;
+
+      var sum = document.createElement("summary");
+      sum.appendChild(el("span", "sect-title", S.title));
+      if (S.tag) sum.appendChild(el("span", "sect-tag", S.tag));
+      var st = el("span", "sect-state");
+      sum.appendChild(st);
+      d.appendChild(sum);
+
+      stateRefs.push(function () {
+        var v = S.state();
+        st.textContent = v;
+        st.className = "sect-state" + (v === "tắt" ? " off" : "");
+      });
+
+      var body = el("div", "sect-body");
+      if (S.groups.length) {
+        S.groups.forEach(function (gid) {
+          buildGroup(GROUPS.filter(function (g) { return g.g === gid; })[0], body,
+                     S.groups.length > 1);
+        });
+      } else {
+        buildMisc(body);
+      }
+      d.appendChild(body);
+
+      d.addEventListener("toggle", function () { rememberOpen(S.id, d.open); });
+      host.appendChild(d);
+    });
+
     var acc = el("section", "group plain");
     acc.appendChild(el("h3", null, "Khung xem chính xác đến đâu"));
     acc.appendChild(el("p", "why",
-      "Trang này chạy lại đúng năm tầng của <code>src/pipeline.js</code>, kể cả cách libvips " +
-      "nhân alpha vào lớp phủ trước khi blend. Đối chiếu với <code>sharp</code> thật trên cùng " +
-      "một ảnh, sai lệch trung bình là 2,1/255 (0,8%) ở bộ tham số đang dùng — mắt không thấy " +
-      "được. Chênh lệch chỉ nới ra khi bán kính vượt quá 5% cạnh dài. " +
+      "Trang này chạy lại đúng sáu tầng của <code>src/pipeline.js</code>, kể cả cách ghép tay " +
+      "lớp bloom và đường cong đáp ứng của tầng hạt. Đối chiếu với <code>sharp</code> thật trên " +
+      "cùng một ảnh, sai lệch trung bình là 2,2/255 (0,9%) ở bộ tham số đang dùng — mắt không " +
+      "thấy được. Chênh lệch chỉ nới ra khi bán kính vượt quá 5% cạnh dài. " +
       "Chốt xong thì chạy <code>npm run preview -- anh.jpg</code> để soi bản do chính exe xuất ra."));
     host.appendChild(acc);
+
+    refreshStates();
   }
 
   function field(labelText, keyText, makeCtl) {
@@ -1355,6 +1759,7 @@
     bloom: "TANG CHINH. Tach rieng vung tong da, lam mo that manh, tang sang roi screen len anh GOC con nguyen net. Vi mat na cat theo MAU DA chu khong theo do sang, phong nen khong bi loe. amount = do manh (0..1), radiusPct tinh theo chieu ngang anh, highlightCutoff loai vung sang hon muc nay (cham bi trang, den).",
     tone: "contrast am = giam tuong phan tong the. lift = nang vung den (0..0.2), tao cam giac bac mau ethereal. Ban tham chieu khong dung tang nay.",
     warm: "temp duong = am hon (tang do, giam lam). highlightWarmth phu them mau am len vung sang bang blend soft-light. Ban tham chieu khong dung tang nay.",
+    grain: "Nhieu hat kieu phim nhua, cong SAU CUNG. Nhieu trang duoc lam mo de ket cum (sizePx quy chieu o anh canh dai 4000px), roi rai theo duong cong sac do - dam nhat o trung gian, cuon ve 0 o vung den kit (shadowRolloff) va vung chay sang (highlightRolloff). chroma pha do lech giua ba kenh mau: 0 = ba kenh giong het nhau, 1 = du do lech ba lop thuoc nhuom cua phim. Dat mono=true de duoc hat xam. seed=0 la ngau nhien moi anh. amount=0 de tat.",
     output: "Chat luong JPEG ghi de. 4:4:4 giu mau vien toc/moi sac net hon 4:2:0.",
     backup: "Anh goc duoc chep vao thu muc con nay truoc khi ghi de. Su ton tai cua ban backup CHINH LA dau hieu 'da xu ly' - nho vay trigger co ban hai lan cung khong xu ly chong.",
     skip: "Bo qua nhung file co duong dan chua mot trong cac chuoi nay. Dung khi dslrBooth goi ca tren file template da ghep - lam mem ca to in se nhoe luon khung va logo. Vi du: [\"\\prints\\\\\", \"_final\"]",
@@ -1404,6 +1809,17 @@
     L.push('    "highlightColor": ' + js(c.warm.highlightColor));
     L.push("  },");
     L.push("");
+    L.push('  "grain": {');
+    L.push('    "_doc": ' + js(DOC.grain) + ",");
+    L.push('    "amount": ' + nf(c.grain.amount) + ",");
+    L.push('    "sizePx": ' + nf(c.grain.sizePx) + ",");
+    L.push('    "chroma": ' + nf(c.grain.chroma) + ",");
+    L.push('    "mono": ' + (c.grain.mono ? "true" : "false") + ",");
+    L.push('    "shadowRolloff": ' + nf(c.grain.shadowRolloff) + ",");
+    L.push('    "highlightRolloff": ' + nf(c.grain.highlightRolloff) + ",");
+    L.push('    "seed": ' + Math.round(c.grain.seed));
+    L.push("  },");
+    L.push("");
     L.push('  "output": {');
     L.push('    "_doc": ' + js(DOC.output) + ",");
     L.push('    "quality": ' + c.output.quality + ",");
@@ -1430,7 +1846,12 @@
     return L.join("\n") + "\n";
   }
 
-  function writeJson() { $("jsonOut").value = toJson(cfg); }
+  /* Mọi đường commit của panel đều đi qua đây, nên đây cũng là chỗ duy nhất
+     cần gọi refreshStates() để dòng tóm tắt trên các tấm gập không bị lệch. */
+  function writeJson() {
+    $("jsonOut").value = toJson(cfg);
+    refreshStates();
+  }
 
   function toast(msg) {
     var t = $("toast");
@@ -1533,7 +1954,8 @@
     };
     var g = function (name) { return (raw[name] && typeof raw[name] === "object") ? raw[name] : {}; };
     var sf = g("softFocus"), cl = g("clarity"), bl = g("bloom"), tn = g("tone"),
-        wm = g("warm"), ou = g("output"), bk = g("backup"), sk = g("skip"), li = g("limits");
+        wm = g("warm"), gn = g("grain"), ou = g("output"), bk = g("backup"),
+        sk = g("skip"), li = g("limits");
 
     o.enabled = raw.enabled !== false;
     o.softFocus.amount = n(sf.amount, 0, 0.9, d.softFocus.amount);
@@ -1554,6 +1976,13 @@
     o.warm.highlightWarmth = n(wm.highlightWarmth, 0, 0.5, d.warm.highlightWarmth);
     o.warm.highlightColor = /^#[0-9a-fA-F]{6}$/.test(wm.highlightColor)
       ? String(wm.highlightColor).toLowerCase() : d.warm.highlightColor;
+    o.grain.amount = n(gn.amount, 0, 0.15, d.grain.amount);
+    o.grain.sizePx = n(gn.sizePx, 0.3, 6, d.grain.sizePx);
+    o.grain.chroma = n(gn.chroma, 0, 1, d.grain.chroma);
+    o.grain.mono = gn.mono === true;
+    o.grain.shadowRolloff = n(gn.shadowRolloff, 0.001, 0.5, d.grain.shadowRolloff);
+    o.grain.highlightRolloff = n(gn.highlightRolloff, 0.5, 0.999, d.grain.highlightRolloff);
+    o.grain.seed = Math.round(n(gn.seed, 0, 4294967295, d.grain.seed));
     o.output.quality = Math.round(n(ou.quality, 60, 100, d.output.quality));
     o.output.chromaSubsampling = ou.chromaSubsampling === "4:2:0" ? "4:2:0" : "4:4:4";
     o.backup.enabled = bk.enabled !== false;
