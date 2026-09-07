@@ -9,6 +9,7 @@ setlocal
 cd /d "%~dp0"
 
 if not exist "softlight.exe"  ( echo [LOI] Chua co softlight.exe. Chay build-exe.bat truoc. & exit /b 1 )
+if not exist "instax.exe"     ( echo [LOI] Chua co instax.exe. Chay build-exe.bat truoc.    & exit /b 1 )
 if not exist "node_modules"   ( echo [LOI] Chua co node_modules. Chay 'npm install' truoc.   & exit /b 1 )
 
 if exist "_deploy" rmdir /s /q "_deploy"
@@ -37,5 +38,8 @@ echo   Xong. Cach dung:
 echo     1. Zip thu muc _deploy
 echo     2. Giai nen sang may booth - TRANH C:\Program Files (can quyen ghi)
 echo     3. Tren may booth: bam dup kiem-tra.bat de xac nhan
-echo     4. Tro dslrBooth Post-Processing toi softlight.exe trong thu muc do
+echo     4. Tro dslrBooth Post-Processing toi MOT trong hai file:
+echo          softlight.exe  - lam mem da
+echo          instax.exe     - chat phim lay lien
+echo     5. Chinh tham so: mo web\index.html
 echo.

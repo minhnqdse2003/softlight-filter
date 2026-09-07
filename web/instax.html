@@ -1,9 +1,4 @@
-<!doctype html>
-<html lang="vi">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Soft Light Tuner</title>
+<title>Instax Wide Tuner</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -485,12 +480,11 @@
     * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
   }
 </style>
-</head>
-<body>
+
 <div class="app">
   <header class="topbar">
     <div class="brand">
-      <h1>Soft Light Tuner</h1>
+      <h1>Instax Wide Tuner</h1>
       <span class="sub">filmong · dslrBooth</span>
     </div>
 
@@ -533,7 +527,7 @@
         <span class="status" id="status">chưa có ảnh</span>
       </div>
 
-      <div class="metrics" id="metrics" title="Đo trên ảnh xem trước, không trùng số của npm run selftest">
+      <div class="metrics" id="metrics" title="Đo trên ảnh xem trước, không trùng số của --filter instax --selftest">
         <div class="metric"><div class="k">Sáng trung bình</div><div class="v" id="m-mean">—</div><div class="d" id="d-mean"></div></div>
         <div class="metric"><div class="k">Độ nét (chi tiết)</div><div class="v" id="m-fine">—</div><div class="d" id="d-fine"></div></div>
         <div class="metric"><div class="k">Tương phản trung</div><div class="v" id="m-mid">—</div><div class="d" id="d-mid"></div></div>
@@ -553,7 +547,7 @@
     <aside class="rail">
       <div class="tabs" role="tablist">
         <button role="tab" id="tabParams" aria-selected="true" aria-controls="panelParams">Tham số</button>
-        <button role="tab" id="tabJson" aria-selected="false" aria-controls="panelJson">softlight.config.json</button>
+        <button role="tab" id="tabJson" aria-selected="false" aria-controls="panelJson">instax.config.json</button>
       </div>
 
       <div class="panel" id="panelParams" role="tabpanel" aria-labelledby="tabParams"></div>
@@ -565,7 +559,7 @@
           <button class="btn ghost" id="saveBtn">Tải file về</button>
         </div>
         <p class="json-note">
-          Dán đè toàn bộ nội dung này vào <code>softlight.config.json</code> cạnh <code>softlight.exe</code>.
+          Dán đè toàn bộ nội dung này vào <code>instax.config.json</code> cạnh <code>instax.exe</code>.
           Không cần build lại — lần chụp kế tiếp là ăn ngay.
         </p>
         <textarea id="jsonOut" spellcheck="false" readonly></textarea>
@@ -581,50 +575,45 @@
   "use strict";
 
   /* ═══════════════════════════════════════════════════════════════
-     1. CẤU HÌNH — miền giá trị lấy đúng theo src/config.js
+     1. CẤU HÌNH — miền giá trị lấy đúng theo src/filters/instax/config.js
      ═══════════════════════════════════════════════════════════════ */
 
+  /* Mọi con số ở đây là dạng CHUẨN HOÁ = số trên thanh trượt của bản tham
+     chiếu chia 100. "Vibrance +35" = 0.35. Giữ đúng tỉ lệ đó là điều kiện để
+     trang này và exe cho ra cùng một ảnh. */
   var PRESETS = {
-    /* Đúng những gì đang nằm trong softlight.config.json của bạn */
+    /* Đúng những gì đang nằm trong instax.config.json của bạn */
     current: {
       enabled: true,
-      softFocus: { amount: 0, radiusPct: 0.22 },
-      clarity:   { amount: 0, radiusPct: 2.0 },
-      bloom:     { amount: 0.7, radiusPct: 2.5, minRadiusPx: 16, brightness: 1.35, contrast: 0.95, skinOnly: true, highlightCutoff: 0.863 },
-      tone:      { contrast: 0, lift: 0 },
-      warm:      { temp: 0, tint: 0, highlightWarmth: 0, highlightColor: "#ffd9a8" },
-      grain:     { amount: 0.014, sizePx: 1.4, chroma: 0.5, mono: false, shadowRolloff: 0.06, highlightRolloff: 0.85, seed: 0 },
-      output:    { quality: 95, chromaSubsampling: "4:4:4" },
-      backup:    { enabled: true, folder: "_original" },
-      skip:      { pathContains: [] },
-      limits:    { minEdge: 400, maxMs: 2500 }
+      colour: { vibrance: 0.35, exposure: 0, contrast: 0.25 },
+      film:   { matte: 0.18, warmHighlight: 0.12, shadowCyan: 0.15 },
+      grain:  { amount: 0.022, sizePx: 1.8, chroma: 0.25, mono: true, shadowRolloff: 0.06, highlightRolloff: 0.85, seed: 0 },
+      output: { quality: 95, chromaSubsampling: "4:4:4" },
+      backup: { enabled: true, folder: "_original" },
+      skip:   { pathContains: [] },
+      limits: { minEdge: 400, maxMs: 2500 }
     },
-    /* DEFAULTS trong src/config.js, đã kẹp về miền hợp lệ */
-    code: {
+    /* Bù sáng để in: máy in Instax ăn tối hơn màn hình khoảng nửa khẩu và tự
+       đẩy màu, nên bản đưa đi in phải sáng hơn và nhạt hơn bản để xem. */
+    preprint: {
       enabled: true,
-      softFocus: { amount: 0, radiusPct: 0.22 },
-      clarity:   { amount: 0, radiusPct: 2.0 },
-      bloom:     { amount: 0.7, radiusPct: 2.5, minRadiusPx: 16, brightness: 1.35, contrast: 0.95, skinOnly: true, highlightCutoff: 0.863 },
-      tone:      { contrast: 0, lift: 0 },
-      warm:      { temp: 0, tint: 0, highlightWarmth: 0, highlightColor: "#ffd9a8" },
-      grain:     { amount: 0.014, sizePx: 1.4, chroma: 0.5, mono: false, shadowRolloff: 0.06, highlightRolloff: 0.85, seed: 0 },
-      output:    { quality: 95, chromaSubsampling: "4:4:4" },
-      backup:    { enabled: true, folder: "_original" },
-      skip:      { pathContains: [] },
-      limits:    { minEdge: 400, maxMs: 2500 }
+      colour: { vibrance: 0.1, exposure: 0.22, contrast: -0.08 },
+      film:   { matte: 0, warmHighlight: -0.04, shadowCyan: 0 },
+      grain:  { amount: 0, sizePx: 1.8, chroma: 0.25, mono: true, shadowRolloff: 0.06, highlightRolloff: 0.85, seed: 0 },
+      output: { quality: 95, chromaSubsampling: "4:4:4" },
+      backup: { enabled: true, folder: "_original" },
+      skip:   { pathContains: [] },
+      limits: { minEdge: 400, maxMs: 2500 }
     },
     off: {
       enabled: true,
-      softFocus: { amount: 0, radiusPct: 0.22 },
-      clarity:   { amount: 0, radiusPct: 2.2 },
-      bloom:     { amount: 0, radiusPct: 2.5, minRadiusPx: 16, brightness: 1.35, contrast: 0.95, skinOnly: true, highlightCutoff: 0.863 },
-      tone:      { contrast: 0, lift: 0 },
-      warm:      { temp: 0, tint: 0, highlightWarmth: 0, highlightColor: "#ffd9a8" },
-      grain:     { amount: 0, sizePx: 1.4, chroma: 0.5, mono: false, shadowRolloff: 0.06, highlightRolloff: 0.85, seed: 0 },
-      output:    { quality: 95, chromaSubsampling: "4:4:4" },
-      backup:    { enabled: true, folder: "_original" },
-      skip:      { pathContains: [] },
-      limits:    { minEdge: 400, maxMs: 2500 }
+      colour: { vibrance: 0, exposure: 0, contrast: 0 },
+      film:   { matte: 0, warmHighlight: 0, shadowCyan: 0 },
+      grain:  { amount: 0, sizePx: 1.8, chroma: 0.25, mono: true, shadowRolloff: 0.06, highlightRolloff: 0.85, seed: 0 },
+      output: { quality: 95, chromaSubsampling: "4:4:4" },
+      backup: { enabled: true, folder: "_original" },
+      skip:   { pathContains: [] },
+      limits: { minEdge: 400, maxMs: 2500 }
     }
   };
 
@@ -634,74 +623,58 @@
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
   function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
-  /* Mô tả từng slider: đường dẫn, nhãn, miền, bước, gợi ý */
+  /* Mô tả từng slider: đường dẫn, nhãn, miền, bước, gợi ý.
+     Cột "≈" trong gợi ý là số tương ứng trên bản tham chiếu HTML, để ai quen
+     bảng đó vẫn đối chiếu được. */
   var SLIDERS = [
-    { g: "softFocus", k: "amount",          label: "Cường độ",   min: 0,    max: 0.9,  step: 0.01,  hint: "Tỉ lệ pha lớp mờ nhỏ vào ảnh. Đây là tầng làm mịn da thật sự." },
-    { g: "softFocus", k: "radiusPct",       label: "Bán kính",   min: 0.02, max: 3,    step: 0.01,  unit: "%", hint: "% cạnh dài. 0,22% trên ảnh 6000px ≈ 13px — cỡ lỗ chân lông." },
-    { g: "clarity",   k: "amount",          label: "Cường độ",   min: 0,    max: 0.9,  step: 0.01,  hint: "Càng cao ảnh càng bớt gắt, nhưng cao quá thì đục và mất khối." },
-    { g: "clarity",   k: "radiusPct",       label: "Bán kính",   min: 0.1,  max: 10,   step: 0.05,  unit: "%", hint: "Dải tần trung — quyết định “khối” của khuôn mặt." },
-    { g: "bloom",     k: "amount",          label: "Cường độ",   min: 0,    max: 1,    step: 0.01,  hint: "Mức screen quầng sáng lên da. Bằng đúng thanh “Độ mịn / Phát sáng” của bản tham chiếu." },
-    { g: "bloom",     k: "radiusPct",       label: "Bán kính",   min: 0.1,  max: 10,   step: 0.05,  unit: "%", hint: "% CHIỀU NGANG ảnh. 2,5% = width/40, đúng bản tham chiếu." },
-    { g: "bloom",     k: "minRadiusPx",     label: "Bán kính tối thiểu", min: 0, max: 200, step: 1, unit: "px", hint: "Sàn tuyệt đối, để ảnh nhỏ vẫn có quầng. Bản tham chiếu dùng 16px." },
-    { g: "bloom",     k: "brightness",      label: "Tăng sáng lớp mờ", min: 0.5, max: 3, step: 0.01, hint: "Nhân độ sáng lớp mờ trước khi screen. Càng cao da càng bừng sáng." },
-    { g: "bloom",     k: "contrast",        label: "Tương phản lớp mờ", min: 0.2, max: 2, step: 0.01, hint: "Dưới 1 làm lớp mờ dịu và đều hơn." },
-    { g: "bloom",     k: "highlightCutoff", label: "Ngưỡng loại vùng sáng", min: 0.2, max: 1, step: 0.005, hint: "Pixel sáng hơn mức này bị loại khỏi lớp mờ — chấm bi trắng, đèn, mảng cháy sáng. Hạ xuống nếu phông vẫn bị loè." },
-    { g: "tone",      k: "contrast",        label: "Tương phản", min: -0.6, max: 0.6,  step: 0.01,  hint: "Số âm = giảm tương phản, cho cảm giác bạc màu." },
-    { g: "tone",      k: "lift",            label: "Nâng vùng đen", min: 0, max: 0.2,  step: 0.005, hint: "Kéo vùng tối lên khỏi 0 — vệt “sương mù” đặc trưng của phim." },
-    { g: "warm",      k: "temp",            label: "Nhiệt độ màu", min: -0.4, max: 0.4, step: 0.005, hint: "Dương = ấm hơn (tăng đỏ, giảm lam). Âm = lạnh hơn." },
-    { g: "warm",      k: "tint",            label: "Sắc lục / tím", min: -0.4, max: 0.4, step: 0.005, hint: "Dương = ngả lục, âm = ngả tím. Thường chỉ cần nhích rất nhẹ." },
-    { g: "warm",      k: "highlightWarmth", label: "Ấm vùng sáng", min: 0,  max: 0.5,  step: 0.005, hint: "Phủ màu ấm bằng soft-light — chỉ ăn vào trung gian và vùng sáng." },
-    { g: "grain",     k: "amount",          label: "Cường độ",   min: 0,    max: 0.15, step: 0.001, hint: "Độ lệch chuẩn của hạt ở vùng trung gian. 0,014 ≈ 3,6/255 — đủ để phá vệt đứt dải mà chưa thấy rõ là hạt." },
-    { g: "grain",     k: "sizePx",          label: "Cỡ cụm hạt", min: 0.3,  max: 6,    step: 0.05,  unit: "px", hint: "Quy chiếu ở ảnh cạnh dài 4000px; ảnh to hơn thì cụm to lên theo. Nhỏ = 65mm mịn, lớn = 8mm thô." },
-    { g: "grain",     k: "chroma",          label: "Lệch kênh màu", min: 0, max: 1,    step: 0.05,  hint: "0 = ba kênh giống hệt nhau. 1 = đủ độ lệch ba lớp thuốc nhuộm (lam thô nhất). Đẩy cao quá thì ra đốm màu kiểu nhiễu cảm biến chứ không ra chất phim." },
-    { g: "grain",     k: "shadowRolloff",   label: "Cuộn vùng đen", min: 0.001, max: 0.5, step: 0.005, hint: "Dưới mức sáng này hạt cuộn dần về 0. Đen kịt thì phản ứng hoá học chưa xảy ra nên không có hạt." },
-    { g: "grain",     k: "highlightRolloff", label: "Cuộn vùng sáng", min: 0.5, max: 0.999, step: 0.005, hint: "Trên mức sáng này hạt cuộn dần về 0. Cháy sáng thì phản ứng bão hoà nên hạt biến mất." }
+    { g: "colour", k: "vibrance", label: "Vibrance", min: -0.5, max: 1, step: 0.01, hint: "Rực màu CÓ CHỌN LỌC: màu đang nhạt được đẩy mạnh, màu đã bão hoà gần như không đụng. Đây là thứ giữ tông da không cháy đỏ. 0,35 ≈ thanh “+35”." },
+    { g: "colour", k: "exposure", label: "Phơi sáng", min: -0.5, max: 0.5, step: 0.01, hint: "Dời cả biểu đồ. 0,22 ≈ +0,5 khẩu — đúng mức bù cho máy in Instax." },
+    { g: "colour", k: "contrast", label: "Tương phản", min: -0.5, max: 0.5, step: 0.01, hint: "Neo ở điểm giữa. Âm = bạc màu, dương = đanh hơn. Cao quá thì matte không cứu nổi vùng tối." },
+    { g: "film", k: "matte", label: "Nâng đáy tối (matte)", min: 0, max: 0.5, step: 0.005, hint: "Kéo vùng tối lên khỏi 0 — vệt “sương” đặc trưng của phim lấy liền. Đây là tầng quyết định ảnh in ra có bết đen hay không." },
+    { g: "film", k: "warmHighlight", label: "Ấm vùng sáng", min: -0.3, max: 0.3, step: 0.005, hint: "Ám kem ở vùng sáng, kéo tông da về phía Instax. Số âm = vùng sáng lạnh đi." },
+    { g: "film", k: "shadowCyan", label: "Lam ở bóng đổ", min: 0, max: 0.4, step: 0.005, hint: "Đối trọng với vùng sáng ấm. Chính cặp ấm/lam này tạo ra cảm giác “ảnh phim” chứ không phải riêng độ rực." },
+    { g: "grain", k: "amount", label: "Cường độ", min: 0, max: 0.15, step: 0.001, hint: "Độ lệch chuẩn của hạt ở vùng trung gian. 0,022 ≈ 5,6/255 — thấy được là hạt nhưng chưa sạn." },
+    { g: "grain", k: "sizePx", label: "Cỡ cụm hạt", min: 0.3, max: 6, step: 0.05, unit: "px", hint: "Quy chiếu ở ảnh cạnh dài 4000px; ảnh to hơn thì cụm to lên theo. Phim lấy liền cho hạt thô hơn phim 35mm." },
+    { g: "grain", k: "chroma", label: "Lệch kênh màu", min: 0, max: 1, step: 0.05, hint: "0 = ba kênh giống hệt nhau. Chỉ có tác dụng khi TẮT “hạt xám”." },
+    { g: "grain", k: "shadowRolloff", label: "Cuộn vùng đen", min: 0.001, max: 0.5, step: 0.005, hint: "Dưới mức sáng này hạt cuộn dần về 0." },
+    { g: "grain", k: "highlightRolloff", label: "Cuộn vùng sáng", min: 0.5, max: 0.999, step: 0.005, hint: "Trên mức sáng này hạt cuộn dần về 0." }
   ];
 
   var GROUPS = [
-    { g: "softFocus", step: 1, title: "Soft focus", why: "Lớp mờ bán kính nhỏ pha vào TOÀN ảnh. Mặc định tắt: bản tham chiếu giữ phông nền sắc nét, mọi độ mềm đều đến từ tầng bloom." },
-    { g: "clarity",   step: 2, title: "Giảm clarity", why: "Lớp mờ bán kính lớn, hạ tương phản dải tần trung trên TOÀN ảnh. Mặc định tắt, cùng lý do trên." },
-    { g: "bloom",     step: 3, title: "Bloom trên vùng da", why: "Tách riêng pixel tông da, loại pixel quá sáng, làm mờ thật mạnh rồi screen lên ảnh gốc còn nguyên nét. Vì mặt nạ cắt theo MÀU DA chứ không theo độ sáng, phông nền — chấm bi, chữ, hoa văn — không bị loè." },
-    { g: "tone",      step: 4, title: "Tông", why: "Biến đổi affine quanh điểm giữa, cộng lift nâng vùng đen." },
-    { g: "warm",      step: 5, title: "Tông ấm", why: "Gain lệch giữa các kênh, cộng một lớp soft-light màu ấm phủ lên vùng sáng." },
-    { g: "grain",     step: 6, title: "Nhiễu hạt", why: "Nhiễu trắng được làm mờ để KẾT CỤM, rồi rải theo đường cong sắc độ — đậm ở trung gian, cuộn về 0 ở đen kịt và cháy sáng. Ba kênh màu có cỡ hạt khác nhau như ba lớp thuốc nhuộm của phim. Cộng sau cùng, nên nó vừa tạo chất phim vừa đóng vai dither phá vệt đứt dải." }
+    { g: "colour", step: 1, title: "Màu & sắc độ", why: "Ba tầng chạy theo đúng thứ tự: phơi sáng → vibrance → tương phản. Vibrance đặt TRƯỚC tương phản là có chủ ý — nó cần đọc độ bão hoà gốc để biết màu nào đáng đẩy." },
+    { g: "film",   step: 2, title: "Chất phim", why: "Nâng đáy tối rồi tách tông: lam-lục ở bóng đổ, kem ấm ở vùng sáng. Cân theo độ sáng SAU khi đã nâng đáy, nếu không thì vùng vừa được nâng vẫn bị tính là bóng đổ." },
+    { g: "grain",  step: 3, title: "Hạt phim", why: "Đúng cỗ máy hạt của bộ lọc Soft Light: nhiễu trắng được làm mờ để KẾT CỤM, rồi rải theo đường cong sắc độ — đậm ở trung gian, cuộn về 0 ở đen kịt và cháy sáng. Bản tham chiếu HTML cộng nhiễu từng điểm ảnh, thứ đó biến mất khi in." }
   ];
 
   /**
-   * Sidebar chia thành mấy tấm gập được. Chỉ tầng chính mở sẵn — mười tám
-   * thanh trượt đổ ra cùng lúc thì không ai tìm được cái mình cần.
-   *
-   * `state` trả về một dòng tóm tắt hiện ngay trên đầu mục kể cả khi đang gập,
-   * để biết mục đó có đang tác động gì không mà không phải mở ra xem.
+   * Sidebar chia thành mấy tấm gập được. Hai tấm đầu mở sẵn vì đó là chỗ chỉnh
+   * hằng ngày; hạt và mục ghi file thì chỉnh một lần rồi thôi.
    */
   var SECTIONS = [
     {
-      id: "bloom", title: "Bloom trên vùng da", tag: "tầng chính", groups: ["bloom"], open: true,
-      state: function () { return cfg.bloom.amount > 0.001 ? fmt(cfg.bloom.amount, 2) : "tắt"; }
+      id: "colour", title: "Màu & sắc độ", tag: "tầng chính", groups: ["colour"], open: true,
+      state: function () {
+        var on = [];
+        if (cfg.colour.vibrance !== 0) on.push("vib " + fmt(cfg.colour.vibrance, 2));
+        if (cfg.colour.exposure !== 0) on.push("EV " + fmt(cfg.colour.exposure, 2));
+        if (cfg.colour.contrast !== 0) on.push("tp " + fmt(cfg.colour.contrast, 2));
+        return on.length ? on.join(" · ") : "tắt";
+      }
     },
     {
-      id: "grain", title: "Nhiễu hạt phim", groups: ["grain"], open: false,
+      id: "film", title: "Chất phim", tag: "tầng chính", groups: ["film"], open: true,
+      state: function () {
+        var on = [];
+        if (cfg.film.matte > 0.001) on.push("matte " + fmt(cfg.film.matte, 2));
+        if (cfg.film.warmHighlight !== 0 || cfg.film.shadowCyan > 0.001) on.push("tách tông");
+        return on.length ? on.join(" · ") : "tắt";
+      }
+    },
+    {
+      id: "grain", title: "Hạt phim", groups: ["grain"], open: false,
       state: function () {
         if (!(cfg.grain.amount > 0.0005)) return "tắt";
-        return fmt(cfg.grain.amount, 3) + (cfg.grain.mono ? " · mono" : "");
-      }
-    },
-    {
-      id: "soften", title: "Làm mềm toàn ảnh", tag: "tuỳ chọn", groups: ["softFocus", "clarity"], open: false,
-      state: function () {
-        var on = [];
-        if (cfg.softFocus.amount > 0.001) on.push("soft focus");
-        if (cfg.clarity.amount > 0.001) on.push("clarity");
-        return on.length ? on.join(" + ") : "tắt";
-      }
-    },
-    {
-      id: "color", title: "Tông & màu", tag: "tuỳ chọn", groups: ["tone", "warm"], open: false,
-      state: function () {
-        var on = [];
-        if (cfg.tone.contrast !== 0 || cfg.tone.lift !== 0) on.push("tông");
-        if (cfg.warm.temp !== 0 || cfg.warm.tint !== 0 || cfg.warm.highlightWarmth > 0.001) on.push("ấm");
-        return on.length ? on.join(" + ") : "tắt";
+        return fmt(cfg.grain.amount, 3) + (cfg.grain.mono ? " · xám" : "");
       }
     },
     {
@@ -709,11 +682,9 @@
       state: function () { return "JPEG " + cfg.output.quality + (cfg.backup.enabled ? " · có backup" : " · KHÔNG backup"); }
     }
   ];
-
   /* ═══════════════════════════════════════════════════════════════
-     2. XỬ LÝ ẢNH — bám sát src/pipeline.js
+     2. XỬ LÝ ẢNH — bám sát src/filters/instax/pipeline.js
      ═══════════════════════════════════════════════════════════════ */
-
   /* Ba lớp mờ dùng box blur 3 lượt: xấp xỉ Gauss với sai số dưới 3%, nhưng
      chi phí không phụ thuộc bán kính nên bán kính 10% cạnh dài vẫn chạy mượt. */
   function boxesForGauss(sigma, n) {
@@ -769,109 +740,12 @@
     return a;
   }
 
-  /* Làm mờ là phần đắt nhất của cả vòng vẽ, mà kéo slider "cường độ" thì bán
-     kính không đổi — nên giữ lại vài lớp mờ gần nhất theo sigma. */
-  var blurCache = [];
-  function cachedBlur(planes, w, h, sigma) {
-    var key = sigma.toFixed(3);
-    for (var i = 0; i < blurCache.length; i++) {
-      if (blurCache[i].key === key) return blurCache[i].planes;
-    }
-    var out = [blurPlane(planes[0], w, h, sigma),
-               blurPlane(planes[1], w, h, sigma),
-               blurPlane(planes[2], w, h, sigma)];
-    blurCache.push({ key: key, planes: out });
-    if (blurCache.length > 4) blurCache.shift();
-    return out;
-  }
-  function dropBlurCache() { blurCache = []; }
-
-  /** Lớp mờ cho tầng soft focus / clarity: 3 kênh, không cắt gì cả. */
-  function blurLayer(planes, w, h, sigma) {
-    return cachedBlur(planes, w, h, sigma);
-  }
-
   /**
    * Nhận diện tông da — đúng ngưỡng của src/pipeline.js và của bản tham chiếu:
    * đỏ trội hơn lục một khoảng rõ rệt và trội hơn lam.
    */
   function isSkin(r, g, b) {
     return r > 80 / 255 && g > 35 / 255 && b > 20 / 255 && r - g > 10 / 255 && r > b;
-  }
-
-  /* Tách mặt nạ da rồi làm mờ nó — phần đắt nhất của vòng vẽ, mà kéo thanh
-     cường độ / tăng sáng thì mặt nạ không đổi. Giữ lại kết quả gần nhất. */
-  var bloomCache = null;
-  function dropBloomCache() { bloomCache = null; }
-
-  /**
-   * Lớp bloom: màu vùng da ĐÃ NHÂN ALPHA cùng mặt nạ của nó, cả hai đã làm mờ.
-   * Nhân alpha trước khi mờ là bắt buộc — nếu làm mờ màu thô rồi mới nhân mặt
-   * nạ, viền vùng da sẽ kéo màu phông vào trong quầng sáng.
-   * Trả về null khi ảnh không có pixel da nào.
-   */
-  function bloomLayer(planes, w, h, c, scale) {
-    var sigma = Math.max(c.minRadiusPx * scale, c.radiusPct / 100 * w);
-    var key = [sigma.toFixed(3), c.skinOnly ? 1 : 0, c.highlightCutoff.toFixed(4)].join("|");
-    if (bloomCache && bloomCache.key === key) return bloomCache.layer;
-
-    var n = w * h;
-    var pm = [new Float32Array(n), new Float32Array(n), new Float32Array(n)];
-    var mk = new Float32Array(n), kept = 0;
-    for (var i = 0; i < n; i++) {
-      var r = planes[0][i], g = planes[1][i], b = planes[2][i];
-      if (c.skinOnly && !isSkin(r, g, b)) continue;
-      // Loại vùng quá sáng: chấm bi trắng, đèn, mảng cháy sáng.
-      if (0.299 * r + 0.587 * g + 0.114 * b > c.highlightCutoff) continue;
-      pm[0][i] = r; pm[1][i] = g; pm[2][i] = b; mk[i] = 1; kept++;
-    }
-
-    var layer = kept ? {
-      colour: [blurPlane(pm[0], w, h, sigma),
-               blurPlane(pm[1], w, h, sigma),
-               blurPlane(pm[2], w, h, sigma)],
-      mask: blurPlane(mk, w, h, sigma)
-    } : null;
-    bloomCache = { key: key, layer: layer };
-    return layer;
-  }
-
-  /**
-   * Screen lớp bloom lên nền, sửa `base` tại chỗ. Bỏ nhân alpha trước rồi mới
-   * áp brightness / contrast — đúng thứ tự chuỗi filter của canvas:
-   *
-   *     out = base + (mask · amount) · layer · (1 − base)
-   *
-   * Lưu ý: pipeline.js cũng ghép tay chứ không nhờ libvips, vì với mọi blend
-   * khác `over` libvips đưa màu ĐÃ nhân alpha vào hàm blend rồi mới pha lại
-   * theo alpha, làm cường độ thật thành amount² thay vì amount.
-   */
-  function screenBloom(base, layer, c) {
-    var br = c.brightness, ct = c.contrast, ctOff = 0.5 * (1 - ct);
-    var mask = layer.mask, n = mask.length;
-    for (var ch = 0; ch < 3; ch++) {
-      var bp = base[ch], cp = layer.colour[ch];
-      for (var i = 0; i < n; i++) {
-        var m = mask[i];
-        if (m <= 0.0001) continue;
-        var s = cp[i] / m;                 // bỏ nhân alpha
-        if (s > 1) s = 1;
-        s = s * br;                        // brightness()
-        s = s * ct + ctOff;                // contrast()
-        s = s < 0 ? 0 : (s > 1 ? 1 : s);
-        var b = bp[i];
-        bp[i] = b + m * c.amount * s * (1 - b);
-      }
-    }
-  }
-
-  /** source-over với alpha hằng, nền đục: out = a·layer + (1−a)·base */
-  function compOver(base, layer, a) {
-    var ia = 1 - a;
-    for (var c = 0; c < 3; c++) {
-      var b = base[c], l = layer[c];
-      for (var i = 0; i < b.length; i++) b[i] = a * l[i] + ia * b[i];
-    }
   }
 
   /* ── nhiễu hạt (film grain), bám sát addGrain() trong pipeline.js ── */
@@ -970,82 +844,108 @@
     }
   }
 
-  /** soft-light theo đúng công thức PDF/W3C mà libvips dùng. */
-  function softLight(cb, cs) {
-    if (cs <= 0.5) return cb - (1 - 2 * cs) * cb * (1 - cb);
-    var d = cb <= 0.25 ? ((16 * cb - 12) * cb + 4) * cb : Math.sqrt(cb);
-    return cb + (2 * cs - 1) * (d - cb);
-  }
+  /* ── năm tầng sắc độ, bám sát applyTone() trong instax/pipeline.js ──
 
-  function hexToRgb(hex) {
-    return [parseInt(hex.slice(1, 3), 16) / 255,
-            parseInt(hex.slice(3, 5), 16) / 255,
-            parseInt(hex.slice(5, 7), 16) / 255];
+     Toàn bộ bộ lọc này là phép biến đổi TỪNG ĐIỂM ẢNH — không điểm nào nhìn
+     sang điểm bên cạnh — nên năm tầng gộp vào một vòng quét. Chỉ tầng hạt cuối
+     cùng mới cần đến lớp mờ ở trên.
+
+     Ở đây tính trên thang 0…1 còn bên Node tính trên 0…255; mọi hằng số của
+     bản tham chiếu vì thế được chia 255 đúng một lần, ghi rõ ở từng chỗ. */
+  var UI = 100;        // số chuẩn hoá × 100 = số trên thanh trượt của bản tham chiếu
+  var MID = 128 / 255; // điểm neo của tương phản, đúng mức 128 của bên Node
+
+  function applyTone(out, c) {
+    var exp = c.colour.exposure * UI * 1.4 / 255;
+    var vib = c.colour.vibrance;
+    var contrast = c.colour.contrast * UI;
+    var fade = c.film.matte * UI / 255;
+    var warmth = c.film.warmHighlight * UI / 255;
+    var cyan = c.film.shadowCyan * UI / 255;
+
+    // Công thức tương phản kinh điển của xử lý ảnh 8-bit, neo ở điểm giữa.
+    var k = (259 * (contrast + 255)) / (255 * (259 - contrast));
+
+    var R = out[0], G = out[1], B = out[2], n = R.length;
+    for (var i = 0; i < n; i++) {
+      var r = R[i] + exp, g = G[i] + exp, b = B[i] + exp;
+
+      // ── 2. Vibrance: màu đang nhạt mới được đẩy mạnh ──
+      if (vib !== 0) {
+        var max = r > g ? (r > b ? r : b) : (g > b ? g : b);
+        var min = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        var sat = max <= 0 ? 0 : (max - min) / max;
+        if (sat > 1) sat = 1;
+        var luma = 0.299 * r + 0.587 * g + 0.114 * b;
+        var dyn = vib * (1 - sat) * 1.5;
+        r += (r - luma) * dyn;
+        g += (g - luma) * dyn;
+        b += (b - luma) * dyn;
+      }
+
+      // ── 3. Tương phản, rồi KẸP NGAY về 0…1 ──
+      // Bản tham chiếu HTML giữ số thực suốt chuỗi, và điều đó nuốt mất tầng
+      // matte ở đúng chỗ matte tồn tại để phục vụ. Đây là chỗ duy nhất bộ lọc
+      // lệch khỏi bản tham chiếu, và exe lệch y hệt — hai bên vẫn khớp nhau.
+      r = k * (r - MID) + MID; r = r < 0 ? 0 : (r > 1 ? 1 : r);
+      g = k * (g - MID) + MID; g = g < 0 ? 0 : (g > 1 ? 1 : g);
+      b = k * (b - MID) + MID; b = b < 0 ? 0 : (b > 1 ? 1 : b);
+
+      // ── 4. Nâng đáy tối ──
+      if (fade !== 0) {
+        r += fade * (1 - r);
+        g += fade * (1 - g);
+        b += fade * (1 - b);
+      }
+
+      // ── 5. Tách tông: lam ở bóng đổ, kem ấm ở vùng sáng ──
+      if (cyan !== 0 || warmth !== 0) {
+        var lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        if (cyan !== 0 && lum < MID) {
+          var ws = (MID - lum) / MID;
+          g += cyan * 0.4 * ws;
+          b += cyan * 1.1 * ws;
+        }
+        if (warmth !== 0 && lum > MID) {
+          var wh = (lum - MID) / MID;
+          r += warmth * 1.2 * wh;
+          g += warmth * 0.6 * wh;
+        }
+      }
+
+      R[i] = r < 0 ? 0 : (r > 1 ? 1 : r);
+      G[i] = g < 0 ? 0 : (g > 1 ? 1 : g);
+      B[i] = b < 0 ? 0 : (b > 1 ? 1 : b);
+    }
   }
 
   /**
-   * Chạy đủ sáu tầng. `planes` là ảnh gốc (0..1), trả về ba kênh kết quả.
-   * `scale` là tỉ lệ khung xem so với ảnh thật — chỉ dùng để quy đổi
-   * `bloom.minRadiusPx`, vốn là một con số pixel tuyệt đối.
-   *
-   * Mọi lớp mờ đều dựng từ ảnh GỐC rồi ghép chồng lần lượt — giống hệt
-   * cách pipeline.js làm.
+   * Chạy đủ chuỗi. `planes` là ảnh gốc (0..1), trả về ba kênh kết quả.
+   * Tham số `scale` có mặt để giữ chung khuôn với tuner của bộ lọc kia; bộ lọc
+   * này không có tham số nào tính bằng pixel tuyệt đối nên không dùng đến.
    */
   function process(planes, w, h, c, scale) {
     var out = [new Float32Array(planes[0]), new Float32Array(planes[1]), new Float32Array(planes[2])];
     if (!c.enabled) return out;
 
-    var longEdge = Math.max(w, h);
+    applyTone(out, c);
 
-    if (c.softFocus.amount > 0.001) {
-      compOver(out, blurLayer(planes, w, h, c.softFocus.radiusPct / 100 * longEdge), c.softFocus.amount);
-    }
-    if (c.clarity.amount > 0.001) {
-      compOver(out, blurLayer(planes, w, h, c.clarity.radiusPct / 100 * longEdge), c.clarity.amount);
-    }
-    // Mặt nạ đọc từ ảnh GỐC: hai tầng trên có thể đã làm nhoè ranh giới da / phông.
-    if (c.bloom.amount > 0.001) {
-      var bl = bloomLayer(planes, w, h, c.bloom, scale || 1);
-      if (bl) screenBloom(out, bl, c.bloom);
-    }
-
-    // Tầng 4 + 5 gộp thành một phép affine, đúng như pipeline.js.
-    var gain = 1 + c.tone.contrast;
-    var offset = 0.5 * (1 - gain) + c.tone.lift;
-    var t = c.warm.temp, ti = c.warm.tint;
-    var g3 = [gain * (1 + t * 0.5), gain * (1 + ti * 0.5), gain * (1 - t * 0.5)];
-    for (var ch = 0; ch < 3; ch++) {
-      var p = out[ch], gg = g3[ch];
-      for (var i = 0; i < p.length; i++) {
-        var v = p[i] * gg + offset;
-        p[i] = v < 0 ? 0 : (v > 1 ? 1 : v);
-      }
-    }
-
-    // 5b. Ấm thêm ở vùng sáng — cũng đi qua luật "nhân alpha trước" ở trên.
-    if (c.warm.highlightWarmth > 0.001) {
-      var cs = hexToRgb(c.warm.highlightColor), a = c.warm.highlightWarmth, ia = 1 - a;
-      for (var ch2 = 0; ch2 < 3; ch2++) {
-        var q = out[ch2], s = cs[ch2] * a;
-        for (var j = 0; j < q.length; j++) q[j] = a * softLight(q[j], s) + ia * q[j];
-      }
-    }
-
-    // 6. Hạt — sau cùng, không có ngoại lệ.
+    // Hạt — sau cùng, không có ngoại lệ: nó phải nằm trên mọi tầng khác thì
+    // mới hàn chúng lại thành một mặt phẳng ảnh duy nhất.
     if (c.grain.amount > 0.0005) addGrain(out, w, h, c.grain);
     return out;
   }
 
-  /* ── thước đo độ hài hoà, bám sát harmony() trong pipeline.js ──
-     Ngưỡng phải trùng khít với HARMONY bên đó, nếu không bảng trong tuner và
-     bảng của --selftest sẽ nói hai điều khác nhau về cùng một tấm ảnh. */
+  /* ── thước đo độ hài hoà ──
+     Ngưỡng phải trùng khít với HARMONY trong src/pipeline.js, nếu không bảng
+     trong tuner và bảng của --selftest sẽ nói hai điều khác nhau về cùng một
+     tấm ảnh. Riêng câu sửa thì trỏ về khoá của instax.config.json. */
   var HARMONY = {
-    crushedPct: { max: 1.0, fix: "tăng tone.lift hoặc giảm tone.contrast" },
-    blownPct: { max: 0.8, fix: "hạ bloom.brightness, bloom.amount hoặc bloom.highlightCutoff" },
+    crushedPct: { max: 1.0, fix: "tăng film.matte hoặc giảm colour.contrast" },
+    blownPct: { max: 0.8, fix: "giảm colour.exposure hoặc colour.contrast" },
     warmth: { min: 10, max: 35, cold: 5, hot: 45 },
     skinTint: { min: -10, max: 5, green: 8, magenta: -15 }
   };
-
   function harmony(planes, w, h) {
     var n = w * h, r = planes[0], g = planes[1], b = planes[2];
     var crushed = 0, blown = 0, sumRB = 0, skinY = 0, skinN = 0, bgY = 0, tint = 0;
@@ -1070,6 +970,8 @@
     };
   }
 
+  /** Chấm từng chỉ số — cùng ngưỡng với bên Node, cùng câu chữ với verdicts()
+      trong src/filters/instax/pipeline.js. */
   function harmonyVerdicts(m) {
     var H = HARMONY, o = {};
 
@@ -1081,24 +983,25 @@
       ? { ok: true, note: "vùng sáng còn mượt" }
       : { ok: false, note: "cháy sáng — " + H.blownPct.fix };
 
+    // Bộ lọc này không có tầng nào tách riêng chủ thể khỏi phông, nên chỉ báo
+    // chứ không quy trách nhiệm cho một tham số nào cả.
     if (m.skinShare < 0.5) o.subject = { ok: true, note: "ảnh gần như không có vùng da để so" };
     else if (m.skinMean >= m.bgMean) o.subject = { ok: true, note: "chủ thể sáng hơn phông, mắt bị hút vào mặt" };
-    else o.subject = { ok: false, note: "phông sáng hơn da — hạ sáng phông hoặc tăng bloom.amount" };
+    else o.subject = { ok: false, note: "phông sáng hơn da — chỉnh ánh sáng buồng chụp" };
 
-    if (m.warmth < H.warmth.cold) o.warmth = { ok: false, note: "lạnh / nhợt — tăng warm.temp" };
-    else if (m.warmth > H.warmth.hot) o.warmth = { ok: false, note: "quá đỏ, da ngả gạch nung — hạ warm.temp" };
+    if (m.warmth < H.warmth.cold) o.warmth = { ok: false, note: "lạnh / nhợt — tăng film.warmHighlight hoặc giảm film.shadowCyan" };
+    else if (m.warmth > H.warmth.hot) o.warmth = { ok: false, note: "quá đỏ, da ngả gạch nung — giảm film.warmHighlight" };
     else if (m.warmth < H.warmth.min || m.warmth > H.warmth.max) o.warmth = { ok: true, note: "chấp nhận được, khoảng đẹp là 10…35" };
     else o.warmth = { ok: true, note: "đúng khoảng ấm của da chân dung" };
 
     if (m.skinShare < 0.5) o.tint = { ok: true, note: "không đủ vùng da để đo" };
-    else if (m.skinTint > H.skinTint.green) o.tint = { ok: false, note: "da ám lục — giảm warm.tint" };
-    else if (m.skinTint < H.skinTint.magenta) o.tint = { ok: false, note: "da ám tím — tăng warm.tint" };
+    else if (m.skinTint > H.skinTint.green) o.tint = { ok: false, note: "da ám lục — giảm film.shadowCyan" };
+    else if (m.skinTint < H.skinTint.magenta) o.tint = { ok: false, note: "da ám tím — giảm colour.vibrance" };
     else if (m.skinTint > H.skinTint.max || m.skinTint < H.skinTint.min) o.tint = { ok: true, note: "hơi lệch nhưng còn trong ngưỡng" };
     else o.tint = { ok: true, note: "màu da tinh khiết" };
 
     return o;
   }
-
   /* ── số đo, cùng tinh thần với measureRaw() trong pipeline.js ── */
   function measure(planes, w, h) {
     var n = w * h, gray = new Float32Array(n), sr = 0, sb = 0, sg = 0;
@@ -1160,8 +1063,6 @@
       planes[2][i] = img.data[k + 2] / 255;
     }
     work = { w: w, h: h, planes: planes, srcW: iw, srcH: ih, scale: w / iw };
-    dropBlurCache();
-    dropBloomCache();
     dropGrainCache();
 
     cvA.width = w; cvA.height = h;
@@ -1334,8 +1235,11 @@
     if (items && items.length) loadFile(items[0]);
   });
 
-  /** Ảnh mẫu dựng bằng canvas: có da, có chỗ bắt sáng, có vùng tối, có sợi mảnh —
-      đủ để cả sáu tầng đều thấy được tác dụng. */
+  /** Ảnh mẫu dựng bằng canvas: có da, có chỗ bắt sáng, có vùng tối, có sợi mảnh,
+      và một dải ô màu chia đôi — nửa trên là màu ĐÃ RỰC, nửa dưới là đúng màu
+      đó nhưng đã pha nhạt. Kéo thanh Vibrance thì nửa dưới bật lên rõ còn nửa
+      trên gần như đứng yên: đó chính là thứ phân biệt vibrance với saturation,
+      và là lý do tông da không cháy đỏ. */
   function makeSample() {
     var w = 1400, h = 933;
     var c = document.createElement("canvas");
@@ -1375,6 +1279,20 @@
       x.bezierCurveTo(sx + 30, sy + 60, sx - 20, sy + 130, sx + 10, sy + 210);
       x.stroke();
     }
+    // dải ô màu: mỗi cột là một màu, trên rực / dưới nhạt
+    var HUES = [[196, 42, 52], [214, 148, 32], [46, 128, 84], [40, 96, 186], [128, 58, 150]];
+    HUES.forEach(function (c, i) {
+      var bw = w * 0.055, bx = w * 0.035 + i * bw * 1.12, by = h * 0.80, bh = h * 0.075;
+      x.fillStyle = "rgb(" + c[0] + "," + c[1] + "," + c[2] + ")";
+      x.fillRect(bx, by, bw, bh);
+      // cùng sắc màu, pha về phía xám: bão hoà thấp đi hẳn
+      var m = 0.42, g = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+      x.fillStyle = "rgb(" + Math.round(c[0] * m + g * (1 - m)) + "," +
+                             Math.round(c[1] * m + g * (1 - m)) + "," +
+                             Math.round(c[2] * m + g * (1 - m)) + ")";
+      x.fillRect(bx, by + bh, bw, bh);
+    });
+
     // vi kết cấu da
     var id = x.getImageData(0, 0, w, h), d = id.data;
     for (var k = 0; k < d.length; k += 4) {
@@ -1465,13 +1383,13 @@
   /* Trạng thái gập/mở được nhớ lại: người chỉnh thường quay lại đúng mục hôm
      qua họ đang làm dở. */
   function openState() {
-    try { return JSON.parse(localStorage.getItem("sl.open") || "{}") || {}; }
+    try { return JSON.parse(localStorage.getItem("ix.open") || "{}") || {}; }
     catch (e) { return {}; }
   }
   function rememberOpen(id, on) {
     try {
       var m = openState(); m[id] = on;
-      localStorage.setItem("sl.open", JSON.stringify(m));
+      localStorage.setItem("ix.open", JSON.stringify(m));
     } catch (e) {}
   }
 
@@ -1515,45 +1433,6 @@
         "Khung xem dựng hạt ở đúng cỡ pixel của ảnh thật, nên nó cho thấy hạt khi soi 100% — " +
         "in ra hoặc xem thu nhỏ cả khung thì hạt sẽ dịu hơn thế này. Hạt trong khung xem cố định " +
         "để so được hai giá trị cạnh nhau; ảnh thật vẫn ngẫu nhiên mỗi tấm khi <code>seed</code> = 0."));
-    }
-
-    if (grp.g === "bloom") {
-      sec.appendChild(field("Chỉ vùng da", "bloom.skinOnly", function () {
-        var w = el("label", "switch");
-        var cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.bloom.skinOnly;
-        cb.addEventListener("change", function () {
-          cfg.bloom.skinOnly = cb.checked;
-          dropBloomCache(); schedule(); writeJson(); remember();
-        });
-        w.appendChild(cb);
-        w.appendChild(el("span", null, "lọc mặt nạ theo tông da"));
-        sliderRefs.push(function () { cb.checked = cfg.bloom.skinOnly; });
-        return w;
-      }));
-      sec.appendChild(el("p", "why", "Tắt đi thì cả ảnh phát sáng, chỉ còn ngưỡng loại vùng sáng chặn bớt — thường không phải thứ bạn muốn."));
-    }
-
-    if (grp.g === "warm") {
-      var f = el("div", "field");
-      f.appendChild(el("label", null, "Màu phủ vùng sáng"));
-      f.appendChild(el("span", "key", "warm.highlightColor"));
-      var ctl = el("div", "ctl");
-      var col = el("input"); col.type = "color"; col.value = cfg.warm.highlightColor;
-      var hex = el("input", null); hex.type = "text"; hex.value = cfg.warm.highlightColor;
-      hex.style.width = "92px"; hex.style.marginLeft = "8px";
-      function setColor(v) {
-        if (!/^#[0-9a-fA-F]{6}$/.test(v)) return;
-        cfg.warm.highlightColor = v.toLowerCase();
-        col.value = cfg.warm.highlightColor;
-        hex.value = cfg.warm.highlightColor;
-        schedule(); writeJson(); remember();
-      }
-      col.addEventListener("input", function () { setColor(col.value); });
-      hex.addEventListener("change", function () { setColor(hex.value.trim()); });
-      ctl.appendChild(col); ctl.appendChild(hex);
-      f.appendChild(ctl);
-      sec.appendChild(f);
-      sliderRefs.push(function () { col.value = cfg.warm.highlightColor; hex.value = cfg.warm.highlightColor; });
     }
 
   host.appendChild(sec);
@@ -1660,10 +1539,13 @@
     /* ── preset: để trên cùng vì đây là chỗ bắt đầu mỗi lần chỉnh ── */
     var pre = el("section", "group plain");
     pre.appendChild(el("h3", null, "Bộ giá trị dựng sẵn"));
-    pre.appendChild(el("p", "why", "Nạp một mốc để so, rồi chỉnh tiếp từ đó."));
+    pre.appendChild(el("p", "why",
+      "Nạp một mốc để so, rồi chỉnh tiếp từ đó. “Bù sáng để in” là bộ số dành cho " +
+      "máy in Instax: nó ăn tối hơn màn hình khoảng nửa khẩu và tự đẩy màu, nên bản " +
+      "đưa đi in phải sáng hơn và nhạt hơn bản để xem."));
     var bar = el("div");
     bar.style.display = "flex"; bar.style.gap = "8px"; bar.style.flexWrap = "wrap";
-    [["File hiện tại", "current"], ["Mặc định trong code", "code"], ["Tắt hết hiệu ứng", "off"]]
+    [["Mô phỏng film", "current"], ["Bù sáng để in", "preprint"], ["Tắt hết hiệu ứng", "off"]]
       .forEach(function (p) {
         var b = el("button", "btn", p[0]);
         b.addEventListener("click", function () { apply(PRESETS[p[1]]); });
@@ -1709,11 +1591,11 @@
     var acc = el("section", "group plain");
     acc.appendChild(el("h3", null, "Khung xem chính xác đến đâu"));
     acc.appendChild(el("p", "why",
-      "Trang này chạy lại đúng sáu tầng của <code>src/pipeline.js</code>, kể cả cách ghép tay " +
-      "lớp bloom và đường cong đáp ứng của tầng hạt. Đối chiếu đầu-cuối với ảnh do exe thật " +
-      "xuất ra, sai lệch trung bình là 1,0/255 (0,4%), lớn nhất 9/255 và dồn ở đúng đường viền " +
-      "mặt nạ da — mắt không thấy được. " +
-      "Chốt xong thì chạy <code>npm run preview -- anh.jpg</code> để soi bản do chính exe xuất ra."));
+      "Trang này chạy lại đúng chuỗi tầng của <code>src/filters/instax/pipeline.js</code>: cùng " +
+      "công thức, cùng thứ tự, cùng chỗ kẹp giá trị sau tầng tương phản. Khác biệt duy nhất là " +
+      "bên Node làm tròn về số nguyên 8-bit ở cuối, còn ở đây giữ số thực — chênh dưới 1/255. " +
+      "Chốt xong thì chạy <code>node src/cli.js --filter instax --preview anh.jpg</code> để soi " +
+      "bản do chính exe xuất ra."));
     host.appendChild(acc);
 
     refreshStates();
@@ -1737,7 +1619,7 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     6. XUẤT / NẠP softlight.config.json
+     6. XUẤT / NẠP instax.config.json
      ═══════════════════════════════════════════════════════════════ */
 
   /** In số gọn: bỏ đuôi 0 thừa, giữ nguyên dạng thập phân (không dùng ký hiệu mũ). */
@@ -1752,17 +1634,16 @@
     return "[" + a.map(js).join(", ") + "]";
   }
 
+  /* Ghi chú đi kèm file cấu hình, không dấu để mo bang Notepad tren may booth
+     nao cung doc duoc. */
   var DOC = {
-    file: "Tham so hieu ung Soft Light. Sua truc tiep file nay roi chup thu, khong can build lai. Chay `npm run preview -- <anh.jpg>` de xem truoc ma khong ghi de.",
-    softFocus: "Lam mo NHE ban kinh nho tren TOAN anh - lam min da va soi toc nhung cung lam mem ca phong nen. De 0 de giu phong nen (cham bi, chu, hoa van) sac net nhu ban tham chieu.",
-    clarity: "Giam do net / do tuong phan cuc bo tren TOAN anh. De 0 vi cung ly do voi softFocus.",
-    bloom: "TANG CHINH. Tach rieng vung tong da, lam mo that manh, tang sang roi screen len anh GOC con nguyen net. Vi mat na cat theo MAU DA chu khong theo do sang, phong nen khong bi loe. amount = do manh (0..1), radiusPct tinh theo chieu ngang anh, highlightCutoff loai vung sang hon muc nay (cham bi trang, den).",
-    tone: "contrast am = giam tuong phan tong the. lift = nang vung den (0..0.2), tao cam giac bac mau ethereal. Ban tham chieu khong dung tang nay.",
-    warm: "temp duong = am hon (tang do, giam lam). highlightWarmth phu them mau am len vung sang bang blend soft-light. Ban tham chieu khong dung tang nay.",
-    grain: "Nhieu hat kieu phim nhua, cong SAU CUNG. Nhieu trang duoc lam mo de ket cum (sizePx quy chieu o anh canh dai 4000px), roi rai theo duong cong sac do - dam nhat o trung gian, cuon ve 0 o vung den kit (shadowRolloff) va vung chay sang (highlightRolloff). chroma pha do lech giua ba kenh mau: 0 = ba kenh giong het nhau, 1 = du do lech ba lop thuoc nhuom cua phim. Dat mono=true de duoc hat xam. seed=0 la ngau nhien moi anh. amount=0 de tat.",
+    file: "Tham so bo loc Instax Wide. Moi so o day = so tren thanh truot chia 100 (vibrance 0.35 = +35). Sua truc tiep file nay roi chup thu, khong can build lai. Chay `node src/cli.js --filter instax --preview <anh.jpg>` de xem truoc ma khong ghi de.",
+    colour: "Ba tang chay theo dung thu tu: phoi sang -> vibrance -> tuong phan. vibrance day ruc mau CO CHON LOC: mau dang nhat duoc day manh, mau da bao hoa gan nhu khong dung - day la thu giu tong da khong chay do. exposure 0.22 ~ +0.5 khau. Sau tuong phan, gia tri bi kep ve 0..255 truoc khi sang tang matte.",
+    film: "matte nang day toi len khoi 0 - vet 'suong' cua phim lay lien, cung la tang quyet dinh anh in ra co bet den hay khong. warmHighlight am kem o vung sang, shadowCyan am lam o bong do; chinh cap am/lam nay tao ra cam giac anh phim.",
+    grain: "Nhieu hat kieu phim, cong SAU CUNG. Nhieu trang duoc lam mo de ket cum (sizePx quy chieu o anh canh dai 4000px), roi rai theo duong cong sac do - dam nhat o trung gian, cuon ve 0 o vung den kit (shadowRolloff) va vung chay sang (highlightRolloff). mono=true cho hat xam, dung cho phim lay lien. chroma chi co tac dung khi mono=false. seed=0 la ngau nhien moi anh. amount=0 de tat.",
     output: "Chat luong JPEG ghi de. 4:4:4 giu mau vien toc/moi sac net hon 4:2:0.",
-    backup: "Anh goc duoc chep vao thu muc con nay truoc khi ghi de. Su ton tai cua ban backup CHINH LA dau hieu 'da xu ly' - nho vay trigger co ban hai lan cung khong xu ly chong.",
-    skip: "Bo qua nhung file co duong dan chua mot trong cac chuoi nay. Dung khi dslrBooth goi ca tren file template da ghep - lam mem ca to in se nhoe luon khung va logo. Vi du: [\"\\prints\\\\\", \"_final\"]",
+    backup: "Anh goc duoc chep vao thu muc con nay truoc khi ghi de. Su ton tai cua ban backup CHINH LA dau hieu 'da xu ly' - nho vay trigger co ban hai lan cung khong xu ly chong. Neu chay CA HAI bo loc tren cung mot thu muc anh thi phai dat hai ten thu muc khac nhau, khong thi bo loc chay sau se bo qua het.",
+    skip: "Bo qua nhung file co duong dan chua mot trong cac chuoi nay. Dung khi dslrBooth goi ca tren file template da ghep. Vi du: [\"\\prints\\\\\", \"_final\"]",
     limits: "Bo qua anh nho hon minEdge px (thumbnail cua dslrBooth). maxMs chi de canh bao trong log khi xu ly qua cham so voi nhip chup."
   };
 
@@ -1772,41 +1653,18 @@
     L.push('  "_doc": ' + js(DOC.file) + ",");
     L.push('  "enabled": ' + (c.enabled ? "true" : "false") + ",");
     L.push("");
-    L.push('  "softFocus": {');
-    L.push('    "_doc": ' + js(DOC.softFocus) + ",");
-    L.push('    "amount": ' + nf(c.softFocus.amount) + ",");
-    L.push('    "radiusPct": ' + nf(c.softFocus.radiusPct));
+    L.push('  "colour": {');
+    L.push('    "_doc": ' + js(DOC.colour) + ",");
+    L.push('    "vibrance": ' + nf(c.colour.vibrance) + ",");
+    L.push('    "exposure": ' + nf(c.colour.exposure) + ",");
+    L.push('    "contrast": ' + nf(c.colour.contrast));
     L.push("  },");
     L.push("");
-    L.push('  "clarity": {');
-    L.push('    "_doc": ' + js(DOC.clarity) + ",");
-    L.push('    "amount": ' + nf(c.clarity.amount) + ",");
-    L.push('    "radiusPct": ' + nf(c.clarity.radiusPct));
-    L.push("  },");
-    L.push("");
-    L.push('  "bloom": {');
-    L.push('    "_doc": ' + js(DOC.bloom) + ",");
-    L.push('    "amount": ' + nf(c.bloom.amount) + ",");
-    L.push('    "radiusPct": ' + nf(c.bloom.radiusPct) + ",");
-    L.push('    "minRadiusPx": ' + nf(c.bloom.minRadiusPx) + ",");
-    L.push('    "brightness": ' + nf(c.bloom.brightness) + ",");
-    L.push('    "contrast": ' + nf(c.bloom.contrast) + ",");
-    L.push('    "skinOnly": ' + (c.bloom.skinOnly ? "true" : "false") + ",");
-    L.push('    "highlightCutoff": ' + nf(c.bloom.highlightCutoff));
-    L.push("  },");
-    L.push("");
-    L.push('  "tone": {');
-    L.push('    "_doc": ' + js(DOC.tone) + ",");
-    L.push('    "contrast": ' + nf(c.tone.contrast) + ",");
-    L.push('    "lift": ' + nf(c.tone.lift));
-    L.push("  },");
-    L.push("");
-    L.push('  "warm": {');
-    L.push('    "_doc": ' + js(DOC.warm) + ",");
-    L.push('    "temp": ' + nf(c.warm.temp) + ",");
-    L.push('    "tint": ' + nf(c.warm.tint) + ",");
-    L.push('    "highlightWarmth": ' + nf(c.warm.highlightWarmth) + ",");
-    L.push('    "highlightColor": ' + js(c.warm.highlightColor));
+    L.push('  "film": {');
+    L.push('    "_doc": ' + js(DOC.film) + ",");
+    L.push('    "matte": ' + nf(c.film.matte) + ",");
+    L.push('    "warmHighlight": ' + nf(c.film.warmHighlight) + ",");
+    L.push('    "shadowCyan": ' + nf(c.film.shadowCyan));
     L.push("  },");
     L.push("");
     L.push('  "grain": {');
@@ -1846,6 +1704,7 @@
     return L.join("\n") + "\n";
   }
 
+
   /* Mọi đường commit của panel đều đi qua đây, nên đây cũng là chỗ duy nhất
      cần gọi refreshStates() để dòng tóm tắt trên các tấm gập không bị lệch. */
   function writeJson() {
@@ -1863,7 +1722,7 @@
 
   $("copyBtn").addEventListener("click", function () {
     var text = $("jsonOut").value;
-    var done = function () { toast("Đã sao chép — dán đè vào softlight.config.json"); };
+    var done = function () { toast("Đã sao chép — dán đè vào instax.config.json"); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, fallback);
     } else fallback();
@@ -1895,8 +1754,8 @@
   saveBtn.addEventListener("click", function () {
     var text = $("jsonOut").value;
     if (hostSave) {
-      hostSave.save({ filename: "softlight.config.json", data: text }).then(function () {
-        toast("Đã lưu softlight.config.json");
+      hostSave.save({ filename: "instax.config.json", data: text }).then(function () {
+        toast("Đã lưu instax.config.json");
       }, function (err) {
         var code = err && err.code;
         if (code === "declined") return;
@@ -1909,7 +1768,7 @@
       var blob = new Blob([text], { type: "application/json" });
       var a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = "softlight.config.json";
+      a.download = "instax.config.json";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -1925,7 +1784,7 @@
     if (ta.readOnly) {
       ta.readOnly = false;
       ta.value = "";
-      ta.placeholder = "Dán nội dung softlight.config.json vào đây rồi bấm lại nút này.";
+      ta.placeholder = "Dán nội dung instax.config.json vào đây rồi bấm lại nút này.";
       ta.focus();
       $("pasteBtn").textContent = "Áp dụng JSON đã dán";
       toast("Dán JSON vào ô bên dưới, rồi bấm “Áp dụng”.");
@@ -1945,6 +1804,8 @@
   });
 
   /** Trộn với mặc định và kẹp về miền hợp lệ — cùng luật với loadConfig(). */
+  /** Trộn với mặc định và kẹp về miền hợp lệ — cùng luật với loadConfig()
+      trong src/filters/instax/config.js. */
   function coerce(raw) {
     var d = PRESETS.current, o = clone(d);
     if (!raw || typeof raw !== "object") return o;
@@ -1953,33 +1814,21 @@
       return clamp(x, lo, hi);
     };
     var g = function (name) { return (raw[name] && typeof raw[name] === "object") ? raw[name] : {}; };
-    var sf = g("softFocus"), cl = g("clarity"), bl = g("bloom"), tn = g("tone"),
-        wm = g("warm"), gn = g("grain"), ou = g("output"), bk = g("backup"),
-        sk = g("skip"), li = g("limits");
+    var co = g("colour"), fi = g("film"), gn = g("grain"), ou = g("output"),
+        bk = g("backup"), sk = g("skip"), li = g("limits");
 
     o.enabled = raw.enabled !== false;
-    o.softFocus.amount = n(sf.amount, 0, 0.9, d.softFocus.amount);
-    o.softFocus.radiusPct = n(sf.radiusPct, 0.02, 3, d.softFocus.radiusPct);
-    o.clarity.amount = n(cl.amount, 0, 0.9, d.clarity.amount);
-    o.clarity.radiusPct = n(cl.radiusPct, 0.1, 10, d.clarity.radiusPct);
-    o.bloom.amount = n(bl.amount, 0, 1, d.bloom.amount);
-    o.bloom.radiusPct = n(bl.radiusPct, 0.1, 10, d.bloom.radiusPct);
-    o.bloom.minRadiusPx = n(bl.minRadiusPx, 0, 200, d.bloom.minRadiusPx);
-    o.bloom.brightness = n(bl.brightness, 0.5, 3, d.bloom.brightness);
-    o.bloom.contrast = n(bl.contrast, 0.2, 2, d.bloom.contrast);
-    o.bloom.skinOnly = bl.skinOnly !== false;
-    o.bloom.highlightCutoff = n(bl.highlightCutoff, 0.2, 1, d.bloom.highlightCutoff);
-    o.tone.contrast = n(tn.contrast, -0.6, 0.6, d.tone.contrast);
-    o.tone.lift = n(tn.lift, 0, 0.2, d.tone.lift);
-    o.warm.temp = n(wm.temp, -0.4, 0.4, d.warm.temp);
-    o.warm.tint = n(wm.tint, -0.4, 0.4, d.warm.tint);
-    o.warm.highlightWarmth = n(wm.highlightWarmth, 0, 0.5, d.warm.highlightWarmth);
-    o.warm.highlightColor = /^#[0-9a-fA-F]{6}$/.test(wm.highlightColor)
-      ? String(wm.highlightColor).toLowerCase() : d.warm.highlightColor;
+    o.colour.vibrance = n(co.vibrance, -0.5, 1, d.colour.vibrance);
+    o.colour.exposure = n(co.exposure, -0.5, 0.5, d.colour.exposure);
+    o.colour.contrast = n(co.contrast, -0.5, 0.5, d.colour.contrast);
+    o.film.matte = n(fi.matte, 0, 0.5, d.film.matte);
+    o.film.warmHighlight = n(fi.warmHighlight, -0.3, 0.3, d.film.warmHighlight);
+    o.film.shadowCyan = n(fi.shadowCyan, 0, 0.4, d.film.shadowCyan);
     o.grain.amount = n(gn.amount, 0, 0.15, d.grain.amount);
     o.grain.sizePx = n(gn.sizePx, 0.3, 6, d.grain.sizePx);
     o.grain.chroma = n(gn.chroma, 0, 1, d.grain.chroma);
-    o.grain.mono = gn.mono === true;
+    // mono mặc định BẬT ở bộ lọc này, nên chỉ false tường minh mới tắt được.
+    o.grain.mono = gn.mono !== false;
     o.grain.shadowRolloff = n(gn.shadowRolloff, 0.001, 0.5, d.grain.shadowRolloff);
     o.grain.highlightRolloff = n(gn.highlightRolloff, 0.5, 0.999, d.grain.highlightRolloff);
     o.grain.seed = Math.round(n(gn.seed, 0, 4294967295, d.grain.seed));
@@ -2016,7 +1865,7 @@
     else document.documentElement.removeAttribute("data-theme");
     var dark = t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches);
     themeBtn.textContent = dark ? "Nền sáng" : "Nền tối";
-    try { localStorage.setItem("sl.theme", t || ""); } catch (e) {}
+    try { localStorage.setItem("ix.theme", t || ""); } catch (e) {}
   }
   themeBtn.addEventListener("click", function () {
     var cur = document.documentElement.getAttribute("data-theme");
@@ -2025,17 +1874,17 @@
   });
 
   function remember() {
-    try { localStorage.setItem("sl.cfg", JSON.stringify(cfg)); } catch (e) {}
+    try { localStorage.setItem("ix.cfg", JSON.stringify(cfg)); } catch (e) {}
   }
 
   (function init() {
     try {
-      var t = localStorage.getItem("sl.theme");
+      var t = localStorage.getItem("ix.theme");
       setTheme(t || null);
     } catch (e) { setTheme(null); }
 
     try {
-      var saved = localStorage.getItem("sl.cfg");
+      var saved = localStorage.getItem("ix.cfg");
       if (saved) cfg = coerce(JSON.parse(saved));
     } catch (e) {}
 
@@ -2047,5 +1896,3 @@
   })();
 })();
 </script>
-</body>
-</html>

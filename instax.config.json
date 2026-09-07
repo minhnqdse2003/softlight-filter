@@ -1,0 +1,37 @@
+{
+  "enabled": true,
+  "colour": {
+    "vibrance": 0.35,
+    "exposure": 0,
+    "contrast": 0.25
+  },
+  "film": {
+    "matte": 0.18,
+    "warmHighlight": 0.12,
+    "shadowCyan": 0.15
+  },
+  "grain": {
+    "amount": 0.022,
+    "sizePx": 1.8,
+    "chroma": 0.25,
+    "mono": true,
+    "shadowRolloff": 0.06,
+    "highlightRolloff": 0.85,
+    "seed": 0
+  },
+  "output": {
+    "quality": 95,
+    "chromaSubsampling": "4:4:4"
+  },
+  "backup": {
+    "enabled": true,
+    "folder": "_original"
+  },
+  "skip": {
+    "pathContains": []
+  },
+  "limits": {
+    "minEdge": 400,
+    "maxMs": 2500
+  }
+}

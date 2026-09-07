@@ -7,3 +7,5 @@ node/
 *.SO-SANH.jpg
 *.softlight.tmp
 *.softlight.lock
+*.instax.tmp
+*.instax.lock

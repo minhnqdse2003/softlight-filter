@@ -40,21 +40,41 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 /** Bậc rút gọn cho một sigma: làm mờ ở ảnh nhỏ rồi phóng lại. */
 const shrinkFor = (sigmaPx) => clamp(Math.round(sigmaPx / TARGET_SIGMA), 1, 24);
 
-/** Làm mờ một buffer raw ở độ phân giải rút gọn rồi trả về đúng kích thước cũ. */
-function blurShrunk(src, raw, channels, sigmaPx, d) {
-  const g = { width: raw.width, height: raw.height, channels };
-  let p = sharp(src, { raw: g });
-  if (d > 1) {
-    p = p.resize(Math.max(2, Math.round(raw.width / d)), Math.max(2, Math.round(raw.height / d)), {
-      kernel: 'cubic',
-      fit: 'fill',
-    });
+/**
+ * Làm mờ một buffer raw ở độ phân giải rút gọn rồi trả về đúng kích thước cũ.
+ *
+ * PHẢI là HAI pipeline riêng với một `toBuffer()` ở giữa. `.resize()` của sharp
+ * là một TUỲ CHỌN của pipeline chứ không phải thao tác xếp hàng: gọi lần thứ
+ * hai trên cùng một instance sẽ GHI ĐÈ lần đầu, nên chuỗi
+ * `.resize(nhỏ).blur(s).resize(to)` lặng lẽ bỏ mất phép thu nhỏ và chỉ làm mờ
+ * ảnh gốc với sigma `s` — nhỏ hơn `d` lần so với ý định. Trên ảnh 24MP với
+ * d = 13, quầng sáng thu về bằng một phần mười ba và có viền cứng. Cùng một
+ * cái bẫy với `.linear()`.
+ */
+async function blurShrunk(src, raw, channels, sigmaPx, d) {
+  const full = { width: raw.width, height: raw.height, channels };
+  const mono = (p) => (channels === 1 ? p.toColourspace('b-w') : p);
+
+  if (d <= 1) {
+    return mono(sharp(src, { raw: full }).blur(Math.max(0.3, sigmaPx))).raw().toBuffer();
   }
-  p = p.blur(Math.max(0.3, sigmaPx / d));
-  if (d > 1) p = p.resize(raw.width, raw.height, { kernel: 'cubic', fit: 'fill' });
-  // Bắt buộc với ảnh 1 kênh: thiếu dòng này sharp nở nó thành 3 kênh khi xuất raw.
-  if (channels === 1) p = p.toColourspace('b-w');
-  return p.raw().toBuffer();
+
+  const sw = Math.max(2, Math.round(raw.width / d));
+  const sh = Math.max(2, Math.round(raw.height / d));
+  const small = await mono(
+    sharp(src, { raw: full })
+      .resize(sw, sh, { kernel: 'cubic', fit: 'fill' })
+      .blur(Math.max(0.3, sigmaPx / d)),
+  )
+    .raw()
+    .toBuffer();
+
+  return mono(
+    sharp(small, { raw: { width: sw, height: sh, channels } })
+      .resize(raw.width, raw.height, { kernel: 'cubic', fit: 'fill' }),
+  )
+    .raw()
+    .toBuffer();
 }
 
 /**
@@ -249,8 +269,12 @@ function grainResponse(lum, lo, hi) {
   return t * t * (3 - 2 * t);
 }
 
-/** Cộng hạt vào buffer RGB, sửa tại chỗ. */
-async function addGrain(base, raw, cfg) {
+/**
+ * Cộng hạt vào buffer RGB, sửa tại chỗ.
+ * Xuất ra ngoài vì bộ lọc Instax dùng lại đúng cỗ máy hạt này — chất phim phải
+ * giống nhau giữa các bộ lọc, và nó đã được đo đạc kỹ ở --selftest.
+ */
+export async function addGrain(base, raw, cfg) {
   const n = raw.width * raw.height;
   const scale = Math.max(raw.width, raw.height) / GRAIN_REF_EDGE;
   const seed = cfg.seed || ((Math.random() * 0xffffffff) >>> 0);

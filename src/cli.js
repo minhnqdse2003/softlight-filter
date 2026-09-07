@@ -4,7 +4,8 @@ import {
   readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
-import { loadConfig, ROOT } from './config.js';
+import { ROOT } from './config.js';
+import { configPathOf, FILTERS, pickFilter } from './filters/registry.js';
 
 /**
  * ĐIỂM VÀO — vừa là đích của dslrBooth Triggers, vừa là công cụ dòng lệnh.
@@ -14,9 +15,14 @@ import { loadConfig, ROOT } from './config.js';
  * nên nhánh xử lý sự kiện phải thoát thật nhanh khi không liên quan. Vì lý do
  * đó sharp chỉ được nạp khi thực sự cần đụng vào ảnh — nạp libvips tốn hơn
  * 100ms, không đáng trả cho mỗi nhịp countdown.
+ *
+ * Cùng một file này phục vụ MỌI bộ lọc. Bộ lọc nào được chạy là do cờ
+ * `--filter <id>` quyết định (xem src/filters/registry.js), và mỗi exe tự truyền
+ * cờ đó theo tên của chính nó. Không có cờ thì chạy Soft Light, đúng như trước.
  */
 
-const LOG = join(ROOT, 'logs', 'softlight.log');
+let FILTER = FILTERS.softlight;
+let LOG = join(ROOT, 'logs', `${FILTER.id}.log`);
 const JPEG_EXT = new Set(['.jpg', '.jpeg']);
 
 function log(fields) {
@@ -61,7 +67,7 @@ async function processFile(path, cfg, { force = false, via = 'cli' } = {}) {
   // Triggers), cả hai tiến trình đều thấy chưa có backup và cùng xử lý — ảnh sẽ
   // bị mờ chồng mờ. Cờ 'wx' tạo file nguyên tử ở mức hệ điều hành nên chỉ đúng
   // một tiến trình giành được.
-  const lockPath = path + '.softlight.lock';
+  const lockPath = `${path}.${FILTER.id}.lock`;
   let lockFd;
   try {
     lockFd = openSync(lockPath, 'wx');
@@ -82,7 +88,6 @@ async function processFile(path, cfg, { force = false, via = 'cli' } = {}) {
 }
 
 async function processLocked(path, cfg, { via, started, backupDir, backupPath }) {
-  const { renderSoftLight } = await import('./pipeline.js');
   const sharp = (await import('sharp')).default;
 
   const meta = await sharp(path).metadata();
@@ -98,14 +103,15 @@ async function processLocked(path, cfg, { via, started, backupDir, backupPath })
 
   // Ghi ra file tạm cùng ổ đĩa rồi đổi tên đè lên: thao tác đổi tên là nguyên
   // tử, nên dslrBooth không bao giờ đọc phải một file JPEG viết dở.
-  const tmp = path + '.softlight.tmp';
+  const tmp = `${path}.${FILTER.id}.tmp`;
   try {
-    const { jpeg, width, height } = await renderSoftLight(path, cfg);
+    const { jpeg, width, height } = await FILTER.render(path, cfg);
     writeFileSync(tmp, jpeg);
     renameSync(tmp, path);
     const ms = Date.now() - started;
     log({
       ev: 'done',
+      filter: FILTER.id,
       via,
       path,
       size: `${width}x${height}`,
@@ -121,16 +127,15 @@ async function processLocked(path, cfg, { via, started, backupDir, backupPath })
 /* ═══════════════════════ các chế độ thủ công ═══════════════════════ */
 
 async function cmdPreview(path, cfg) {
-  const { renderComparison, renderSoftLight } = await import('./pipeline.js');
   const out = path.replace(/\.(jpe?g)$/i, '') + '.SO-SANH.jpg';
   const started = Date.now();
-  writeFileSync(out, await renderComparison(path, cfg));
+  writeFileSync(out, await FILTER.renderComparison(path, cfg));
   console.log(`Đã ghi ảnh so sánh trái=gốc / phải=đã xử lý (${Date.now() - started}ms):\n  ${out}`);
-  console.log('Ảnh gốc KHÔNG bị đụng tới. Sửa softlight.config.json rồi chạy lại để so.');
+  console.log(`Ảnh gốc KHÔNG bị đụng tới. Sửa ${FILTER.configFile} rồi chạy lại để so.`);
 
   // Bảng hài hoà đo trên ẢNH THẬT có ý nghĩa hơn hẳn so với đo trên ảnh kiểm
   // tổng hợp của --selftest, vốn cố tình chứa cả mảng đen kịt lẫn đốm cháy sáng.
-  const { jpeg } = await renderSoftLight(path, cfg);
+  const { jpeg } = await FILTER.render(path, cfg);
   await reportHarmony(jpeg);
 }
 
@@ -173,15 +178,16 @@ async function cmdDoctor() {
   const line = (good, label, detail) => (good ? ok : bad).push([label, detail]);
 
   line(true, 'Thư mục cài đặt', ROOT);
+  line(true, 'Bộ lọc đang kiểm', `${FILTER.title} (--filter ${FILTER.id})`);
   line(process.versions.node.split('.')[0] >= 18, `Node.js ${process.version}`,
     process.versions.node.split('.')[0] >= 18 ? 'đạt yêu cầu (>=18)' : 'CẦN Node.js 18 trở lên');
   line(existsSync(join(ROOT, 'src', 'cli.js')), 'src/cli.js', 'bộ xử lý');
   line(existsSync(join(ROOT, 'node_modules')), 'node_modules/',
     existsSync(join(ROOT, 'node_modules')) ? 'có' : 'THIẾU — chạy: npm install');
-  line(existsSync(join(ROOT, 'softlight.config.json')), 'softlight.config.json',
-    existsSync(join(ROOT, 'softlight.config.json')) ? 'có' : 'THIẾU — dùng giá trị mặc định');
-  line(existsSync(join(ROOT, 'softlight.exe')), 'softlight.exe',
-    existsSync(join(ROOT, 'softlight.exe')) ? 'có' : 'THIẾU — chạy: build-exe.bat');
+  line(existsSync(configPathOf(FILTER)), FILTER.configFile,
+    existsSync(configPathOf(FILTER)) ? 'có' : 'THIẾU — dùng giá trị mặc định');
+  line(existsSync(join(ROOT, FILTER.exeFile)), FILTER.exeFile,
+    existsSync(join(ROOT, FILTER.exeFile)) ? 'có' : 'THIẾU — chạy: build-exe.bat');
 
   const npf = join(ROOT, 'node-path.txt');
   if (existsSync(npf)) {
@@ -214,7 +220,7 @@ async function cmdDoctor() {
     line(false, 'sharp', `KHÔNG nạp được: ${err.message} — chạy lại: npm install`);
   }
 
-  const cfg = loadConfig();
+  const cfg = FILTER.loadConfig();
   line(cfg.enabled, 'Cấu hình', cfg.enabled ? 'đang bật' : 'ĐANG TẮT (enabled: false)');
 
   const rule = '  ' + '─'.repeat(72);
@@ -226,7 +232,7 @@ async function cmdDoctor() {
   console.log(rule);
   if (bad.length === 0) {
     console.log('  Mọi thứ sẵn sàng. Trỏ dslrBooth Post-Processing tới:');
-    console.log('  ' + join(ROOT, 'softlight.exe'));
+    console.log('  ' + join(ROOT, FILTER.exeFile));
   } else {
     console.log(`  Còn ${bad.length} vấn đề phải sửa trước khi cắm vào dslrBooth.`);
   }
@@ -401,7 +407,10 @@ async function reportGrain(testPath, cfg) {
 async function reportHarmony(jpeg) {
   const { harmonyOf, harmonyVerdicts, HARMONY } = await import('./pipeline.js');
   const m = await harmonyOf(jpeg);
-  const v = harmonyVerdicts(m);
+  // Ngưỡng dùng chung cho mọi bộ lọc — có vậy mới so được ảnh của hai bộ lọc
+  // với nhau. Riêng lời khuyên thì mỗi bộ lọc tự viết, vì nó phải gọi đúng tên
+  // khoá trong file cấu hình của chính nó.
+  const v = FILTER.verdicts ? await FILTER.verdicts(m) : harmonyVerdicts(m);
   const H = HARMONY;
 
   const row = (label, value, target, verdict) => {
@@ -492,13 +501,12 @@ async function cmdSelftest(cfg) {
 }
 
 async function cmdBench(path, cfg) {
-  const { renderSoftLight } = await import('./pipeline.js');
   const sharp = (await import('sharp')).default;
   const meta = await sharp(path).metadata();
   const runs = [];
   for (let i = 0; i < 5; i++) {
     const t = Date.now();
-    await renderSoftLight(path, cfg);
+    await FILTER.render(path, cfg);
     runs.push(Date.now() - t);
   }
   runs.sort((x, y) => x - y);
@@ -508,8 +516,11 @@ async function cmdBench(path, cfg) {
 }
 
 function usage() {
+  const list = Object.values(FILTERS)
+    .map((f) => `      ${f.id.padEnd(11)} ${f.title} — ${f.blurb}`)
+    .join('\n');
   console.log(`
-filmong-softlight — hậu kỳ Soft Light cho dslrBooth
+filmong-filter — hậu kỳ ảnh cho dslrBooth · đang chạy bộ lọc: ${FILTER.title}
 
   Gọi từ dslrBooth Triggers (tự động):
     cli.js <EventType> <param1> ...        chỉ hành động với file_download
@@ -523,6 +534,14 @@ filmong-softlight — hậu kỳ Soft Light cho dslrBooth
     node src/cli.js --selftest             kiểm chứng hiệu ứng bằng số đo
     node src/cli.js --bench    <anh.jpg>   đo tốc độ trên ảnh thật
     thêm --force                           xử lý lại kể cả khi đã có backup
+
+  Chọn bộ lọc (mặc định: ${FILTERS.softlight.id}):
+    --filter <id>                          đặt TRƯỚC hoặc SAU lệnh đều được
+${list}
+
+  Mỗi bộ lọc có file cấu hình, file exe và trang tuner riêng, đặt tên theo id:
+  <id>.config.json · <id>.exe · web/<id>-tuner.html. Mở web/index.html để đi tới
+  từng trang tuner.
 `);
 }
 
@@ -532,7 +551,7 @@ filmong-softlight — hậu kỳ Soft Light cho dslrBooth
  * dslrBooth gọi chương trình này theo HAI cách khác nhau, và chúng khác nhau ở
  * chỗ quan trọng nhất — tham số đầu tiên:
  *
- *   Post-Processing  →  softlight.exe "C:\...\IMG_0001.jpg"
+ *   Post-Processing  →  <id>.exe "C:\...\IMG_0001.jpg"
  *                       Gọi thẳng với đường dẫn ảnh, KHÔNG có EventType.
  *                       Đây là đường chính: dslrBooth chờ chương trình xong
  *                       rồi mới dùng ảnh, nên hiệu ứng chắc chắn vào bản in.
@@ -565,17 +584,23 @@ function resolveTargets(parts) {
 }
 
 async function main() {
-  const argv = process.argv.slice(2);
+  // Cờ --filter được bóc ra TRƯỚC mọi thứ khác: nó quyết định file cấu hình,
+  // file log và đuôi file khoá, nên phải biết nó trước cả khi ghi dòng log đầu.
+  const picked = pickFilter(process.argv.slice(2));
+  FILTER = picked.filter;
+  LOG = join(ROOT, 'logs', `${FILTER.id}.log`);
+
+  const argv = picked.args;
   if (!argv.length) return usage();
 
   const force = argv.includes('--force');
   const args = argv.filter((a) => a !== '--force');
   const [first, ...rest] = args;
-  const cfg = loadConfig();
+  const cfg = FILTER.loadConfig();
 
   if (first.startsWith('--')) {
     if (!cfg.enabled && !['--selftest', '--doctor'].includes(first)) {
-      console.log('Cấu hình đang tắt (enabled: false). Bật lại trong softlight.config.json.');
+      console.log(`Cấu hình đang tắt (enabled: false). Bật lại trong ${FILTER.configFile}.`);
       return;
     }
     switch (first) {
@@ -583,7 +608,10 @@ async function main() {
       case '--file': return processFile(rest[0], cfg, { force });
       case '--dir': return cmdDir(rest[0], cfg, force);
       case '--restore': return cmdRestore(rest[0], cfg);
-      case '--selftest': return cmdSelftest(cfg);
+      // Bộ lọc nào tự mang bài kiểm riêng thì dùng bài của nó — các tầng của
+      // Soft Light là tầng không gian, đo bằng lưới sin; các tầng của Instax là
+      // tầng sắc độ, đo bằng ô màu. Một bài kiểm chung sẽ không nói được gì.
+      case '--selftest': return FILTER.selftest ? FILTER.selftest(cfg) : cmdSelftest(cfg);
       case '--doctor': return cmdDoctor();
       case '--bench': return cmdBench(rest[0], cfg);
       default: return usage();

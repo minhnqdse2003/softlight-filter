@@ -4,13 +4,20 @@ using System.IO;
 using System.Text;
 
 // ============================================================================
-//  softlight.exe — cau noi giua dslrBooth va bo xu ly Node.
+//  <id>.exe — cau noi giua dslrBooth va bo xu ly Node.
 //
 //  DAY CHI LA CAU NOI ~6KB, KHONG PHAI CHUONG TRINH.
-//  No can co ben canh: src\cli.js, node_modules\, softlight.config.json,
+//  No can co ben canh: src\cli.js, node_modules\, <id>.config.json,
 //  va mot ban Node.js de chay. Chep rieng file exe sang may khac se khong
 //  chay duoc. Vi vay moi nhanh that bai o day deu phai ghi log noi ro thieu gi
 //  — chay o che do winexe nen khong co cua so nao de bao loi.
+//
+//  MOT NGUON, NHIEU EXE. File nay duoc bien dich ra nhieu ban co ten khac
+//  nhau — softlight.exe, instax.exe — va MOI BAN TU BIET no phai chay bo loc
+//  nao bang cach doc chinh ten file cua no. Nho vay them mot bo loc moi chi
+//  la them mot dong trong build-exe.bat, khong phai viet lai launcher; va
+//  moi bo loc co file cau hinh, file log rieng nen chay canh nhau khong dung
+//  do gi cua nhau.
 //
 //  Vi sao la .exe chu khong phai .bat:
 //   1) Muc Post-Processing cua dslrBooth chon file thuc thi.
@@ -32,16 +39,22 @@ static class Launcher
         string dir = AppDomain.CurrentDomain.BaseDirectory;
         string script = Path.Combine(dir, "src\\cli.js");
 
+        // Ten file exe = id bo loc. FriendlyName tra ve "instax.exe" ke ca khi
+        // nguoi dung doi ten file, nen doi ten exe la doi bo loc — dung y do.
+        string id = Path.GetFileNameWithoutExtension(
+                        AppDomain.CurrentDomain.FriendlyName).ToLowerInvariant();
+        if (id.Length == 0) id = "softlight";
+
         if (!File.Exists(script))
         {
-            Log(dir, "THIEU src\\cli.js canh softlight.exe. File exe chi la cau noi 6KB; "
-                   + "phai chep CA THU MUC (src, node_modules, softlight.config.json), "
+            Log(dir, id, "THIEU src\\cli.js canh " + id + ".exe. File exe chi la cau noi 6KB; "
+                   + "phai chep CA THU MUC (src, node_modules, " + id + ".config.json), "
                    + "khong the chep rieng file exe. Dang tim tai: " + script);
             return 0;
         }
         if (!Directory.Exists(Path.Combine(dir, "node_modules")))
         {
-            Log(dir, "THIEU thu muc node_modules. Chay 'npm install' trong thu muc nay, "
+            Log(dir, id, "THIEU thu muc node_modules. Chay 'npm install' trong thu muc nay, "
                    + "hoac chep ca thu muc node_modules tu may goc sang.");
             return 0;
         }
@@ -50,6 +63,10 @@ static class Launcher
 
         var cmd = new StringBuilder();
         cmd.Append(Quote(script));
+        // Co --filter di truoc moi tham so cua dslrBooth. cli.js boc no ra
+        // truoc khi phan tich phan con lai, nen no khong the bi nham voi mot
+        // duong dan anh hay mot ten su kien.
+        cmd.Append(" --filter ").Append(Quote(id));
         foreach (string a in args) { cmd.Append(' '); cmd.Append(Quote(a)); }
 
         try
@@ -72,19 +89,19 @@ static class Launcher
                 if (!p.WaitForExit(TimeoutMs))
                 {
                     try { p.Kill(); } catch { }
-                    Log(dir, "node chay qua " + TimeoutMs + "ms nen da bi dung.");
+                    Log(dir, id, "node chay qua " + TimeoutMs + "ms nen da bi dung.");
                 }
                 else if (p.ExitCode != 0 || err.Trim().Length > 0)
                 {
                     // Day la nhanh tung im lang: node bao loi ra stderr roi thoat,
                     // khong co ngoai le nao duoc nem ra nen truoc kia khong ai biet.
-                    Log(dir, "node thoat voi ma " + p.ExitCode + ". stderr: " + Squash(err));
+                    Log(dir, id, "node thoat voi ma " + p.ExitCode + ". stderr: " + Squash(err));
                 }
             }
         }
         catch (Exception ex)
         {
-            Log(dir, "khong chay duoc Node (" + node + "): " + ex.Message
+            Log(dir, id, "khong chay duoc Node (" + node + "): " + ex.Message
                    + " | Kiem tra Node.js da cai chua (node -v), hoac tao file "
                    + "node-path.txt canh exe chua duong dan day du toi node.exe.");
         }
@@ -119,14 +136,15 @@ static class Launcher
         return s.Length > 600 ? s.Substring(0, 600) + "…" : s;
     }
 
-    static void Log(string dir, string msg)
+    /// Log rieng cho tung bo loc: logs\<id>.log, dung file ma cli.js ghi vao.
+    static void Log(string dir, string id, string msg)
     {
         try
         {
             string logDir = Path.Combine(dir, "logs");
             Directory.CreateDirectory(logDir);
             File.AppendAllText(
-                Path.Combine(logDir, "softlight.log"),
+                Path.Combine(logDir, id + ".log"),
                 "{\"t\":\"" + DateTime.UtcNow.ToString("o") + "\",\"ev\":\"launcher\",\"error\":\""
                     + msg.Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"}\n",
                 new UTF8Encoding(false));

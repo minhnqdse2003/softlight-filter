@@ -1,8 +1,36 @@
-# filmong-softlight
+# filmong-filter
 
-Hậu kỳ **Soft Light** cho dslrBooth. Chạy trên máy booth, được dslrBooth gọi ở
-mục **Post-Processing**, xử lý ghi đè lên chính file ảnh — nên hiệu ứng có mặt
-trên cả bản in lẫn bản digital.
+Hậu kỳ ảnh cho dslrBooth. Chạy trên máy booth, được dslrBooth gọi ở mục
+**Post-Processing**, xử lý ghi đè lên chính file ảnh — nên hiệu ứng có mặt trên
+cả bản in lẫn bản digital.
+
+## Hai bộ lọc, một bộ xử lý
+
+| Bộ lọc | id | Trỏ dslrBooth tới | Cấu hình | Trang chỉnh |
+|---|---|---|---|---|
+| **Soft Light** | `softlight` | `softlight.exe` | `softlight.config.json` | `web/softlight-tuner.html` |
+| **Instax Wide** | `instax` | `instax.exe` | `instax.config.json` | `web/instax-tuner.html` |
+
+Soft Light làm mềm da bằng bloom trên mặt nạ tông da, phông nền giữ nguyên nét.
+Instax Wide dựng chất phim lấy liền: vibrance chọn lọc, matte black, tách tông
+lam/kem, hạt phim.
+
+Mở **`web/index.html`** để đi tới trang chỉnh của từng bộ lọc — đó là chỗ tập
+trung mọi bộ lọc, kèm hướng dẫn cắm vào dslrBooth.
+
+Hai bộ lọc dùng chung một bộ xử lý (`src/cli.js`): cùng cách bắt lời gọi của
+dslrBooth, cùng cách backup, cùng khoá chống chạy chồng, cùng cách ghi file
+nguyên tử. Khác nhau đúng ở phần biến đổi ảnh. Mỗi bộ lọc có **file exe, file
+cấu hình, file log, file khoá và file tạm riêng** — đặt tên theo `id` — nên chạy
+cạnh nhau không đụng gì của nhau.
+
+> **Chạy cả hai trên cùng một thư mục ảnh?** Phải đổi `backup.folder` của bộ lọc
+> thứ hai sang tên khác. Sự tồn tại của bản backup chính là dấu hiệu "đã xử lý",
+> nên dùng chung một thư mục backup thì bộ lọc chạy sau sẽ bỏ qua sạch.
+
+Phần README từ đây trở xuống mô tả **bộ lọc Soft Light**; mục
+[Bộ lọc Instax Wide](#bộ-lọc-instax-wide) ở cuối nói riêng về bộ còn lại. Mọi
+lệnh đều nhận thêm cờ `--filter <id>`; không có cờ thì chạy Soft Light.
 
 ---
 
@@ -165,21 +193,21 @@ dslrBooth gọi tới lúc `softlight.exe` thoát:
 
 | Độ phân giải | Xử lý ảnh | Khởi động Node + sharp | **Tổng** |
 |---|---|---|---|
-| 24MP (6000×4000) | ~1,61s | ~460ms | **~2,1s** |
-| 11MP (4000×2667) | ~750ms | ~460ms | **~1,2s** |
+| 24MP (6000×4000) | ~1,83s | ~460ms | **~2,3s** |
+| 11MP (4000×2667) | ~820ms | ~460ms | **~1,3s** |
 
 Đo trên máy booth của bạn: `node src\cli.js --bench <ảnh thật>`
 
-Tầng hạt chiếm khoảng **420ms** trong số đó trên ảnh 24MP, và làm **file JPEG
-phình từ 5,1 MB lên 8,8 MB** — nhiễu vốn rất khó nén. Với một sự kiện 500 ảnh
-thì chênh khoảng 1,9 GB, đáng cân nhắc nếu ổ đĩa máy booth chật.
+Tầng hạt chiếm khoảng **460ms** trong số đó trên ảnh 24MP, và làm **file JPEG
+phình từ 5,1 MB lên 7,9 MB** — nhiễu vốn rất khó nén. Với một sự kiện 500 ảnh
+thì chênh khoảng 1,4 GB, đáng cân nhắc nếu ổ đĩa máy booth chật.
 
 Nếu quá chậm hoặc quá nặng, xử lý theo thứ tự hiệu quả giảm dần:
 
 1. Hạ độ phân giải chụp trong dslrBooth — đòn bẩy mạnh nhất, thời gian tỉ lệ
    thẳng với số điểm ảnh.
-2. Đặt `grain.mono: true` — bớt ~80ms và kéo file về ~6,2 MB, hạt vẫn giữ chất
-   phim, chỉ mất phần lệch màu giữa ba lớp.
+2. Đặt `grain.mono: true` — kéo file về ~5,8 MB, hạt vẫn giữ chất phim, chỉ
+   mất phần lệch màu giữa ba lớp.
 3. Hạ `output.quality` xuống 90.
 4. Đặt `grain.amount: 0` nếu vẫn chật — nhưng nhớ rằng lúc đó vệt đứt dải trên
    nền chuyển sắc của phông sẽ hiện lại.
@@ -207,9 +235,10 @@ thẳng trên ảnh đã lọc và nói luôn phải xoay tham số nào — xem
 Toàn bộ chạy trong trình duyệt, ảnh không đi đâu cả. Trang này dựng lại đúng
 sáu tầng của `src/pipeline.js`, kể cả cách ghép tay lớp bloom (bỏ nhân alpha
 trước khi áp brightness/contrast) và đường cong đáp ứng của tầng hạt; đối chiếu
-với `sharp` thật thì sai lệch trung bình 2,2/255 (0,9%) ở bộ tham số đang dùng —
-phần dư đến từ box blur xấp xỉ Gauss và từ việc pipeline làm mờ ở độ phân giải
-rút gọn. Biên độ hạt lệch dưới 5%, các thước đo hài hoà lệch dưới 1%.
+với `sharp` thật thì sai lệch trung bình **1,0/255 (0,4%)**, lớn nhất 9/255 —
+đo đầu-cuối: thả ảnh 24MP vào tuner rồi so khung xem với ảnh do exe xuất ra thu
+về cùng kích thước. Phần dư đến từ box blur xấp xỉ Gauss và dồn hết ở đúng
+đường viền mặt nạ da. Biên độ hạt lệch dưới 5%, các thước đo hài hoà lệch dưới 1%.
 
 Một khác biệt cố ý: khung xem dựng hạt ở **đúng cỡ pixel của ảnh thật**, nên nó
 cho thấy hạt khi soi 100%. In ra hoặc xem thu nhỏ cả khung thì hạt sẽ dịu hơn.
@@ -423,18 +452,117 @@ Máy thiếu .NET Framework 4 (rất hiếm). Cài .NET Framework 4.8 rồi ch�
 ## Cấu trúc
 
 ```
-softlight.exe             điểm vào cho dslrBooth (tạo bởi build-exe.bat)
-softlight.config.json     tham số hiệu ứng — sửa tay, không cần build lại
-build-exe.bat             biên dịch launcher bằng csc.exe của Windows
+softlight.exe             điểm vào cho dslrBooth, bộ lọc Soft Light
+instax.exe                điểm vào cho dslrBooth, bộ lọc Instax Wide
+softlight.config.json     tham số Soft Light — sửa tay, không cần build lại
+instax.config.json        tham số Instax Wide — sửa tay, không cần build lại
+build-exe.bat             biên dịch CẢ HAI launcher bằng csc.exe của Windows
 dong-goi.bat              tạo thư mục _deploy để chép sang máy booth
-kiem-tra.bat              bấm đúp trên máy booth: kiểm tra môi trường
-tools/Launcher.cs         nguồn của launcher
-src/config.js             đọc + kẹp cấu hình về miền an toàn
-src/pipeline.js           sáu tầng hiệu ứng + các phép đo kiểm chứng
-src/cli.js                điều phối lời gọi và các lệnh thủ công
-logs/softlight.log        nhật ký, dùng để kiểm chứng
-web/tuner.html            bảng chỉnh tham số trong trình duyệt (nguồn)
+kiem-tra.bat              bấm đúp trên máy booth: kiểm tra môi trường cả hai bộ lọc
+tools/Launcher.cs         nguồn của launcher — một nguồn, nhiều exe
+
+src/cli.js                điều phối lời gọi và các lệnh thủ công (dùng chung)
+src/filters/registry.js   sổ đăng ký bộ lọc — thêm bộ lọc mới là thêm một mục ở đây
+src/config.js             đọc + kẹp cấu hình Soft Light
+src/pipeline.js           sáu tầng của Soft Light + các phép đo kiểm chứng
+src/filters/instax/config.js    đọc + kẹp cấu hình Instax Wide
+src/filters/instax/pipeline.js  các tầng của Instax Wide + bài kiểm riêng
+
+logs/softlight.log        nhật ký của bộ lọc Soft Light
+logs/instax.log           nhật ký của bộ lọc Instax Wide
+
+web/index.html            TRANG HUB — đi tới trang chỉnh của từng bộ lọc
+web/hub.html              nguồn của trang hub
+web/tuner.html            nguồn trang chỉnh Soft Light
 web/softlight-tuner.html  bản bấm đúp là chạy, dựng từ file trên
-web/build-offline.mjs     dựng lại bản bấm đúp sau khi sửa tuner.html
+web/instax.html           nguồn trang chỉnh Instax Wide
+web/instax-tuner.html     bản bấm đúp là chạy, dựng từ file trên
+web/build-offline.mjs     dựng lại các bản bấm đúp (npm run web)
+
 _old-web-overlay/         công cụ overlay PNG cũ, giữ lại phòng khi cần
 ```
+
+---
+
+## Bộ lọc Instax Wide
+
+Mô phỏng chất phim lấy liền. Khác Soft Light về bản chất: Soft Light làm việc
+trên **không gian** — dựng các lớp mờ rồi ghép chồng; Instax làm việc trên
+**sắc độ** — mọi tầng đều là phép biến đổi từng điểm ảnh. Vì vậy nó chạy nhanh
+hơn và không bao giờ làm mềm chi tiết.
+
+### Các tầng, theo đúng thứ tự
+
+| # | Tầng | Làm gì | Tham số | Mặc định |
+|---|---|---|---|---|
+| 1 | Phơi sáng | Dời cả biểu đồ, để các tầng sau đọc đúng vùng sáng | `colour.exposure` | 0 |
+| 2 | **Vibrance** | Đẩy rực màu **có chọn lọc** — chỉ màu đang nhạt | `colour.vibrance` | **0.35** |
+| 3 | Tương phản | Neo ở điểm giữa, rồi **kẹp về 0…255** | `colour.contrast` | 0.25 |
+| 4 | **Matte** | Nâng đáy tối lên khỏi 0 — vệt "sương" của phim lấy liền | `film.matte` | **0.18** |
+| 5 | Tách tông | Lam-lục ở bóng đổ, kem ấm ở vùng sáng | `film.warmHighlight`, `film.shadowCyan` | 0.12 / 0.15 |
+| 6 | Hạt phim | Cùng cỗ máy hạt với Soft Light, mặc định hạt xám | `grain.*` | 0.022 |
+
+Mọi con số là **dạng chuẩn hoá = số trên thanh trượt chia 100**: `vibrance: 0.35`
+chính là "Vibrance +35" trên giao diện.
+
+### Vì sao vibrance chứ không phải saturation
+
+Saturation đẩy đều mọi màu, và tông da vốn đã bão hoà sẵn nên nó cháy đỏ trước
+tiên. Vibrance cân theo trọng số `(1 − độ bão hoà hiện tại)`: màu đang nhạt được
+đẩy mạnh, màu đã rực gần như miễn nhiễm. `--selftest` đo đúng điều này — trên ảnh
+kiểm, riêng tầng vibrance đẩy ô màu nhạt **+8,3%** bão hoà trong khi ô đã rực chỉ
+**+0,1%**.
+
+### Một chỗ cố ý lệch khỏi bản tham chiếu
+
+Bản tham chiếu HTML giữ số thực suốt chuỗi, không kẹp giữa các tầng. Điều đó
+**nuốt mất tầng matte ở đúng chỗ matte tồn tại để phục vụ**: tương phản 25 đẩy
+mức 0 xuống −27, rồi matte cộng +18 vào đó vẫn ra số âm, nên đen kịt vẫn là đen
+kịt — trái hẳn lời hứa của thanh trượt "nâng đáy tối", và bết đen thì in ra rất
+xấu.
+
+Ở đây giá trị được **kẹp về 0…255 ngay sau tầng tương phản**, đúng như mọi phép
+tương phản 8-bit thật. Kết quả: mức 0 ra `(18, 23, 32)` — đáy đen hơi ngả lam,
+đúng chất Instax. Đây là chỗ **duy nhất** lệch khỏi bản tham chiếu, và trang
+tuner lệch y hệt nên hai bên vẫn khớp nhau.
+
+### Hai bộ số dựng sẵn
+
+- **Mô phỏng film** — mặc định, dành cho ảnh xem trên màn hình và bản digital.
+- **Bù sáng để in** — `vibrance 0.10 · exposure 0.22 · contrast −0.08 · matte 0 ·
+  warmHighlight −0.04 · shadowCyan 0 · grain 0`. Máy in Instax ăn tối hơn màn
+  hình khoảng nửa khẩu và tự đẩy màu, nên bản đưa đi in phải sáng hơn và nhạt hơn
+  bản để xem.
+
+Bấm nút tương ứng trong trang chỉnh để nạp.
+
+### Lệnh riêng
+
+```bash
+npm run selftest:instax                      # kiểm chứng bằng số đo
+npm run preview:instax -- anh.jpg            # ảnh so sánh, KHÔNG ghi đè
+node src/cli.js --filter instax --doctor     # kiểm tra môi trường
+node src/cli.js --filter instax --dir thu-muc
+```
+
+`--selftest` của bộ lọc này in thêm **đường cong sắc độ** (mức xám vào → ra ở
+0, 32, 64, 128, 192, 255). Đó là chỗ đọc nhanh nhất xem đáy đen đã rời khỏi 0
+chưa và điểm trắng còn nguyên không — hai thứ quyết định ảnh in ra có bết đen
+hay cháy trắng, mà nhìn bằng mắt trên màn hình thì không thấy.
+
+---
+
+## Thêm một bộ lọc mới
+
+1. Viết `src/filters/<id>/config.js` (mặc định + kẹp miền giá trị) và
+   `src/filters/<id>/pipeline.js` (hàm render).
+2. Thêm **một mục** vào `src/filters/registry.js`. Không phải sửa `cli.js` —
+   backup, khoá, log, trigger, ghi file nguyên tử đều dùng chung.
+3. Thêm `call :build <id>` vào `build-exe.bat`. Launcher tự đọc tên file exe của
+   chính nó để biết chạy bộ lọc nào, nên không phải sửa `tools/Launcher.cs`.
+4. Làm trang chỉnh `web/<id>.html`, khai báo trong `web/build-offline.mjs`, rồi
+   thêm một thẻ vào `web/hub.html`.
+
+Mục tuỳ chọn nhưng nên có: hàm `selftest(cfg)` và `verdicts(m)` trong pipeline
+của bộ lọc, khai báo trong registry — để `--selftest` và bảng hài hoà của
+`--preview` nói đúng tên khoá cấu hình của bộ lọc đó.

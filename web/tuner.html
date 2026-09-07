@@ -1704,9 +1704,9 @@
     acc.appendChild(el("h3", null, "Khung xem chính xác đến đâu"));
     acc.appendChild(el("p", "why",
       "Trang này chạy lại đúng sáu tầng của <code>src/pipeline.js</code>, kể cả cách ghép tay " +
-      "lớp bloom và đường cong đáp ứng của tầng hạt. Đối chiếu với <code>sharp</code> thật trên " +
-      "cùng một ảnh, sai lệch trung bình là 2,2/255 (0,9%) ở bộ tham số đang dùng — mắt không " +
-      "thấy được. Chênh lệch chỉ nới ra khi bán kính vượt quá 5% cạnh dài. " +
+      "lớp bloom và đường cong đáp ứng của tầng hạt. Đối chiếu đầu-cuối với ảnh do exe thật " +
+      "xuất ra, sai lệch trung bình là 1,0/255 (0,4%), lớn nhất 9/255 và dồn ở đúng đường viền " +
+      "mặt nạ da — mắt không thấy được. " +
       "Chốt xong thì chạy <code>npm run preview -- anh.jpg</code> để soi bản do chính exe xuất ra."));
     host.appendChild(acc);
 
