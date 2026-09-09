@@ -15,8 +15,12 @@ if not exist "node_modules"   ( echo [LOI] Chua co node_modules. Chay 'npm insta
 if exist "_deploy" rmdir /s /q "_deploy"
 mkdir "_deploy"
 
-for %%F in (softlight.exe softlight.config.json kiem-tra.bat package.json README.md) do copy /y "%%F" "_deploy\" >nul
+REM  CA HAI bo loc phai co mat: script nay van kiem tra instax.exe o tren
+REM  va van bao operator tro dslrBooth toi no o duoi, nhung truoc day chi
+REM  chep softlight sang _deploy - goi giao di khong he co bo loc Instax.
+for %%F in (softlight.exe softlight.config.json instax.exe instax.config.json kiem-tra.bat package.json README.md) do copy /y "%%F" "_deploy\" >nul
 xcopy /e /i /q /y "src"          "_deploy\src"          >nul
+xcopy /e /i /q /y "web"          "_deploy\web"          >nul
 xcopy /e /i /q /y "node_modules" "_deploy\node_modules" >nul
 
 if /I "%~1"=="/khong-kem-node" goto done
