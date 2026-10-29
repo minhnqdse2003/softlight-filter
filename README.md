@@ -467,6 +467,8 @@ src/config.js             đọc + kẹp cấu hình Soft Light
 src/pipeline.js           sáu tầng của Soft Light + các phép đo kiểm chứng
 src/filters/instax/config.js    đọc + kẹp cấu hình Instax Wide
 src/filters/instax/pipeline.js  các tầng của Instax Wide + bài kiểm riêng
+src/filters/instax/look.js      công cụ chỉnh của cấu hình v2, dùng chung cho exe và trang chỉnh
+luts/                           file .cube cho mục LUT của Instax Wide
 
 logs/softlight.log        nhật ký của bộ lọc Soft Light
 logs/instax.log           nhật ký của bộ lọc Instax Wide
@@ -486,69 +488,94 @@ _old-web-overlay/         công cụ overlay PNG cũ, giữ lại phòng khi c�
 
 ## Bộ lọc Instax Wide
 
-Mô phỏng chất phim lấy liền. Khác Soft Light về bản chất: Soft Light làm việc
-trên **không gian** — dựng các lớp mờ rồi ghép chồng; Instax làm việc trên
-**sắc độ** — mọi tầng đều là phép biến đổi từng điểm ảnh. Vì vậy nó chạy nhanh
-hơn và không bao giờ làm mềm chi tiết.
+Mô phỏng chất phim lấy liền cho **bản digital** khách tải về (booth_print_daemon.py
+gọi `instax.exe --file <ảnh> [--bw]`; tấm film in ra không qua bộ lọc). Có đủ
+công cụ chỉnh màu / tông, nhưng trong thực tế chỉ cần **một thanh: Độ đậm**.
 
-### Các tầng, theo đúng thứ tự
+### Chỉnh look
 
-| # | Tầng | Làm gì | Tham số | Mặc định |
-|---|---|---|---|---|
-| 1 | Phơi sáng | Dời cả biểu đồ, để các tầng sau đọc đúng vùng sáng | `colour.exposure` | 0 |
-| 2 | **Vibrance** | Đẩy rực màu **có chọn lọc** — chỉ màu đang nhạt | `colour.vibrance` | **0.35** |
-| 3 | Tương phản | Neo ở điểm giữa, rồi **kẹp về 0…255** | `colour.contrast` | 0.25 |
-| 4 | **Matte** | Nâng đáy tối lên khỏi 0 — vệt "sương" của phim lấy liền | `film.matte` | **0.18** |
-| 5 | Tách tông | Lam-lục ở bóng đổ, kem ấm ở vùng sáng | `film.warmHighlight`, `film.shadowCyan` | 0.12 / 0.15 |
-| 6 | Hạt phim | Cùng cỗ máy hạt với Soft Light, mặc định hạt xám | `grain.*` | 0.022 |
+Mở `web/instax-tuner.html` (bấm đúp, chạy offline):
 
-Mọi con số là **dạng chuẩn hoá = số trên thanh trượt chia 100**: `vibrance: 0.35`
-chính là "Vibrance +35" trên giao diện.
+- **Look Instax**: chọn Style (*Chuẩn cộng đồng* / *Trung tính*) và kéo **Độ đậm**
+  0–100 — trộn cả look với ảnh gốc. Thường chỉ cần thế.
+- Bên dưới là các công cụ, xếp theo tab:
+  - **Phơi sáng**: Exposure (Exposure EV, Contrast, Brightness, Saturation),
+    High Dynamic Range (Highlight, Shadow, White, Black), Levels, Curve
+    (RGB / Luma / Red / Green / Blue).
+  - **Màu**: White Balance (Kelvin, Tint), Color Balance (3-Way + Master),
+    Color Editor (7 dải màu, Orange = tông da), Black & White (+ Split Tones), LUT.
+    Color Balance có các tab Master / 3-Way / Shadow / Midtone / Highlight; mỗi vòng màu
+    kéo nút giữa để chọn màu, cung trái kéo độ đậm, cung phải kéo độ sáng.
+  - **Chi tiết**: Clarity (Natural / Punch / Neutral / Classic, Clarity,
+    Structure), Vignetting (EV), Film Grain (Type, Impact, Granularity).
+- Bấm đúp nhãn / rãnh thanh trượt (hay phần vòng màu) để về giá trị của Style, nút ↺
+  đưa cả công cụ về Style, chấm cam = công cụ đã khác Style.
+- **Xem như lượt B&W**: xem bản digital của lượt khách chọn B&W.
+- **Lưu instax.config.json** rồi đặt file cạnh `instax.exe`. Không cần build lại.
 
-### Vì sao vibrance chứ không phải saturation
+Trang chỉnh chạy **đúng file** `src/filters/instax/look.js` mà exe chạy
+(`web/build-offline.mjs` dán nguyên văn vào trang), nên ảnh xem trước và bản
+digital không thể lệch nhau. Sửa `look.js` hay `web/instax.html` thì chạy lại
+`node web/build-offline.mjs`.
 
-Saturation đẩy đều mọi màu, và tông da vốn đã bão hoà sẵn nên nó cháy đỏ trước
-tiên. Vibrance cân theo trọng số `(1 − độ bão hoà hiện tại)`: màu đang nhạt được
-đẩy mạnh, màu đã rực gần như miễn nhiễm. `--selftest` đo đúng điều này — trên ảnh
-kiểm, riêng tầng vibrance đẩy ô màu nhạt **+8,3%** bão hoà trong khi ô đã rực chỉ
-**+0,1%**.
+### Bộ "chuẩn cộng đồng"
 
-### Một chỗ cố ý lệch khỏi bản tham chiếu
+Không có bộ số Instax nào được công bố chính thức. Bộ mặc định theo đúng những
+nguyên tắc mà hướng dẫn film-look nào cũng nhắc: tương phản dịu (Contrast −10),
+vùng sáng hạ và trắng hơi đục (Highlight 30, White −12, Curve 255→248), đáy đen
+nâng kiểu matte (Curve 0→20), vùng sáng ấm / bóng đổ lạnh (Color Balance), lục
+ngả lam-lục và bớt rực (Color Editor), hạt mịn (Fine Grain, Impact 20),
+vignetting nhẹ (−0,3 EV). Là điểm xuất phát, chỉnh tiếp theo mắt.
 
-Bản tham chiếu HTML giữ số thực suốt chuỗi, không kẹp giữa các tầng. Điều đó
-**nuốt mất tầng matte ở đúng chỗ matte tồn tại để phục vụ**: tương phản 25 đẩy
-mức 0 xuống −27, rồi matte cộng +18 vào đó vẫn ra số âm, nên đen kịt vẫn là đen
-kịt — trái hẳn lời hứa của thanh trượt "nâng đáy tối", và bết đen thì in ra rất
-xấu.
+### Mang look làm sẵn sang: LUT
 
-Ở đây giá trị được **kẹp về 0…255 ngay sau tầng tương phản**, đúng như mọi phép
-tương phản 8-bit thật. Kết quả: mức 0 ra `(18, 23, 32)` — đáy đen hơi ngả lam,
-đúng chất Instax. Đây là chỗ **duy nhất** lệch khỏi bản tham chiếu, và trang
-tuner lệch y hệt nên hai bên vẫn khớp nhau.
+Look đã làm ở phần mềm chỉnh ảnh khác thì mang sang bằng LUT:
 
-### Hai bộ số dựng sẵn
+1. Làm look ở phần mềm đó.
+2. Áp look lên một ảnh **LUT gốc (Hald identity)**, xuất ra PNG/TIFF không nén.
+3. Đổi ảnh đó thành file `.cube` (công cụ đổi Hald → cube nào cũng được).
+4. Chép file vào thư mục **`luts`** cạnh `instax.exe`, rồi ở mục **LUT** của
+   trang chỉnh bấm *Chọn file .cube* (cùng tên file) và chỉnh Opacity.
 
-- **Mô phỏng film** — mặc định, dành cho ảnh xem trên màn hình và bản digital.
-- **Bù sáng để in** — `vibrance 0.10 · exposure 0.22 · contrast −0.08 · matte 0 ·
-  warmHighlight −0.04 · shadowCyan 0 · grain 0`. Máy in Instax ăn tối hơn màn
-  hình khoảng nửa khẩu và tự đẩy màu, nên bản đưa đi in phải sáng hơn và nhạt hơn
-  bản để xem.
+LUT chạy **trước** mọi công cụ khác: LUT là nền look, các công cụ chỉnh thêm trên đó.
+Thiếu file `.cube` thì bản digital vẫn được làm với các công cụ còn lại, và log
+ghi `warn: bỏ qua LUT …`.
 
-Bấm nút tương ứng trong trang chỉnh để nạp.
+### Lượt B&W
+
+`--bw` bật công cụ **Black & White** (trộn kênh theo dải màu + Split Tones) dù
+cấu hình đang tắt nó. Ảnh ghép của event B&W đã xám sẵn, nên phần đáng chỉnh là
+Split Tones (ngả ấm / lạnh nhẹ) và tông (Curve, HDR) — dùng chung với lượt màu.
+
+### Thứ tự xử lý
+
+LUT → White Balance → Exposure (EV, trên ánh sáng tuyến tính) → High Dynamic
+Range → Contrast → Brightness → Levels → Curve → Saturation → Color Editor →
+Color Balance → Black & White, **gộp thành một LUT 3D 33³** rồi mỗi điểm ảnh chỉ
+còn một phép tra bảng; sau đó các công cụ theo vùng: Clarity / Structure →
+Vignetting → Film Grain. Một bản digital 1260×840 mất khoảng 0,4 giây kể cả khởi
+động Node.
+
+### Cấu hình bản cũ (v1)
+
+File không có `"version": 2` vẫn chạy đúng sáu tầng cũ (vibrance, contrast,
+matte, tách tông kem/lam, hạt) như trước, để booth chưa cập nhật không đổi màu
+bất ngờ. Mở file đó trong trang chỉnh mới thì các công cụ bắt đầu từ bộ chuẩn
+cộng đồng; bấm Lưu là thành v2.
 
 ### Lệnh riêng
 
 ```bash
 npm run selftest:instax                      # kiểm chứng bằng số đo
 npm run preview:instax -- anh.jpg            # ảnh so sánh, KHÔNG ghi đè
+node src/cli.js --filter instax --preview anh.jpg --bw   # xem bản của lượt B&W
 node src/cli.js --filter instax --doctor     # kiểm tra môi trường
 node src/cli.js --filter instax --dir thu-muc
 ```
 
-`--selftest` của bộ lọc này in thêm **đường cong sắc độ** (mức xám vào → ra ở
-0, 32, 64, 128, 192, 255). Đó là chỗ đọc nhanh nhất xem đáy đen đã rời khỏi 0
-chưa và điểm trắng còn nguyên không — hai thứ quyết định ảnh in ra có bết đen
-hay cháy trắng, mà nhìn bằng mắt trên màn hình thì không thấy.
+`--selftest` đo từng công cụ riêng (trung tính = ảnh gốc, độ đậm 0 = ảnh gốc,
+lượt B&W ra xám, hạt có mặt, tông da chưa cháy) và in **đường cong sắc độ** —
+chỗ đọc nhanh nhất xem đáy đen đã rời khỏi 0 chưa và điểm trắng ở đâu.
 
 ---
 

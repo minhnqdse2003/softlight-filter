@@ -38,7 +38,7 @@ function log(fields) {
 
 /* ═══════════════════════ xử lý một file ═══════════════════════ */
 
-async function processFile(path, cfg, { force = false, via = 'cli' } = {}) {
+async function processFile(path, cfg, { force = false, via = 'cli', bw = false, maxEdge = 0 } = {}) {
   const started = Date.now();
 
   if (!existsSync(path)) return log({ ev: 'skip', reason: 'không tìm thấy file', path });
@@ -81,13 +81,13 @@ async function processFile(path, cfg, { force = false, via = 'cli' } = {}) {
   }
 
   try {
-    await processLocked(path, cfg, { via, started, backupDir, backupPath });
+    await processLocked(path, cfg, { via, started, backupDir, backupPath, bw, maxEdge });
   } finally {
     try { closeSync(lockFd); unlinkSync(lockPath); } catch { /* dọn dẹp */ }
   }
 }
 
-async function processLocked(path, cfg, { via, started, backupDir, backupPath }) {
+async function processLocked(path, cfg, { via, started, backupDir, backupPath, bw, maxEdge }) {
   const sharp = (await import('sharp')).default;
 
   const meta = await sharp(path).metadata();
@@ -105,10 +105,11 @@ async function processLocked(path, cfg, { via, started, backupDir, backupPath })
   // tử, nên dslrBooth không bao giờ đọc phải một file JPEG viết dở.
   const tmp = `${path}.${FILTER.id}.tmp`;
   try {
-    const { jpeg, width, height } = await FILTER.render(path, cfg);
+    const { jpeg, width, height, warn } = await FILTER.render(path, cfg, { bw, maxEdge });
     writeFileSync(tmp, jpeg);
     renameSync(tmp, path);
     const ms = Date.now() - started;
+    const warns = [warn, ms > cfg.limits.maxMs ? `chậm hơn ngưỡng ${cfg.limits.maxMs}ms` : null].filter(Boolean);
     log({
       ev: 'done',
       filter: FILTER.id,
@@ -116,7 +117,8 @@ async function processLocked(path, cfg, { via, started, backupDir, backupPath })
       path,
       size: `${width}x${height}`,
       ms,
-      ...(ms > cfg.limits.maxMs ? { warn: `chậm hơn ngưỡng ${cfg.limits.maxMs}ms` } : {}),
+      ...(bw ? { bw: true } : {}),
+      ...(warns.length ? { warn: warns.join('; ') } : {}),
     });
   } catch (err) {
     try { if (existsSync(tmp)) unlinkSync(tmp); } catch { /* dọn dẹp, bỏ qua lỗi */ }
@@ -126,20 +128,20 @@ async function processLocked(path, cfg, { via, started, backupDir, backupPath })
 
 /* ═══════════════════════ các chế độ thủ công ═══════════════════════ */
 
-async function cmdPreview(path, cfg) {
+async function cmdPreview(path, cfg, bw = false) {
   const out = path.replace(/\.(jpe?g)$/i, '') + '.SO-SANH.jpg';
   const started = Date.now();
-  writeFileSync(out, await FILTER.renderComparison(path, cfg));
+  writeFileSync(out, await FILTER.renderComparison(path, cfg, undefined, { bw }));
   console.log(`Đã ghi ảnh so sánh trái=gốc / phải=đã xử lý (${Date.now() - started}ms):\n  ${out}`);
   console.log(`Ảnh gốc KHÔNG bị đụng tới. Sửa ${FILTER.configFile} rồi chạy lại để so.`);
 
   // Bảng hài hoà đo trên ẢNH THẬT có ý nghĩa hơn hẳn so với đo trên ảnh kiểm
   // tổng hợp của --selftest, vốn cố tình chứa cả mảng đen kịt lẫn đốm cháy sáng.
-  const { jpeg } = await FILTER.render(path, cfg);
+  const { jpeg } = await FILTER.render(path, cfg, { bw });
   await reportHarmony(jpeg);
 }
 
-async function cmdDir(dir, cfg, force) {
+async function cmdDir(dir, cfg, force, opts = {}) {
   if (!existsSync(dir)) throw new Error(`Không tìm thấy thư mục: ${dir}`);
   const files = readdirSync(dir)
     .filter((f) => JPEG_EXT.has(extname(f).toLowerCase()))
@@ -147,7 +149,7 @@ async function cmdDir(dir, cfg, force) {
     .filter((f) => statSync(f).isFile());
   console.log(`Xử lý ${files.length} ảnh trong ${dir}`);
   const t0 = Date.now();
-  for (const f of files) await processFile(f, cfg, { force });
+  for (const f of files) await processFile(f, cfg, { force, ...opts });
   console.log(`Xong ${files.length} ảnh trong ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 }
 
@@ -534,6 +536,8 @@ filmong-filter — hậu kỳ ảnh cho dslrBooth · đang chạy bộ lọc: ${
     node src/cli.js --selftest             kiểm chứng hiệu ứng bằng số đo
     node src/cli.js --bench    <anh.jpg>   đo tốc độ trên ảnh thật
     thêm --force                           xử lý lại kể cả khi đã có backup
+    thêm --bw                              ảnh của lượt B&W (Instax: bật Black & White)
+    thêm --max-edge <px>                   thu nhỏ cạnh dài trước khi xử lý (Instax)
 
   Chọn bộ lọc (mặc định: ${FILTERS.softlight.id}):
     --filter <id>                          đặt TRƯỚC hoặc SAU lệnh đều được
@@ -594,7 +598,12 @@ async function main() {
   if (!argv.length) return usage();
 
   const force = argv.includes('--force');
-  const args = argv.filter((a) => a !== '--force');
+  // --bw: booth_print_daemon.py truyền vào cho ảnh của lượt khách chọn B&W.
+  const bw = argv.includes('--bw');
+  // --max-edge <px>: FilmongBooth thu nhỏ ảnh đơn của khách trước khi áp look.
+  const mi = argv.indexOf('--max-edge');
+  const maxEdge = mi >= 0 ? Math.max(0, parseInt(argv[mi + 1], 10) || 0) : 0;
+  const args = argv.filter((a, i) => a !== '--force' && a !== '--bw' && !(mi >= 0 && (i === mi || i === mi + 1)));
   const [first, ...rest] = args;
   const cfg = FILTER.loadConfig();
 
@@ -604,9 +613,9 @@ async function main() {
       return;
     }
     switch (first) {
-      case '--preview': return cmdPreview(rest[0], cfg);
-      case '--file': return processFile(rest[0], cfg, { force });
-      case '--dir': return cmdDir(rest[0], cfg, force);
+      case '--preview': return cmdPreview(rest[0], cfg, bw);
+      case '--file': return processFile(rest[0], cfg, { force, bw, maxEdge });
+      case '--dir': return cmdDir(rest[0], cfg, force, { bw, maxEdge });
       case '--restore': return cmdRestore(rest[0], cfg);
       // Bộ lọc nào tự mang bài kiểm riêng thì dùng bài của nó — các tầng của
       // Soft Light là tầng không gian, đo bằng lưới sin; các tầng của Instax là

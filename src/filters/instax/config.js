@@ -3,8 +3,18 @@ import { join } from "node:path";
 // ROOT là thư mục cài đặt, tính một lần ở src/config.js. Mượn lại thay vì tính
 // lại ở đây để hai bộ lọc không bao giờ trỏ về hai gốc khác nhau.
 import { ROOT } from "../../config.js";
+import { normalizeLook, normalizeFileOptions } from "./look.js";
 
 const CONFIG_PATH = join(ROOT, "instax.config.json");
+
+/**
+ * Hai đời cấu hình:
+ *   - v2 (`"version": 2`): các công cụ chỉnh trong look.js, số ghi
+ *     đúng như trên thanh trượt. Trang chỉnh mới chỉ ghi ra dạng này.
+ *   - v1 (không có `version`): sáu tầng cũ bên dưới (vibrance, matte…). Vẫn
+ *     đọc và chạy đúng như trước, để booth đang chạy không đổi màu bất ngờ cho
+ *     tới khi ai đó lưu lại bằng trang chỉnh mới.
+ */
 
 /**
  * Cấu hình bộ lọc INSTAX WIDE — mô phỏng chất phim lấy liền.
@@ -81,15 +91,14 @@ export function loadConfig(path = CONFIG_PATH) {
   }
 
   const d = DEFAULTS;
+  if (raw.version === 2) return { version: 2, enabled: raw.enabled !== false, ...normalizeLook(raw), ...normalizeFileOptions(raw) };
+
   const c = { ...d.colour, ...raw.colour };
   const f = { ...d.film, ...raw.film };
   const gr = { ...d.grain, ...raw.grain };
-  const o = { ...d.output, ...raw.output };
-  const b = { ...d.backup, ...raw.backup };
-  const sk = { ...d.skip, ...raw.skip };
-  const l = { ...d.limits, ...raw.limits };
 
   return {
+    version: 1,
     enabled: raw.enabled !== false,
     colour: {
       vibrance: num(c.vibrance, -0.5, 1, d.colour.vibrance),
@@ -110,27 +119,7 @@ export function loadConfig(path = CONFIG_PATH) {
       highlightRolloff: num(gr.highlightRolloff, 0.5, 0.999, d.grain.highlightRolloff),
       seed: Math.round(num(gr.seed, 0, 4294967295, d.grain.seed)),
     },
-    output: {
-      quality: Math.round(num(o.quality, 60, 100, d.output.quality)),
-      chromaSubsampling: o.chromaSubsampling === "4:2:0" ? "4:2:0" : "4:4:4",
-    },
-    backup: {
-      enabled: b.enabled !== false,
-      folder:
-        typeof b.folder === "string" && b.folder.trim()
-          ? b.folder.trim()
-          : d.backup.folder,
-    },
-    skip: {
-      pathContains: Array.isArray(sk.pathContains)
-        ? sk.pathContains
-            .filter((x) => typeof x === "string" && x.trim())
-            .map((x) => x.trim())
-        : [],
-    },
-    limits: {
-      minEdge: Math.round(num(l.minEdge, 0, 20000, d.limits.minEdge)),
-      maxMs: Math.round(num(l.maxMs, 100, 60000, d.limits.maxMs)),
-    },
+    // Chất lượng JPEG, backup, bỏ qua, giới hạn: giống nhau ở hai đời.
+    ...normalizeFileOptions(raw),
   };
 }

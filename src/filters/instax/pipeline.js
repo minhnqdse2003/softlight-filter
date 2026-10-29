@@ -1,7 +1,33 @@
+import { readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import sharp from 'sharp';
 // Cỗ máy hạt và bộ thước đo dùng chung với bộ lọc Soft Light — cùng một chất
 // phim, cùng một cách đọc số, nên hai bộ lọc so sánh được với nhau.
 import { addGrain, harmony, HARMONY, measureRaw } from '../../pipeline.js';
+import { ROOT } from '../../config.js';
+import { renderLook, parseCube, buildLut, neutralLook, normalizeLook } from './look.js';
+
+/** Thư mục chứa file .cube cho mục LUT, cạnh instax.exe. */
+export const LUT_DIR = join(ROOT, 'luts');
+
+const cubeCache = new Map();
+
+/** Đọc LUT của cấu hình v2 (có cache theo thời điểm sửa file). Trả về { lut, warn }. */
+function loadUserLut(cfg) {
+  if (!cfg.lut || !cfg.lut.file || cfg.lut.opacity <= 0) return { lut: null };
+  const path = join(LUT_DIR, cfg.lut.file);
+  try {
+    const mtime = statSync(path).mtimeMs;
+    const hit = cubeCache.get(path);
+    if (hit && hit.mtime === mtime) return { lut: hit.lut };
+    const lut = parseCube(readFileSync(path, 'utf8'));
+    cubeCache.set(path, { mtime, lut });
+    return { lut };
+  } catch (err) {
+    // Thiếu LUT thì vẫn làm bản digital với các công cụ còn lại, và ghi lý do vào log.
+    return { lut: null, warn: `bỏ qua LUT ${cfg.lut.file}: ${err.code === 'ENOENT' ? 'không có file trong thư mục luts' : err.message}` };
+  }
+}
 
 /**
  * BỘ LỌC INSTAX WIDE — chất phim lấy liền.
@@ -119,9 +145,19 @@ export function applyTone(base, raw, cfg) {
 /**
  * Áp hiệu ứng lên một ảnh, trả về buffer JPEG đã mã hoá.
  * Không đụng tới đĩa — việc ghi file do lớp gọi quyết định.
+ *
+ * `bw`: lượt khách chọn B&W (daemon truyền `--bw`). Ảnh ghép từ event B&W đã
+ * xám sẵn, nhưng tách tông của bộ lọc sẽ nhuộm nó: v2 bật công cụ Black &
+ * White (kèm Split Tones của nó), v1 chuyển về xám ngay sau các tầng sắc độ.
+ *
+ * `maxEdge`: thu nhỏ cho cạnh dài không quá số này trước khi xử lý (0 = giữ
+ * nguyên). FilmongBooth dùng cho ảnh đơn của khách: ảnh máy ảnh 24MP để xem
+ * trên điện thoại thì vài nghìn px là đủ, lại nhanh hơn nhiều.
  */
-export async function renderInstax(inputPath, cfg, { trace = false } = {}) {
-  const src = sharp(inputPath, { failOn: 'none' }).rotate().toColourspace('srgb');
+export async function renderInstax(inputPath, cfg, { trace = false, bw = false, maxEdge = 0 } = {}) {
+  let src = sharp(inputPath, { failOn: 'none' }).rotate();
+  if (maxEdge > 0) src = src.resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true });
+  src = src.toColourspace('srgb');
   const { data, info } = await src.raw().toBuffer({ resolveWithObject: true });
   const raw = { width: info.width, height: info.height, channels: info.channels };
 
@@ -134,7 +170,20 @@ export async function renderInstax(inputPath, cfg, { trace = false } = {}) {
   const cur = Buffer.from(data);
   if (trace) stages.push({ name: 'gốc', ...(await measureRaw(cur, raw)) });
 
+  if (cfg.version === 2) {
+    const { lut, warn } = loadUserLut(cfg);
+    renderLook(cur, raw.width, raw.height, 3, cfg, { bw, userLut: lut });
+    if (trace) stages.push({ name: 'look', ...(await measureRaw(cur, raw)) });
+    return { jpeg: await encode(cur, raw, cfg), width: raw.width, height: raw.height, stages, warn };
+  }
+
   applyTone(cur, raw, cfg);
+  if (bw) {
+    for (let p = 0; p < cur.length; p += 3) {
+      const y = Math.round(0.299 * cur[p] + 0.587 * cur[p + 1] + 0.114 * cur[p + 2]);
+      cur[p] = y; cur[p + 1] = y; cur[p + 2] = y;
+    }
+  }
   if (trace) stages.push({ name: 'sắc độ', ...(await measureRaw(cur, raw)) });
 
   if (cfg.grain.amount > 0.0005) {
@@ -142,7 +191,11 @@ export async function renderInstax(inputPath, cfg, { trace = false } = {}) {
     if (trace) stages.push({ name: 'hạt', ...(await measureRaw(cur, raw)) });
   }
 
-  const jpeg = await sharp(cur, { raw })
+  return { jpeg: await encode(cur, raw, cfg), width: raw.width, height: raw.height, stages };
+}
+
+function encode(cur, raw, cfg) {
+  return sharp(cur, { raw })
     .jpeg({
       quality: cfg.output.quality,
       chromaSubsampling: cfg.output.chromaSubsampling,
@@ -150,18 +203,16 @@ export async function renderInstax(inputPath, cfg, { trace = false } = {}) {
     })
     .withMetadata()
     .toBuffer();
-
-  return { jpeg, width: raw.width, height: raw.height, stages };
 }
 
 /** Ảnh so sánh trước / sau, ghép cạnh nhau — cùng khuôn với bộ lọc Soft Light. */
-export async function renderComparison(inputPath, cfg, maxWidth = 2200) {
+export async function renderComparison(inputPath, cfg, maxWidth = 2200, opts = {}) {
   const before = await sharp(inputPath, { failOn: 'none' })
     .rotate()
     .toColourspace('srgb')
     .jpeg({ quality: 95 })
     .toBuffer();
-  const { jpeg: after } = await renderInstax(inputPath, cfg);
+  const { jpeg: after } = await renderInstax(inputPath, cfg, opts);
 
   const half = Math.floor(maxWidth / 2);
   const [a, b] = await Promise.all(
@@ -287,11 +338,11 @@ export function verdicts(m) {
 
   out.crushed = m.crushedPct <= H.crushedPct.max
     ? { ok: true, note: 'giữ được chi tiết vùng tối' }
-    : { ok: false, note: 'bết đen — tăng film.matte hoặc giảm colour.contrast' };
+    : { ok: false, note: 'bết đen — nâng điểm đen (Curve / HDR Black) hoặc giảm Contrast' };
 
   out.blown = m.blownPct <= H.blownPct.max
     ? { ok: true, note: 'vùng sáng còn mượt' }
-    : { ok: false, note: 'cháy sáng — giảm colour.exposure hoặc colour.contrast' };
+    : { ok: false, note: 'cháy sáng — giảm Exposure, tăng HDR Highlight hoặc giảm Contrast' };
 
   // Bộ lọc này không có tầng nào tách riêng chủ thể khỏi phông, nên chỉ báo
   // chứ không quy trách nhiệm cho một tham số nào cả.
@@ -304,9 +355,9 @@ export function verdicts(m) {
   }
 
   if (m.warmth < H.warmth.cold) {
-    out.warmth = { ok: false, note: 'lạnh / nhợt — tăng film.warmHighlight hoặc giảm film.shadowCyan' };
+    out.warmth = { ok: false, note: 'lạnh / nhợt — tăng Kelvin (White Balance) hoặc Color Balance vùng sáng về phía ấm' };
   } else if (m.warmth > H.warmth.hot) {
-    out.warmth = { ok: false, note: 'quá đỏ, da ngả gạch nung — giảm film.warmHighlight' };
+    out.warmth = { ok: false, note: 'quá đỏ, da ngả gạch nung — giảm Kelvin hoặc bớt ấm ở Color Balance' };
   } else if (m.warmth < H.warmth.min || m.warmth > H.warmth.max) {
     out.warmth = { ok: true, note: 'chấp nhận được, khoảng đẹp cho chân dung là 10…35' };
   } else {
@@ -314,8 +365,8 @@ export function verdicts(m) {
   }
 
   if (m.skinShare < 0.5) out.tint = { ok: true, note: 'không đủ vùng da để đo' };
-  else if (m.skinTint > H.skinTint.green) out.tint = { ok: false, note: 'da ám lục — giảm film.shadowCyan' };
-  else if (m.skinTint < H.skinTint.magenta) out.tint = { ok: false, note: 'da ám tím — giảm colour.vibrance' };
+  else if (m.skinTint > H.skinTint.green) out.tint = { ok: false, note: 'da ám lục — tăng Tint (White Balance) hoặc bớt lam-lục ở Color Balance' };
+  else if (m.skinTint < H.skinTint.magenta) out.tint = { ok: false, note: 'da ám tím — giảm Tint hoặc Saturation' };
   else if (m.skinTint > H.skinTint.max || m.skinTint < H.skinTint.min) {
     out.tint = { ok: true, note: 'hơi lệch nhưng còn trong ngưỡng' };
   } else out.tint = { ok: true, note: 'màu da tinh khiết' };
@@ -336,6 +387,7 @@ export function verdicts(m) {
  *   5. Tông da chưa vượt ngưỡng cháy đỏ.
  */
 export async function selftest(cfg) {
+  if (cfg.version === 2) return selftestV2(cfg);
   const { data, raw } = makeTestImage();
 
   /**
@@ -439,6 +491,81 @@ export async function selftest(cfg) {
   console.log('  vì ảnh kiểm này cố tình chứa cả mảng đen kịt lẫn dải cháy trắng.');
   console.log('');
 
+  const bad = checks.filter((c) => !c.ok).length;
+  if (bad) console.log(`  Còn ${bad} mệnh đề chưa đạt — xem lại instax.config.json.\n`);
+  return bad === 0;
+}
+
+/**
+ * Bài kiểm cho cấu hình v2 (look.js). Cùng tinh thần với bản
+ * v1: đo bằng số trên ảnh kiểm, mỗi công cụ được bật / tắt riêng để chứng minh
+ * phần đóng góp của chính nó.
+ */
+async function selftestV2(cfg) {
+  const { data, raw } = makeTestImage();
+  const { width: w, height: h } = raw;
+  const run = (look, opts = {}) => {
+    const buf = Buffer.from(data);
+    renderLook(buf, w, h, 3, look, { seed: 1, ...opts });
+    return buf;
+  };
+  const read = (buf, box) => patchStat(buf, raw, box);
+  const maxDiff = (a, b) => { let m = 0; for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(a[i] - b[i])); return m; };
+
+  const t0 = Date.now();
+  const full = run(cfg);
+  const ms = Date.now() - t0;
+
+  const neutral = normalizeLook({}, neutralLook());
+  const off = { ...cfg, strength: 0 };
+  // Chỉ phần màu/tông (bỏ hạt, vignetting, clarity) để đọc ô màu không bị nhiễu.
+  const tone = { ...cfg, grain: { ...cfg.grain, impact: 0 }, vignetting: { ...cfg.vignetting, amount: 0 }, clarity: { ...cfg.clarity, clarity: 0, structure: 0 } };
+  const toneBuf = run(tone);
+  const black = read(toneBuf, BOX.black);
+  const sh = read(toneBuf, BOX.shadow), sh0 = read(data, BOX.shadow);
+  const hi = read(toneBuf, BOX.highlight), hi0 = read(data, BOX.highlight);
+  const skin0 = read(data, BOX.skin), skin = read(toneBuf, BOX.skin);
+
+  const bwOpts = { ...tone, blackWhite: { ...tone.blackWhite, highlightSaturation: 0, shadowSaturation: 0 } };
+  const bwBuf = run(bwOpts, { bw: true });
+  let bwGray = true;
+  for (let p = 0; p < bwBuf.length; p += 3) {
+    if (Math.abs(bwBuf[p] - bwBuf[p + 1]) > 1 || Math.abs(bwBuf[p + 1] - bwBuf[p + 2]) > 1) { bwGray = false; break; }
+  }
+
+  const grained = run({ ...neutral, grain: { ...cfg.grain, impact: Math.max(cfg.grain.impact, 1) } });
+  const flat = flatStdev(Buffer.from(data), raw, BOX.pale);
+  const noisy = flatStdev(grained, raw, BOX.pale);
+  const grainSigma = Math.sqrt(Math.max(0, noisy * noisy - flat * flat));
+
+  const lutMs = (() => { const t = Date.now(); buildLut(cfg); return Date.now() - t; })();
+
+  const checks = [
+    { ok: maxDiff(run(neutral), data) <= 1, label: 'Trung tính = ảnh gốc', detail: 'mọi công cụ về 0 thì ảnh ra đúng bằng ảnh vào' },
+    { ok: maxDiff(run(off), data) <= 1, label: 'Độ đậm 0 = ảnh gốc', detail: 'thanh độ đậm trộn đúng từ 0 tới 100' },
+    { ok: cfg.strength === 0 || maxDiff(full, data) > 4, label: 'Look có tác dụng', detail: `lệch tối đa ${maxDiff(full, data)} / 255 so với ảnh gốc` },
+    { ok: true, label: 'Đáy đen', detail: `mảng đen kịt 0 → ${black.lum.toFixed(1)} / 255 (Curve / Levels / HDR Black)` },
+    { ok: true, label: 'Bóng đổ / vùng sáng', detail: `B−R bóng ${(sh0.b - sh0.r).toFixed(1)} → ${(sh.b - sh.r).toFixed(1)} · R−B sáng ${(hi0.r - hi0.b).toFixed(1)} → ${(hi.r - hi.b).toFixed(1)}` },
+    { ok: bwGray, label: 'Lượt B&W ra xám', detail: '--bw bật Black & White; tắt Split Tones thì R = G = B' },
+    { ok: cfg.grain.impact <= 0 || (grainSigma > 0.4 && grainSigma < 40), label: 'Film Grain có mặt', detail: `σ ≈ ${grainSigma.toFixed(2)} / 255 trên mảng phẳng` },
+    { ok: skin.sat < 0.72, label: 'Tông da còn ngưỡng', detail: `bão hoà da ${pct(skin0.sat)} → ${pct(skin.sat)} (ngưỡng cháy đỏ: 72%)` },
+  ];
+
+  const rule = '  ' + '─'.repeat(78);
+  console.log('');
+  console.log('  KIỂM CHỨNG BỘ LỌC INSTAX WIDE — cấu hình v2');
+  console.log(rule);
+  for (const c of checks) console.log(`  [${c.ok ? ' OK ' : 'LỖI'}]  ${c.label.padEnd(22)} ${c.detail}`);
+  console.log(rule);
+  console.log('  ĐƯỜNG CONG SẮC ĐỘ (mức xám vào → ra, R/G/B, chỉ phần màu/tông)');
+  for (const v of [0, 32, 64, 128, 192, 255]) {
+    const one = Buffer.from([v, v, v]);
+    renderLook(one, 1, 1, 3, tone);
+    console.log(`    ${String(v).padStart(3)} →  ${String(one[0]).padStart(3)} ${String(one[1]).padStart(3)} ${String(one[2]).padStart(3)}`);
+  }
+  console.log(rule);
+  console.log(`  Dựng LUT ${lutMs}ms · cả look trên ảnh 1600×1000: ${ms}ms`);
+  console.log('');
   const bad = checks.filter((c) => !c.ok).length;
   if (bad) console.log(`  Còn ${bad} mệnh đề chưa đạt — xem lại instax.config.json.\n`);
   return bad === 0;

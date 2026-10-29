@@ -1,571 +1,92 @@
-<title>Soft Light Tuner</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<title>Soft Light</title>
 
 <style>
-  :root {
-    --bg:        #e5e9ee;
-    --surface:   #f3f5f8;
-    --surface-2: #dae0e8;
-    --sunken:    #cfd6e0;
-    --line:      #bec7d3;
-    --line-soft: #d5dce4;
-    --text:      #1a1f27;
-    --text-dim:  #59636f;
-    --text-mute: #707a86;
-    --accent:    #b25f18;
-    --accent-ink:#8c4a10;
-    --accent-soft: rgba(178, 95, 24, .13);
-    --on-accent: #fdf7f0;
-    --good:      #1f7a4d;
-    --good-soft: rgba(31, 122, 77, .12);
-    --warn:      #b23a1f;
-    --warn-soft: rgba(178, 58, 31, .12);
-    --stage:     #6b7076;
-    --shadow:    0 1px 2px rgba(20,28,38,.10), 0 8px 24px rgba(20,28,38,.07);
-    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
-    --sans: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif;
-    --disp: "Archivo", "IBM Plex Sans", system-ui, sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg:        #0f131a;
-      --surface:   #171d25;
-      --surface-2: #1e2530;
-      --sunken:    #10151c;
-      --line:      #2b3441;
-      --line-soft: #222a35;
-      --text:      #e3e8ef;
-      --text-dim:  #93a0ae;
-      --text-mute: #6c7987;
-      --accent:    #e09a4b;
-      --accent-ink:#f0b878;
-      --accent-soft: rgba(224, 154, 75, .15);
-      --on-accent: #14181e;
-      --good:      #5fc98d;
-      --good-soft: rgba(95, 201, 141, .14);
-      --warn:      #f08268;
-      --warn-soft: rgba(240, 130, 104, .14);
-      --stage:     #4a4e54;
-      --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg:        #0f131a;
-    --surface:   #171d25;
-    --surface-2: #1e2530;
-    --sunken:    #10151c;
-    --line:      #2b3441;
-    --line-soft: #222a35;
-    --text:      #e3e8ef;
-    --text-dim:  #93a0ae;
-    --text-mute: #6c7987;
-    --accent:    #e09a4b;
-    --accent-ink:#f0b878;
-    --accent-soft: rgba(224, 154, 75, .15);
-    --on-accent: #14181e;
-    --good:      #5fc98d;
-    --good-soft: rgba(95, 201, 141, .14);
-    --warn:      #f08268;
-    --warn-soft: rgba(240, 130, 104, .14);
-    --stage:     #4a4e54;
-    --shadow:    0 1px 2px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.35);
-  }
-
-  * { box-sizing: border-box; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 14px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
-  button, input, select, textarea { font: inherit; color: inherit; }
-  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
-
-  /* ── shell ─────────────────────────────────────────────── */
-  .app {
-    min-height: 100vh;
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
-  .topbar {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    flex-wrap: wrap;
-    padding: 12px 20px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--line);
-  }
-  .brand { display: flex; align-items: baseline; gap: 10px; margin-right: auto; }
-  .brand h1 {
-    font-family: var(--disp);
-    font-weight: 700;
-    font-size: 17px;
-    letter-spacing: -.01em;
-    margin: 0;
-  }
-  .brand .sub {
-    font-size: 12px;
-    color: var(--text-mute);
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    font-family: var(--disp);
-    font-weight: 500;
-  }
-
-  .workbench {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 400px;
-    min-height: 0;
-  }
-  @media (max-width: 1000px) {
-    .workbench { grid-template-columns: minmax(0, 1fr); }
-  }
-
-  /* ── controls, generic ─────────────────────────────────── */
-  .btn {
-    display: inline-flex; align-items: center; gap: 7px;
-    padding: 7px 13px;
-    background: var(--surface-2);
-    border: 1px solid var(--line);
-    border-radius: 5px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 500;
-    transition: background .12s, border-color .12s, color .12s;
-    white-space: nowrap;
-  }
-  .btn:hover { border-color: var(--accent); color: var(--accent-ink); }
-  .btn:active { transform: translateY(1px); }
-  .btn.primary {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: var(--on-accent);
-  }
-  .btn.primary:hover { filter: brightness(1.08); color: var(--on-accent); border-color: var(--accent); }
-  .btn.ghost { background: transparent; }
-  .btn[disabled] { opacity: .45; cursor: default; }
-  .btn[disabled]:hover { border-color: var(--line); color: inherit; }
-  .btn[aria-pressed="true"] {
-    background: var(--accent-soft);
-    border-color: var(--accent);
-    color: var(--accent-ink);
-  }
-
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; }
-  .seg button {
-    padding: 6px 12px;
-    background: var(--surface-2);
-    border: 0;
-    border-right: 1px solid var(--line);
-    cursor: pointer;
-    font-size: 12.5px;
-    font-weight: 500;
-    color: var(--text-dim);
-  }
-  .seg button:last-child { border-right: 0; }
-  .seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-ink); }
-  .seg button:hover { color: var(--text); }
-
-  .filepick { position: relative; overflow: hidden; }
-  .filepick input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-
-  /* ── stage ─────────────────────────────────────────────── */
-  .stage-wrap {
-    display: flex; flex-direction: column;
-    min-width: 0; min-height: 0;
-    border-right: 1px solid var(--line);
-  }
-  @media (max-width: 1000px) { .stage-wrap { border-right: 0; border-bottom: 1px solid var(--line); } }
-
-  .stage {
-    position: relative;
-    flex: 1;
-    min-height: 420px;
-    background: var(--stage);
-    display: grid;
-    place-items: center;
-    overflow: hidden;
-    padding: 20px;
-    touch-action: none;
-  }
-  .stage.drop { outline: 2px dashed var(--accent); outline-offset: -12px; }
-  /* .frame co theo ảnh, nhưng bị chặn ở bề ngang khung xem — nếu không thì
-     ảnh 1200px sẽ tràn ra khỏi cột bên trái trên màn hình hẹp. */
-  .frame {
-    position: relative; line-height: 0;
-    max-width: 100%;
-    box-shadow: 0 6px 30px rgba(0,0,0,.35);
-  }
-  .frame canvas {
-    display: block;
-    max-width: 100%;
-    max-height: calc(100vh - 270px);
-    width: auto; height: auto;
-  }
-  .frame canvas.before {
-    position: absolute; inset: 0; width: 100%; height: 100%;
-  }
-  .divider {
-    position: absolute; top: 0; bottom: 0; width: 2px;
-    background: var(--accent);
-    box-shadow: 0 0 0 1px rgba(0,0,0,.35);
-    cursor: ew-resize;
-  }
-  .divider::after {
-    content: "";
-    position: absolute; left: 50%; top: 50%;
-    width: 34px; height: 34px; margin: -17px 0 0 -17px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 2px 8px rgba(0,0,0,.45);
-  }
-  .divider .glyph {
-    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
-    z-index: 1; color: var(--on-accent); font-size: 13px; line-height: 1; pointer-events: none;
-    font-family: var(--disp); font-weight: 700;
-  }
-  .tag {
-    position: absolute; top: 12px;
-    font-family: var(--disp); font-weight: 600;
-    font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
-    background: rgba(10,14,20,.62); color: #fff;
-    padding: 4px 9px; border-radius: 3px;
-    pointer-events: none;
-  }
-  .tag.l { left: 12px; }
-  .tag.r { right: 12px; }
-  .empty {
-    text-align: center; color: #fff; max-width: 380px;
-    text-shadow: 0 1px 3px rgba(0,0,0,.5);
-  }
-  .empty h2 { font-family: var(--disp); font-size: 19px; margin: 0 0 6px; font-weight: 600; }
-  .empty p { margin: 0 0 16px; font-size: 13.5px; opacity: .88; }
-
-  .stage-bar {
-    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-    padding: 9px 16px;
-    background: var(--surface);
-    border-top: 1px solid var(--line);
-    font-size: 12.5px;
-  }
-  .stage-bar .status { color: var(--text-mute); font-family: var(--mono); font-size: 11.5px; margin-left: auto; }
-
-  /* ── metrics ───────────────────────────────────────────── */
-  .metrics {
-    display: grid;
-    grid-template-columns: repeat(5, minmax(0,1fr));
-    gap: 1px;
-    background: var(--line-soft);
-    border-top: 1px solid var(--line);
-  }
-  @media (max-width: 720px) { .metrics { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-  .metric { background: var(--surface); padding: 9px 14px 10px; }
-  .metric .k {
-    font-family: var(--disp); font-weight: 600;
-    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--text-mute);
-  }
-  .metric .v {
-    font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums;
-    display: flex; align-items: baseline; gap: 6px; margin-top: 2px;
-  }
-  .metric .v .from { color: var(--text-mute); font-size: 12px; }
-  .metric .v .arrow { color: var(--text-mute); font-size: 11px; }
-  .metric .d { font-size: 11px; font-family: var(--mono); color: var(--text-dim); }
-  .metric .d.up { color: var(--accent-ink); }
-
-  /* ── thẻ chấm độ hài hoà ────────────────────────────────
-     Khác với hàng chỉ số trên: hàng kia nói ảnh ĐỔI thế nào, hàng này chấm ảnh
-     đầu ra có dùng được không, nên mỗi thẻ mang màu đạt/cảnh báo và câu sửa. */
-  .harmony {
-    display: grid; grid-template-columns: repeat(4, minmax(0,1fr));
-    gap: 1px; background: var(--line-soft); border-top: 1px solid var(--line);
-  }
-  @media (max-width: 720px) { .harmony { grid-template-columns: repeat(2, minmax(0,1fr)); } }
-  .hcard { background: var(--surface); padding: 9px 14px 10px; border-left: 3px solid transparent; }
-  .hcard.ok { border-left-color: var(--good); background: var(--good-soft); }
-  .hcard.warn { border-left-color: var(--warn); background: var(--warn-soft); }
-  .hcard .k {
-    font-family: var(--disp); font-weight: 600;
-    font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--text-mute);
-  }
-  .hcard .v {
-    font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums;
-    margin-top: 2px; display: flex; align-items: baseline; gap: 7px;
-  }
-  .hcard.ok .v { color: var(--good); }
-  .hcard.warn .v { color: var(--warn); }
-  .hcard .v .lim { font-size: 11px; color: var(--text-mute); }
-  .hcard .n { font-size: 11px; color: var(--text-dim); margin-top: 1px; line-height: 1.35; }
-
-  /* ── rail ──────────────────────────────────────────────── */
-  .rail {
-    display: flex; flex-direction: column;
-    background: var(--surface);
-    min-width: 0;
-    max-height: calc(100vh - 57px);
-  }
-  @media (max-width: 1000px) { .rail { max-height: none; } }
-  .tabs { display: flex; border-bottom: 1px solid var(--line); background: var(--surface-2); }
-  .tabs button {
-    flex: 1; padding: 11px 8px 10px;
-    background: transparent; border: 0; border-bottom: 2px solid transparent;
-    cursor: pointer;
-    font-family: var(--disp); font-weight: 600; font-size: 12px;
-    letter-spacing: .07em; text-transform: uppercase;
-    color: var(--text-mute);
-  }
-  .tabs button[aria-selected="true"] {
-    color: var(--accent-ink); border-bottom-color: var(--accent); background: var(--surface);
-  }
-  .panel { overflow-y: auto; flex: 1; padding: 4px 0 40px; }
-  .panel[hidden] { display: none; }
-
-  /* Tấm gập được. Mười tám thanh trượt đổ ra cùng lúc thì không tìm nổi cái
-     mình cần, nên chỉ tầng chính mở sẵn; dòng tóm tắt bên phải cho biết mục
-     đang gập có tác động gì không. */
-  .sect { border-bottom: 1px solid var(--line-soft); }
-  .sect > summary {
-    display: flex; align-items: center; gap: 9px;
-    padding: 12px 18px; cursor: pointer; list-style: none; user-select: none;
-  }
-  .sect > summary::-webkit-details-marker { display: none; }
-  .sect > summary::before {
-    content: ""; flex: none; width: 6px; height: 6px; margin: -2px 1px 0 1px;
-    border-right: 1.5px solid var(--text-mute); border-bottom: 1.5px solid var(--text-mute);
-    transform: rotate(-45deg); transition: transform .15s ease;
-  }
-  .sect[open] > summary::before { transform: rotate(45deg) translate(-1px, -1px); }
-  .sect > summary:hover { background: var(--sunken); }
-  .sect > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-  .sect-title { font-family: var(--disp); font-size: 13.5px; font-weight: 600; letter-spacing: -.005em; }
-  .sect-tag {
-    font-size: 10px; text-transform: uppercase; letter-spacing: .05em;
-    color: var(--accent-ink); background: var(--accent-soft);
-    border-radius: 3px; padding: 2px 5px;
-  }
-  .sect-state {
-    margin-left: auto; font-family: var(--mono); font-size: 11px;
-    color: var(--text-mute); font-variant-numeric: tabular-nums;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%;
-  }
-  .sect-state.off { opacity: .5; }
-  .sect-body { padding: 0 18px 16px; }
-  .sect-body > .group { border-bottom: 0; padding: 0; }
-  .sect-body > .group + .group {
-    margin-top: 15px; padding-top: 14px; border-top: 1px dashed var(--line-soft);
-  }
-
-  .group { border-bottom: 1px solid var(--line-soft); padding: 14px 18px 16px; }
-  .group > header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 3px; }
-  .step {
-    font-family: var(--mono); font-size: 11px; font-weight: 500;
-    color: var(--accent-ink); background: var(--accent-soft);
-    border-radius: 3px; padding: 2px 6px; margin-top: 1px;
-  }
-  .group h3 {
-    font-family: var(--disp); font-size: 14px; font-weight: 600; margin: 0;
-    letter-spacing: -.005em;
-  }
-  .group .why { color: var(--text-dim); font-size: 12.5px; margin: 0 0 12px 40px; }
-  .group .why code {
-    font-family: var(--mono); font-size: 11.5px;
-    background: var(--sunken); padding: 1px 4px; border-radius: 3px;
-  }
-  .group.plain .why { margin-left: 0; }
-
-  .row { margin-top: 13px; }
-  .row .top { display: flex; align-items: baseline; gap: 8px; }
-  .row label { font-weight: 500; font-size: 13px; }
-  .row .key { font-family: var(--mono); font-size: 11px; color: var(--text-mute); }
-  .row .num {
-    margin-left: auto; width: 68px; text-align: right;
-    padding: 2px 6px;
-    background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 4px;
-    font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums;
-  }
-  .row .num.changed { border-color: var(--accent); color: var(--accent-ink); }
-  .row .hint { font-size: 11.5px; color: var(--text-mute); margin-top: 1px; }
-
-  input[type=range] {
-    -webkit-appearance: none; appearance: none;
-    width: 100%; height: 22px; background: transparent; margin: 2px 0 0; cursor: pointer;
-  }
-  input[type=range]::-webkit-slider-runnable-track {
-    height: 4px; border-radius: 2px; background: var(--sunken); border: 1px solid var(--line-soft);
-  }
-  input[type=range]::-moz-range-track {
-    height: 4px; border-radius: 2px; background: var(--sunken); border: 1px solid var(--line-soft);
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none; appearance: none;
-    width: 15px; height: 15px; margin-top: -6px;
-    border-radius: 50%; background: var(--surface);
-    border: 2px solid var(--accent);
-    box-shadow: 0 1px 3px rgba(0,0,0,.25);
-  }
-  input[type=range]::-moz-range-thumb {
-    width: 13px; height: 13px;
-    border-radius: 50%; background: var(--surface);
-    border: 2px solid var(--accent);
-    box-shadow: 0 1px 3px rgba(0,0,0,.25);
-  }
-
-  .field { display: flex; align-items: center; gap: 10px; margin-top: 11px; }
-  .field label { font-weight: 500; font-size: 13px; min-width: 0; }
-  .field .key { font-family: var(--mono); font-size: 11px; color: var(--text-mute); }
-  .field .ctl { margin-left: auto; }
-  .field input[type=text], .field input[type=number], .field select {
-    padding: 5px 8px; background: var(--sunken);
-    border: 1px solid var(--line-soft); border-radius: 4px;
-    font-family: var(--mono); font-size: 12px;
-  }
-  .field input[type=number] { width: 82px; text-align: right; }
-  .field input[type=text] { width: 150px; }
-  .field input[type=color] {
-    width: 42px; height: 28px; padding: 2px;
-    background: var(--sunken); border: 1px solid var(--line-soft); border-radius: 4px; cursor: pointer;
-  }
-  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-  .switch input { accent-color: var(--accent); width: 16px; height: 16px; }
-  .stack { display: block; }
-  .stack textarea {
-    width: 100%; margin-top: 6px; min-height: 62px; resize: vertical;
-    padding: 7px 9px; background: var(--sunken);
-    border: 1px solid var(--line-soft); border-radius: 4px;
-    font-family: var(--mono); font-size: 12px;
-  }
-
-  /* ── json panel ────────────────────────────────────────── */
-  .json-head {
-    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
-    padding: 13px 18px;
-    border-bottom: 1px solid var(--line-soft);
-  }
-  .json-note { padding: 12px 18px 0; color: var(--text-dim); font-size: 12.5px; }
-  .json-note code {
-    font-family: var(--mono); font-size: 11.5px;
-    background: var(--sunken); padding: 1px 5px; border-radius: 3px;
-  }
-  #jsonOut {
-    display: block; width: calc(100% - 36px); margin: 12px 18px 0;
-    min-height: 60vh;
-    padding: 12px 13px;
-    background: var(--sunken);
-    border: 1px solid var(--line-soft); border-radius: 5px;
-    font-family: var(--mono); font-size: 11.5px; line-height: 1.6;
-    white-space: pre; overflow: auto; resize: vertical;
-    tab-size: 2;
-  }
-  .toast {
-    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(14px);
-    background: var(--text); color: var(--bg);
-    padding: 9px 18px; border-radius: 6px;
-    font-size: 13px; font-weight: 500;
-    box-shadow: var(--shadow);
-    opacity: 0; pointer-events: none;
-    transition: opacity .18s, transform .18s;
-    z-index: 50;
-  }
-  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-
-  @media (prefers-reduced-motion: reduce) {
-    * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
-  }
+/*@@UI_CSS@@*/
 </style>
 
 <div class="app">
-  <header class="topbar">
-    <div class="brand">
-      <h1>Soft Light Tuner</h1>
-      <span class="sub">filmong · dslrBooth</span>
-    </div>
-
-    <label class="btn primary filepick">
-      Mở ảnh
-      <input type="file" id="file" accept="image/*">
-    </label>
+  <header class="top">
+    <h1>Soft Light <span>· làm mịn da</span></h1>
+    <label class="btn primary filepick">Mở ảnh<input type="file" id="file" accept="image/*"></label>
     <button class="btn ghost" id="sampleBtn">Ảnh mẫu</button>
-
     <div class="seg" role="group" aria-label="Độ phân giải xem trước">
       <button id="qFast" aria-pressed="false">Nhanh</button>
       <button id="qFine" aria-pressed="true">Nét</button>
     </div>
-
-    <button class="btn ghost" id="themeBtn" title="Đổi nền sáng / tối">Nền tối</button>
+    <div class="spacer"></div>
+    <span class="status" id="status">chưa có ảnh</span>
   </header>
 
-  <div class="workbench">
-    <!-- ══ khung xem ══ -->
-    <section class="stage-wrap">
+  <main class="work">
+    <section class="viewer">
       <div class="stage" id="stage">
         <div class="empty" id="empty">
           <h2>Thả một tấm ảnh vào đây</h2>
-          <p>Ảnh không rời khỏi máy bạn — toàn bộ xử lý chạy ngay trong trình duyệt.
+          <p>Ảnh không rời khỏi máy — mọi xử lý chạy ngay trong trình duyệt.
              Kéo thả, dán từ clipboard, hoặc bấm “Mở ảnh”.</p>
-          <button class="btn" id="sampleBtn2">Dùng ảnh mẫu để thử</button>
+          <button class="btn" id="sampleBtn2">Dùng ảnh mẫu</button>
         </div>
         <div class="frame" id="frame" hidden>
           <canvas id="cvAfter"></canvas>
           <canvas id="cvBefore" class="before"></canvas>
           <span class="tag l">Gốc</span>
-          <span class="tag r">Đã lọc</span>
+          <span class="tag r">Soft Light</span>
           <div class="divider" id="divider"><span class="glyph">↔</span></div>
         </div>
       </div>
-
-      <div class="stage-bar">
+      <div class="viewbar">
         <button class="btn ghost" id="holdBtn" title="Giữ phím Space cũng được">Giữ để xem ảnh gốc</button>
         <button class="btn ghost" id="centerBtn">Vạch chia về giữa</button>
-        <span class="status" id="status">chưa có ảnh</span>
-      </div>
-
-      <div class="metrics" id="metrics" title="Đo trên ảnh xem trước, không trùng số của npm run selftest">
-        <div class="metric"><div class="k">Sáng trung bình</div><div class="v" id="m-mean">—</div><div class="d" id="d-mean"></div></div>
-        <div class="metric"><div class="k">Độ nét (chi tiết)</div><div class="v" id="m-fine">—</div><div class="d" id="d-fine"></div></div>
-        <div class="metric"><div class="k">Tương phản trung</div><div class="v" id="m-mid">—</div><div class="d" id="d-mid"></div></div>
-        <div class="metric"><div class="k">Tương phản tổng</div><div class="v" id="m-global">—</div><div class="d" id="d-global"></div></div>
-        <div class="metric"><div class="k">Độ ấm (R−B)</div><div class="v" id="m-warmth">—</div><div class="d" id="d-warmth"></div></div>
-      </div>
-
-      <div class="harmony" id="harmony" title="Chấm trên ảnh ĐÃ LỌC: có dùng được không, sai thì xoay tham số nào">
-        <div class="hcard" id="h-crushed"></div>
-        <div class="hcard" id="h-blown"></div>
-        <div class="hcard" id="h-subject"></div>
-        <div class="hcard" id="h-skin"></div>
+        <button class="btn ghost" id="allAfterBtn">Xem toàn ảnh đã lọc</button>
       </div>
     </section>
 
-    <!-- ══ bảng chỉnh ══ -->
-    <aside class="rail">
-      <div class="tabs" role="tablist">
-        <button role="tab" id="tabParams" aria-selected="true" aria-controls="panelParams">Tham số</button>
-        <button role="tab" id="tabJson" aria-selected="false" aria-controls="panelJson">softlight.config.json</button>
-      </div>
+    <aside class="tools">
+      <div class="histo"><canvas id="histo" width="320" height="74"></canvas></div>
 
-      <div class="panel" id="panelParams" role="tabpanel" aria-labelledby="tabParams"></div>
-
-      <div class="panel" id="panelJson" role="tabpanel" aria-labelledby="tabJson" hidden>
-        <div class="json-head">
-          <button class="btn primary" id="copyBtn">Sao chép</button>
-          <button class="btn ghost" id="pasteBtn">Nạp JSON đang có</button>
-          <button class="btn ghost" id="saveBtn">Tải file về</button>
+      <div class="look">
+        <div class="row">
+          <span class="title">Soft Light</span>
+          <select id="styleSel" aria-label="Bộ giá trị">
+            <option value="current">Theo file hiện tại</option>
+            <option value="code">Mặc định</option>
+            <option value="off">Tắt hết hiệu ứng</option>
+            <option value="loaded" hidden>Từ file đã nạp</option>
+          </select>
         </div>
-        <p class="json-note">
-          Dán đè toàn bộ nội dung này vào <code>softlight.config.json</code> cạnh <code>softlight.exe</code>.
-          Không cần build lại — lần chụp kế tiếp là ăn ngay.
-        </p>
-        <textarea id="jsonOut" spellcheck="false" readonly></textarea>
+        <div class="big" id="mainHost"></div>
+        <div class="hint">Thường chỉ cần thanh này. Chỉnh chi tiết ở các tab bên dưới.</div>
       </div>
+
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="skin" aria-selected="true">Da</button>
+        <button role="tab" data-tab="color" aria-selected="false">Tông màu</button>
+        <button role="tab" data-tab="details" aria-selected="false">Chi tiết</button>
+        <button role="tab" data-tab="file" aria-selected="false">File</button>
+      </nav>
+
+      <div class="panes">
+        <div class="pane" id="pane-skin"></div>
+        <div class="pane" id="pane-color" hidden></div>
+        <div class="pane" id="pane-details" hidden></div>
+        <div class="pane filepane" id="pane-file" hidden>
+          <div id="fileOpts"></div>
+          <div class="btns">
+            <button class="btn ghost" id="pasteBtn">Nạp JSON đang có</button>
+            <button class="btn ghost" id="copyBtn">Sao chép</button>
+          </div>
+          <p class="note">Bấm <b>Lưu</b> rồi đặt file <code>softlight.config.json</code> cạnh <code>softlight.exe</code> (thay file cũ).
+             Không cần build lại — lần chụp kế tiếp là ăn ngay.</p>
+          <textarea id="jsonOut" spellcheck="false" readonly></textarea>
+        </div>
+      </div>
+
+      <footer class="savebar">
+        <button class="btn primary" id="saveBtn">Lưu softlight.config.json</button>
+        <button class="btn ghost" id="undoBtn" title="Bỏ mọi thay đổi từ lần lưu / nạp gần nhất">Hoàn tác</button>
+      </footer>
     </aside>
-  </div>
+  </main>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -659,49 +180,6 @@
     { g: "tone",      step: 4, title: "Tông", why: "Biến đổi affine quanh điểm giữa, cộng lift nâng vùng đen." },
     { g: "warm",      step: 5, title: "Tông ấm", why: "Gain lệch giữa các kênh, cộng một lớp soft-light màu ấm phủ lên vùng sáng." },
     { g: "grain",     step: 6, title: "Nhiễu hạt", why: "Nhiễu trắng được làm mờ để KẾT CỤM, rồi rải theo đường cong sắc độ — đậm ở trung gian, cuộn về 0 ở đen kịt và cháy sáng. Ba kênh màu có cỡ hạt khác nhau như ba lớp thuốc nhuộm của phim. Cộng sau cùng, nên nó vừa tạo chất phim vừa đóng vai dither phá vệt đứt dải." }
-  ];
-
-  /**
-   * Sidebar chia thành mấy tấm gập được. Chỉ tầng chính mở sẵn — mười tám
-   * thanh trượt đổ ra cùng lúc thì không ai tìm được cái mình cần.
-   *
-   * `state` trả về một dòng tóm tắt hiện ngay trên đầu mục kể cả khi đang gập,
-   * để biết mục đó có đang tác động gì không mà không phải mở ra xem.
-   */
-  var SECTIONS = [
-    {
-      id: "bloom", title: "Bloom trên vùng da", tag: "tầng chính", groups: ["bloom"], open: true,
-      state: function () { return cfg.bloom.amount > 0.001 ? fmt(cfg.bloom.amount, 2) : "tắt"; }
-    },
-    {
-      id: "grain", title: "Nhiễu hạt phim", groups: ["grain"], open: false,
-      state: function () {
-        if (!(cfg.grain.amount > 0.0005)) return "tắt";
-        return fmt(cfg.grain.amount, 3) + (cfg.grain.mono ? " · mono" : "");
-      }
-    },
-    {
-      id: "soften", title: "Làm mềm toàn ảnh", tag: "tuỳ chọn", groups: ["softFocus", "clarity"], open: false,
-      state: function () {
-        var on = [];
-        if (cfg.softFocus.amount > 0.001) on.push("soft focus");
-        if (cfg.clarity.amount > 0.001) on.push("clarity");
-        return on.length ? on.join(" + ") : "tắt";
-      }
-    },
-    {
-      id: "color", title: "Tông & màu", tag: "tuỳ chọn", groups: ["tone", "warm"], open: false,
-      state: function () {
-        var on = [];
-        if (cfg.tone.contrast !== 0 || cfg.tone.lift !== 0) on.push("tông");
-        if (cfg.warm.temp !== 0 || cfg.warm.tint !== 0 || cfg.warm.highlightWarmth > 0.001) on.push("ấm");
-        return on.length ? on.join(" + ") : "tắt";
-      }
-    },
-    {
-      id: "file", title: "Ghi file & bỏ qua", groups: [], open: false,
-      state: function () { return "JPEG " + cfg.output.quality + (cfg.backup.enabled ? " · có backup" : " · KHÔNG backup"); }
-    }
   ];
 
   /* ═══════════════════════════════════════════════════════════════
@@ -1177,9 +655,9 @@
       img.data[k + 3] = 255;
     }
     ctxA.putImageData(img, 0, 0);
+    drawHisto(img.data);
     var ms = performance.now() - t0;
 
-    showMetrics(work.baseMetrics, measure(out, work.w, work.h));
     showHarmony(harmony(out, work.w, work.h));
     $("status").textContent =
       work.srcW + "×" + work.srcH + " → xem ở " + work.w + "×" + work.h +
@@ -1400,7 +878,11 @@
 
   /* ═══════════════════════════════════════════════════════════════
      5. DỰNG BẢNG CHỈNH
+     baseline = bộ giá trị đang chọn ở ô trên cùng: nút ↺ và bấm đúp đưa về đây.
+     saved    = bản ở lần lưu / nạp gần nhất, cho nút Hoàn tác.
      ═══════════════════════════════════════════════════════════════ */
+
+  var saved = clone(cfg);
 
   function el(tag, cls, html) {
     var e = document.createElement(tag);
@@ -1408,327 +890,249 @@
     if (html != null) e.innerHTML = html;
     return e;
   }
-
-  var sliderRefs = [];
-
   function decimals(step) { return step >= 1 ? 0 : (String(step).split(".")[1] || "").length; }
+  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function getPath(o, path) { return path.split(".").reduce(function (a, k) { return a[k]; }, o); }
+  function setPath(o, path, v) {
+    var ks = path.split("."), last = ks.pop();
+    ks.reduce(function (a, k) { return a[k]; }, o)[last] = v;
+  }
+  function dropCaches() { dropBlurCache(); dropBloomCache(); dropGrainCache(); }
 
-  function buildSlider(spec, host) {
-    var row = el("div", "row");
-    var top = el("div", "top");
-    var lab = el("label", null, spec.label);
-    var key = el("span", "key", spec.g + "." + spec.k);
-    var num = el("input", "num");
-    num.type = "text";
-    num.inputMode = "decimal";
-    num.setAttribute("aria-label", spec.label + " (" + spec.g + "." + spec.k + ")");
-    top.appendChild(lab); top.appendChild(key); top.appendChild(num);
+  var refreshers = [];   // mỗi điều khiển tự đọc lại cfg khi bộ số đổi từ ngoài
+  var toolMarks = [];    // chấm "đã chỉnh" trên tiêu đề công cụ
+  var byPath = {};       // các thanh cùng một tham số (thanh chính + thanh trong công cụ) chạy theo nhau
 
-    var rng = el("input");
-    rng.type = "range";
-    rng.min = spec.min; rng.max = spec.max; rng.step = spec.step;
+  function marks() { toolMarks.forEach(function (f) { f(); }); }
+  function commit() { schedule(); writeJson(); remember(); }
+  function syncAll() { refreshers.forEach(function (f) { f(); }); marks(); }
+
+  /** Thanh trượt: nhãn trái, ô số phải, rãnh mảnh bên dưới. Bấm đúp nhãn / rãnh → về bộ giá trị đang chọn. */
+  function slider(host, spec) {
+    var path = spec.path || (spec.g + "." + spec.k);
+    var digits = decimals(spec.step);
+    var wrap = el("div", "sl"), head = el("div", "sl-head");
+    var lab = el("label", null, spec.label + (spec.unit ? " (" + spec.unit + ")" : ""));
+    var box = el("input"); box.type = "number"; box.step = spec.step; box.min = spec.min; box.max = spec.max;
+    var rng = el("input"); rng.type = "range"; rng.min = spec.min; rng.max = spec.max; rng.step = spec.step;
     rng.setAttribute("aria-label", spec.label);
-
-    row.appendChild(top);
-    row.appendChild(rng);
-    if (spec.hint) row.appendChild(el("div", "hint", spec.hint));
-    host.appendChild(row);
-
-    var dec = decimals(spec.step);
-    function sync() {
-      var v = cfg[spec.g][spec.k];
+    if (spec.hint) lab.title = spec.hint + "\n\nBấm đúp để về giá trị gốc.";
+    head.appendChild(lab); head.appendChild(box);
+    wrap.appendChild(head); wrap.appendChild(rng);
+    host.appendChild(wrap);
+    function show(v) {
       rng.value = v;
-      if (document.activeElement !== num) num.value = v.toFixed(dec);
-      var same = Math.abs(v - baseline[spec.g][spec.k]) < 1e-9;
-      num.classList.toggle("changed", !same);
+      if (document.activeElement !== box) box.value = Number(v).toFixed(digits);
+      var lo = spec.min, hi = spec.max, z = lo < 0 && hi > 0 ? 0 : lo;
+      var a = (Math.min(z, v) - lo) / (hi - lo) * 100, b = (Math.max(z, v) - lo) / (hi - lo) * 100;
+      rng.style.setProperty("--trk", "linear-gradient(90deg,#555 " + a + "%,#c9c9c9 " + a + "%,#c9c9c9 " + b + "%,#555 " + b + "%)");
+      box.classList.toggle("off", Math.abs(v - getPath(baseline, path)) < 1e-9);
     }
-    function commit(v) {
-      if (!isFinite(v)) return;
-      cfg[spec.g][spec.k] = clamp(Math.round(v / spec.step) * spec.step, spec.min, spec.max);
-      // tránh sai số dấu phẩy động tích luỹ
-      cfg[spec.g][spec.k] = parseFloat(cfg[spec.g][spec.k].toFixed(dec + 1));
-      sync(); schedule(); writeJson(); remember();
+    function put(v, live) {
+      if (!isFinite(v)) { show(getPath(cfg, path)); return; }
+      v = clamp(Math.round(v / spec.step) * spec.step, spec.min, spec.max);
+      v = parseFloat(v.toFixed(digits + 1));
+      setPath(cfg, path, v);
+      byPath[path].forEach(function (f) { f(); });
+      if (live) { schedule(); return; }
+      marks(); commit();
     }
-    rng.addEventListener("input", function () { commit(parseFloat(rng.value)); });
-    num.addEventListener("change", function () { commit(parseFloat(num.value.replace(",", "."))); });
-    num.addEventListener("blur", sync);
-
-    sliderRefs.push(sync);
+    rng.addEventListener("input", function () { put(parseFloat(rng.value), true); });
+    rng.addEventListener("change", function () { put(parseFloat(rng.value), false); });
+    box.addEventListener("change", function () { put(parseFloat(String(box.value).replace(",", ".")), false); });
+    box.addEventListener("blur", function () { show(getPath(cfg, path)); });
+    box.addEventListener("keydown", function (e) { if (e.key === "Enter") box.blur(); });
+    var reset = function () { put(getPath(baseline, path), false); };
+    lab.addEventListener("dblclick", reset);
+    rng.addEventListener("dblclick", reset);
+    var refresh = function () { show(getPath(cfg, path)); };
+    refreshers.push(refresh);
+    (byPath[path] = byPath[path] || []).push(refresh);
+    refresh();
   }
 
-  /* Trạng thái gập/mở được nhớ lại: người chỉnh thường quay lại đúng mục hôm
-     qua họ đang làm dở. */
-  function openState() {
-    try { return JSON.parse(localStorage.getItem("sl.open") || "{}") || {}; }
-    catch (e) { return {}; }
-  }
-  function rememberOpen(id, on) {
-    try {
-      var m = openState(); m[id] = on;
-      localStorage.setItem("sl.open", JSON.stringify(m));
-    } catch (e) {}
+  function checkField(host, label, path, after) {
+    var f = el("label", "check"), c = el("input"); c.type = "checkbox";
+    f.appendChild(c); f.appendChild(document.createTextNode(" " + label));
+    c.addEventListener("change", function () { setPath(cfg, path, c.checked); if (after) after(); marks(); commit(); });
+    refreshers.push(function () { c.checked = !!getPath(cfg, path); });
+    host.appendChild(f);
   }
 
-  /* Dòng tóm tắt trên đầu mỗi tấm. Gọi lại sau mọi thay đổi — writeJson() chạy
-     trên đúng mọi đường commit nên hook vào đó là đủ, không sót nhánh nào. */
-  var stateRefs = [];
-  function refreshStates() { stateRefs.forEach(function (f) { f(); }); }
-
-  /** Dựng một nhóm tham số (một mục trong GROUPS) vào phần tử cha cho trước. */
-  /**
-   * Dựng một nhóm tham số (một mục trong GROUPS) vào phần tử cha cho trước.
-   * `titled = false` khi tấm chỉ chứa đúng một nhóm — lúc đó tiêu đề trên
-   * summary đã nói rồi, lặp lại chỉ tổ rối.
-   */
-  function buildGroup(grp, host, titled) {
-    var sec = el("section", "group");
-    if (titled) {
-      var head = el("header");
-      head.appendChild(el("span", "step", String(grp.step)));
-      head.appendChild(el("h3", null, grp.title));
-      sec.appendChild(head);
-    }
-    sec.appendChild(el("p", "why", grp.why));
-    SLIDERS.filter(function (s) { return s.g === grp.g; })
-           .forEach(function (s) { buildSlider(s, sec); });
-
-    if (grp.g === "grain") {
-      sec.appendChild(field("Hạt xám", "grain.mono", function () {
-        var w = el("label", "switch");
-        var cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.grain.mono;
-        cb.addEventListener("change", function () {
-          cfg.grain.mono = cb.checked;
-          dropGrainCache(); schedule(); writeJson(); remember();
-        });
-        w.appendChild(cb);
-        w.appendChild(el("span", null, "một lớp hạt dùng chung ba kênh"));
-        sliderRefs.push(function () { cb.checked = cfg.grain.mono; });
-        return w;
-      }));
-      sec.appendChild(el("p", "why",
-        "Khung xem dựng hạt ở đúng cỡ pixel của ảnh thật, nên nó cho thấy hạt khi soi 100% — " +
-        "in ra hoặc xem thu nhỏ cả khung thì hạt sẽ dịu hơn thế này. Hạt trong khung xem cố định " +
-        "để so được hai giá trị cạnh nhau; ảnh thật vẫn ngẫu nhiên mỗi tấm khi <code>seed</code> = 0."));
-    }
-
-    if (grp.g === "bloom") {
-      sec.appendChild(field("Chỉ vùng da", "bloom.skinOnly", function () {
-        var w = el("label", "switch");
-        var cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.bloom.skinOnly;
-        cb.addEventListener("change", function () {
-          cfg.bloom.skinOnly = cb.checked;
-          dropBloomCache(); schedule(); writeJson(); remember();
-        });
-        w.appendChild(cb);
-        w.appendChild(el("span", null, "lọc mặt nạ theo tông da"));
-        sliderRefs.push(function () { cb.checked = cfg.bloom.skinOnly; });
-        return w;
-      }));
-      sec.appendChild(el("p", "why", "Tắt đi thì cả ảnh phát sáng, chỉ còn ngưỡng loại vùng sáng chặn bớt — thường không phải thứ bạn muốn."));
-    }
-
-    if (grp.g === "warm") {
-      var f = el("div", "field");
-      f.appendChild(el("label", null, "Màu phủ vùng sáng"));
-      f.appendChild(el("span", "key", "warm.highlightColor"));
-      var ctl = el("div", "ctl");
-      var col = el("input"); col.type = "color"; col.value = cfg.warm.highlightColor;
-      var hex = el("input", null); hex.type = "text"; hex.value = cfg.warm.highlightColor;
-      hex.style.width = "92px"; hex.style.marginLeft = "8px";
-      function setColor(v) {
-        if (!/^#[0-9a-fA-F]{6}$/.test(v)) return;
-        cfg.warm.highlightColor = v.toLowerCase();
-        col.value = cfg.warm.highlightColor;
-        hex.value = cfg.warm.highlightColor;
-        schedule(); writeJson(); remember();
-      }
-      col.addEventListener("input", function () { setColor(col.value); });
-      hex.addEventListener("change", function () { setColor(hex.value.trim()); });
-      ctl.appendChild(col); ctl.appendChild(hex);
-      f.appendChild(ctl);
-      sec.appendChild(f);
-      sliderRefs.push(function () { col.value = cfg.warm.highlightColor; hex.value = cfg.warm.highlightColor; });
-    }
-
-  host.appendChild(sec);
+  function inputField(host, label, make) {
+    var f = el("label", "field");
+    f.appendChild(el("span", null, label));
+    f.appendChild(make());
+    host.appendChild(f);
   }
 
-  /** Nhóm "Ghi file & bỏ qua" — không tác động gì lên khung xem. */
-  function buildMisc(host) {
-    var misc = el("section", "group plain");
-    misc.appendChild(el("p", "why", "Những mục này không đổi gì trên khung xem, nhưng vẫn phải có trong file cấu hình."));
+  var openState = {};
+  try { openState = JSON.parse(localStorage.getItem("sl2.open") || "{}") || {}; } catch (e) { openState = {}; }
 
-    misc.appendChild(field("Bật hiệu ứng", "enabled", function () {
-      var w = el("label", "switch");
-      var cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.enabled;
-      cb.addEventListener("change", function () { cfg.enabled = cb.checked; schedule(); writeJson(); remember(); });
-      w.appendChild(cb); w.appendChild(el("span", null, "xử lý ảnh mới"));
-      sliderRefs.push(function () { cb.checked = cfg.enabled; });
-      return w;
-    }));
-
-    misc.appendChild(field("Chất lượng JPEG", "output.quality", function () {
-      var i = el("input"); i.type = "number"; i.min = 60; i.max = 100; i.step = 1; i.value = cfg.output.quality;
-      i.addEventListener("change", function () {
-        cfg.output.quality = Math.round(clamp(parseFloat(i.value) || 95, 60, 100));
-        i.value = cfg.output.quality; writeJson(); remember();
-      });
-      sliderRefs.push(function () { i.value = cfg.output.quality; });
-      return i;
-    }));
-
-    misc.appendChild(field("Lấy mẫu màu", "output.chromaSubsampling", function () {
-      var s = el("select");
-      ["4:4:4", "4:2:0"].forEach(function (v) {
-        var o = el("option", null, v); o.value = v; s.appendChild(o);
-      });
-      s.value = cfg.output.chromaSubsampling;
-      s.addEventListener("change", function () { cfg.output.chromaSubsampling = s.value; writeJson(); remember(); });
-      sliderRefs.push(function () { s.value = cfg.output.chromaSubsampling; });
-      return s;
-    }));
-
-    misc.appendChild(field("Sao lưu ảnh gốc", "backup.enabled", function () {
-      var w = el("label", "switch");
-      var cb = el("input"); cb.type = "checkbox"; cb.checked = cfg.backup.enabled;
-      cb.addEventListener("change", function () { cfg.backup.enabled = cb.checked; writeJson(); remember(); });
-      w.appendChild(cb); w.appendChild(el("span", null, "trước khi ghi đè"));
-      sliderRefs.push(function () { cb.checked = cfg.backup.enabled; });
-      return w;
-    }));
-
-    misc.appendChild(field("Thư mục sao lưu", "backup.folder", function () {
-      var i = el("input"); i.type = "text"; i.value = cfg.backup.folder; i.style.width = "120px";
-      i.addEventListener("change", function () {
-        cfg.backup.folder = i.value.trim() || "_original"; i.value = cfg.backup.folder; writeJson(); remember();
-      });
-      sliderRefs.push(function () { i.value = cfg.backup.folder; });
-      return i;
-    }));
-
-    misc.appendChild(field("Cạnh nhỏ nhất (px)", "limits.minEdge", function () {
-      var i = el("input"); i.type = "number"; i.min = 0; i.max = 20000; i.step = 50; i.value = cfg.limits.minEdge;
-      i.addEventListener("change", function () {
-        cfg.limits.minEdge = Math.round(clamp(parseFloat(i.value) || 0, 0, 20000));
-        i.value = cfg.limits.minEdge; writeJson(); remember();
-      });
-      sliderRefs.push(function () { i.value = cfg.limits.minEdge; });
-      return i;
-    }));
-
-    misc.appendChild(field("Cảnh báo khi chậm hơn (ms)", "limits.maxMs", function () {
-      var i = el("input"); i.type = "number"; i.min = 100; i.max = 60000; i.step = 100; i.value = cfg.limits.maxMs;
-      i.addEventListener("change", function () {
-        cfg.limits.maxMs = Math.round(clamp(parseFloat(i.value) || 1500, 100, 60000));
-        i.value = cfg.limits.maxMs; writeJson(); remember();
-      });
-      sliderRefs.push(function () { i.value = cfg.limits.maxMs; });
-      return i;
-    }));
-
-    var sk = el("div", "row stack");
-    var skTop = el("div", "top");
-    skTop.appendChild(el("label", null, "Bỏ qua đường dẫn chứa"));
-    skTop.appendChild(el("span", "key", "skip.pathContains"));
-    sk.appendChild(skTop);
-    sk.appendChild(el("div", "hint", "Mỗi dòng một chuỗi. Dùng khi dslrBooth gọi cả trên file template đã ghép — làm mềm cả tờ in sẽ nhoè luôn khung và logo."));
-    var ta = el("textarea");
-    ta.spellcheck = false;
-    ta.value = cfg.skip.pathContains.join("\n");
-    ta.placeholder = "\\prints\\\n_final";
-    ta.addEventListener("change", function () {
-      cfg.skip.pathContains = ta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
-      writeJson(); remember();
+  /** Một công cụ gập/mở; `keys` là các nhóm cfg nó quản, để biết đã chỉnh chưa và ↺ về đâu. */
+  function tool(pane, id, title, keys, build) {
+    var sec = el("section", "tool");
+    var hd = el("header");
+    hd.innerHTML = '<span class="chev">▸</span><h3>' + title + '</h3><span class="dot" title="Khác bộ giá trị đang chọn"></span>';
+    var rs = null;
+    if (keys.length) {
+      rs = el("button", "reset", "↺"); rs.title = "Đưa công cụ này về bộ giá trị đang chọn";
+      hd.appendChild(rs);
+    }
+    var body = el("div", "body");
+    sec.appendChild(hd); sec.appendChild(body);
+    $("pane-" + pane).appendChild(sec);
+    if (openState[id]) sec.classList.add("open");
+    hd.addEventListener("click", function (e) {
+      if (e.target === rs) return;
+      sec.classList.toggle("open");
+      openState[id] = sec.classList.contains("open");
+      try { localStorage.setItem("sl2.open", JSON.stringify(openState)); } catch (err) { /* chỉ là ghi nhớ gập/mở */ }
     });
-    sliderRefs.push(function () { ta.value = cfg.skip.pathContains.join("\n"); });
-    sk.appendChild(ta);
-    misc.appendChild(sk);
-    host.appendChild(misc);
+    if (rs) {
+      rs.addEventListener("click", function () {
+        keys.forEach(function (k) { setPath(cfg, k, clone(getPath(baseline, k))); });
+        dropCaches(); syncAll(); commit();
+      });
+      toolMarks.push(function () {
+        sec.classList.toggle("changed", keys.some(function (k) { return !same(getPath(cfg, k), getPath(baseline, k)); }));
+      });
+    }
+    build(body);
+  }
+
+  function groupSliders(host, g) {
+    SLIDERS.filter(function (s) { return s.g === g; }).forEach(function (s) { slider(host, s); });
+  }
+  function why(host, g) {
+    var grp = GROUPS.filter(function (x) { return x.g === g; })[0];
+    if (grp) host.appendChild(el("p", "note", grp.why));
   }
 
   function buildPanel() {
-    var host = $("panelParams");
-    host.innerHTML = "";
-    stateRefs = [];
+    // thanh chính: độ mịn da (cường độ bloom)
+    slider($("mainHost"), { path: "bloom.amount", label: "Độ mịn da", min: 0, max: 1, step: 0.01,
+                            hint: "Cường độ quầng sáng trên vùng da — tầng chính của Soft Light." });
 
-    /* ── preset: để trên cùng vì đây là chỗ bắt đầu mỗi lần chỉnh ── */
-    var pre = el("section", "group plain");
-    pre.appendChild(el("h3", null, "Bộ giá trị dựng sẵn"));
-    pre.appendChild(el("p", "why", "Nạp một mốc để so, rồi chỉnh tiếp từ đó."));
-    var bar = el("div");
-    bar.style.display = "flex"; bar.style.gap = "8px"; bar.style.flexWrap = "wrap";
-    [["File hiện tại", "current"], ["Mặc định trong code", "code"], ["Tắt hết hiệu ứng", "off"]]
-      .forEach(function (p) {
-        var b = el("button", "btn", p[0]);
-        b.addEventListener("click", function () { apply(PRESETS[p[1]]); });
-        bar.appendChild(b);
-      });
-    pre.appendChild(bar);
-    host.appendChild(pre);
-
-    var saved = openState();
-
-    SECTIONS.forEach(function (S) {
-      var d = el("details", "sect");
-      d.open = typeof saved[S.id] === "boolean" ? saved[S.id] : S.open;
-
-      var sum = document.createElement("summary");
-      sum.appendChild(el("span", "sect-title", S.title));
-      if (S.tag) sum.appendChild(el("span", "sect-tag", S.tag));
-      var st = el("span", "sect-state");
-      sum.appendChild(st);
-      d.appendChild(sum);
-
-      stateRefs.push(function () {
-        var v = S.state();
-        st.textContent = v;
-        st.className = "sect-state" + (v === "tắt" ? " off" : "");
-      });
-
-      var body = el("div", "sect-body");
-      if (S.groups.length) {
-        S.groups.forEach(function (gid) {
-          buildGroup(GROUPS.filter(function (g) { return g.g === gid; })[0], body,
-                     S.groups.length > 1);
-        });
-      } else {
-        buildMisc(body);
-      }
-      d.appendChild(body);
-
-      d.addEventListener("toggle", function () { rememberOpen(S.id, d.open); });
-      host.appendChild(d);
+    tool("skin", "bloom", "Bloom trên vùng da", ["bloom"], function (b) {
+      why(b, "bloom");
+      groupSliders(b, "bloom");
+      checkField(b, "Chỉ vùng da (lọc mặt nạ theo tông da)", "bloom.skinOnly", dropBloomCache);
     });
 
-    var acc = el("section", "group plain");
-    acc.appendChild(el("h3", null, "Khung xem chính xác đến đâu"));
-    acc.appendChild(el("p", "why",
-      "Trang này chạy lại đúng sáu tầng của <code>src/pipeline.js</code>, kể cả cách ghép tay " +
-      "lớp bloom và đường cong đáp ứng của tầng hạt. Đối chiếu đầu-cuối với ảnh do exe thật " +
-      "xuất ra, sai lệch trung bình là 1,0/255 (0,4%), lớn nhất 9/255 và dồn ở đúng đường viền " +
-      "mặt nạ da — mắt không thấy được. " +
-      "Chốt xong thì chạy <code>npm run preview -- anh.jpg</code> để soi bản do chính exe xuất ra."));
-    host.appendChild(acc);
+    tool("color", "tone", "Tông", ["tone"], function (b) { why(b, "tone"); groupSliders(b, "tone"); });
+    tool("color", "warm", "Tông ấm", ["warm"], function (b) {
+      why(b, "warm");
+      groupSliders(b, "warm");
+      inputField(b, "Màu phủ vùng sáng", function () {
+        var col = el("input"); col.type = "color";
+        col.addEventListener("input", function () { cfg.warm.highlightColor = col.value.toLowerCase(); schedule(); });
+        col.addEventListener("change", function () { cfg.warm.highlightColor = col.value.toLowerCase(); marks(); commit(); });
+        refreshers.push(function () { col.value = cfg.warm.highlightColor; });
+        return col;
+      });
+    });
 
-    refreshStates();
+    tool("details", "softFocus", "Soft focus", ["softFocus"], function (b) { why(b, "softFocus"); groupSliders(b, "softFocus"); });
+    tool("details", "clarity", "Giảm clarity", ["clarity"], function (b) { why(b, "clarity"); groupSliders(b, "clarity"); });
+    tool("details", "grain", "Nhiễu hạt", ["grain"], function (b) {
+      why(b, "grain");
+      groupSliders(b, "grain");
+      checkField(b, "Hạt xám (một lớp dùng chung ba kênh)", "grain.mono", dropGrainCache);
+    });
+    tool("details", "check", "Kiểm tra ảnh", [], function (b) {
+      b.appendChild(el("p", "note", "Chấm trên ảnh đã lọc: dùng được chưa, sai thì chỉnh ở đâu."));
+      ["h-crushed", "h-blown", "h-subject", "h-skin"].forEach(function (id) { var c = el("div", "hcard"); c.id = id; b.appendChild(c); });
+    });
+
+    // tab File: các mục không đổi gì trên khung xem nhưng vẫn phải có trong file
+    var fo = $("fileOpts");
+    checkField(fo, "Bật hiệu ứng (xử lý ảnh mới)", "enabled");
+    inputField(fo, "Chất lượng JPEG", function () {
+      var i = el("input"); i.type = "number"; i.min = 60; i.max = 100; i.step = 1; i.style.width = "64px";
+      i.addEventListener("change", function () { cfg.output.quality = Math.round(clamp(parseFloat(i.value) || 95, 60, 100)); i.value = cfg.output.quality; commit(); });
+      refreshers.push(function () { i.value = cfg.output.quality; });
+      return i;
+    });
+    inputField(fo, "Lấy mẫu màu", function () {
+      var s = el("select");
+      ["4:4:4", "4:2:0"].forEach(function (v) { var o = el("option", null, v); o.value = v; s.appendChild(o); });
+      s.addEventListener("change", function () { cfg.output.chromaSubsampling = s.value; commit(); });
+      refreshers.push(function () { s.value = cfg.output.chromaSubsampling; });
+      return s;
+    });
+    checkField(fo, "Sao lưu ảnh gốc trước khi ghi đè", "backup.enabled");
+    inputField(fo, "Thư mục sao lưu", function () {
+      var i = el("input"); i.type = "text"; i.style.width = "120px";
+      i.addEventListener("change", function () { cfg.backup.folder = i.value.trim() || "_original"; i.value = cfg.backup.folder; commit(); });
+      refreshers.push(function () { i.value = cfg.backup.folder; });
+      return i;
+    });
+    inputField(fo, "Cạnh nhỏ nhất (px)", function () {
+      var i = el("input"); i.type = "number"; i.min = 0; i.max = 20000; i.step = 50; i.style.width = "80px";
+      i.addEventListener("change", function () { cfg.limits.minEdge = Math.round(clamp(parseFloat(i.value) || 0, 0, 20000)); i.value = cfg.limits.minEdge; commit(); });
+      refreshers.push(function () { i.value = cfg.limits.minEdge; });
+      return i;
+    });
+    inputField(fo, "Cảnh báo khi chậm hơn (ms)", function () {
+      var i = el("input"); i.type = "number"; i.min = 100; i.max = 60000; i.step = 100; i.style.width = "80px";
+      i.addEventListener("change", function () { cfg.limits.maxMs = Math.round(clamp(parseFloat(i.value) || 1500, 100, 60000)); i.value = cfg.limits.maxMs; commit(); });
+      refreshers.push(function () { i.value = cfg.limits.maxMs; });
+      return i;
+    });
+    fo.appendChild(el("p", "note", "Bỏ qua đường dẫn chứa (mỗi dòng một chuỗi) — dùng khi dslrBooth gọi cả trên file template đã ghép."));
+    var ta = el("textarea", "plain"); ta.rows = 3; ta.spellcheck = false; ta.placeholder = "\\prints\\\n_final";
+    ta.addEventListener("change", function () {
+      cfg.skip.pathContains = ta.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
+      commit();
+    });
+    refreshers.push(function () { ta.value = cfg.skip.pathContains.join("\n"); });
+    fo.appendChild(ta);
   }
 
-  function field(labelText, keyText, makeCtl) {
-    var f = el("div", "field");
-    f.appendChild(el("label", null, labelText));
-    f.appendChild(el("span", "key", keyText));
-    var ctl = el("div", "ctl");
-    ctl.appendChild(makeCtl());
-    f.appendChild(ctl);
-    return f;
+  /* Histogram: ba kênh chồng nhau, chỗ trùng thành xám. */
+  var hcv = $("histo"), hctx = hcv.getContext("2d");
+  function drawHisto(d) {
+    var bins = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+    var step = Math.max(4, Math.floor(d.length / 4 / 120000) * 4);
+    for (var i = 0; i < d.length; i += step) { bins[0][d[i]]++; bins[1][d[i + 1]]++; bins[2][d[i + 2]]++; }
+    var max = 1, c, v;
+    for (c = 0; c < 3; c++) for (v = 2; v < 254; v++) max = Math.max(max, bins[c][v]);
+    var W = hcv.width, H = hcv.height;
+    hctx.clearRect(0, 0, W, H);
+    hctx.globalCompositeOperation = "lighter";
+    var cols = ["rgba(220,70,70,.75)", "rgba(70,200,90,.75)", "rgba(80,120,235,.75)"];
+    for (c = 0; c < 3; c++) {
+      hctx.fillStyle = cols[c];
+      hctx.beginPath(); hctx.moveTo(0, H);
+      for (v = 0; v < 256; v++) hctx.lineTo(v / 255 * W, H - Math.min(1, Math.sqrt(bins[c][v] / max)) * (H - 2));
+      hctx.lineTo(W, H); hctx.closePath(); hctx.fill();
+    }
+    hctx.globalCompositeOperation = "source-over";
   }
 
-  function syncAll() { sliderRefs.forEach(function (f) { f(); }); }
+  /** Bộ giá trị đang chọn ở ô trên cùng: khớp preset nào thì hiện tên preset đó. */
+  var styleSel = $("styleSel");
+  function showStyle() {
+    var name = "loaded";
+    ["current", "code", "off"].forEach(function (k) { if (name === "loaded" && same(PRESETS[k], baseline)) name = k; });
+    styleSel.querySelector('option[value="loaded"]').hidden = name !== "loaded";
+    styleSel.value = name;
+  }
+  styleSel.addEventListener("change", function () {
+    if (styleSel.value === "loaded") return;
+    baseline = clone(PRESETS[styleSel.value]);
+    apply(baseline);
+    toast(styleSel.value === "off" ? "Đã tắt hết hiệu ứng — ảnh ra như ảnh gốc." : "Đã nạp bộ giá trị.");
+  });
 
   function apply(next) {
     cfg = clone(next);
-    syncAll(); schedule(); writeJson(); remember();
+    dropCaches(); syncAll(); showStyle(); schedule(); writeJson(); remember();
   }
+
+  $("allAfterBtn").addEventListener("click", function () { setSplit(0); });
+  $("undoBtn").addEventListener("click", function () { apply(saved); toast("Đã về bản lưu / nạp gần nhất."); });
 
   /* ═══════════════════════════════════════════════════════════════
      6. XUẤT / NẠP softlight.config.json
@@ -1844,7 +1248,7 @@
      cần gọi refreshStates() để dòng tóm tắt trên các tấm gập không bị lệch. */
   function writeJson() {
     $("jsonOut").value = toJson(cfg);
-    refreshStates();
+    marks();
   }
 
   function toast(msg) {
@@ -1890,6 +1294,7 @@
     var text = $("jsonOut").value;
     if (hostSave) {
       hostSave.save({ filename: "softlight.config.json", data: text }).then(function () {
+        saved = clone(cfg); remember();
         toast("Đã lưu softlight.config.json");
       }, function (err) {
         var code = err && err.code;
@@ -1907,6 +1312,7 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
+      saved = clone(cfg); remember();
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     } catch (e) {
       toast("Không tải được ở đây — dùng nút Sao chép.");
@@ -1934,8 +1340,9 @@
     catch (e) { writeJson(); toast("JSON sai cú pháp: " + e.message); return; }
     var merged = coerce(parsed);
     baseline = clone(merged);
+    saved = clone(merged);
     apply(merged);
-    toast("Đã nạp. Ô nào lệch so với JSON vừa dán sẽ được tô sáng.");
+    toast("Đã nạp. Công cụ có chấm cam là đang khác file vừa nạp.");
   });
 
   /** Trộn với mặc định và kẹp về miền hợp lệ — cùng luật với loadConfig(). */
@@ -1991,50 +1398,36 @@
   }
 
   /* ═══════════════════════════════════════════════════════════════
-     7. TAB, THEME, GHI NHỚ
+     7. TAB, GHI NHỚ, KHỞI ĐỘNG
      ═══════════════════════════════════════════════════════════════ */
 
-  function selectTab(which) {
-    var p = which === "params";
-    $("tabParams").setAttribute("aria-selected", String(p));
-    $("tabJson").setAttribute("aria-selected", String(!p));
-    $("panelParams").hidden = !p;
-    $("panelJson").hidden = p;
+  var tabBtns = document.querySelectorAll(".tabs button");
+  function selectTab(name) {
+    Array.prototype.forEach.call(tabBtns, function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === name)); });
+    ["skin", "color", "details", "file"].forEach(function (n) { $("pane-" + n).hidden = n !== name; });
+    try { localStorage.setItem("sl2.tab", name); } catch (e) { /* chỉ là ghi nhớ tab */ }
   }
-  $("tabParams").addEventListener("click", function () { selectTab("params"); });
-  $("tabJson").addEventListener("click", function () { selectTab("json"); });
-
-  var themeBtn = $("themeBtn");
-  function setTheme(t) {
-    if (t) document.documentElement.setAttribute("data-theme", t);
-    else document.documentElement.removeAttribute("data-theme");
-    var dark = t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    themeBtn.textContent = dark ? "Nền sáng" : "Nền tối";
-    try { localStorage.setItem("sl.theme", t || ""); } catch (e) {}
-  }
-  themeBtn.addEventListener("click", function () {
-    var cur = document.documentElement.getAttribute("data-theme");
-    var dark = cur === "dark" || (!cur && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    setTheme(dark ? "light" : "dark");
-  });
+  Array.prototype.forEach.call(tabBtns, function (b) { b.addEventListener("click", function () { selectTab(b.dataset.tab); }); });
 
   function remember() {
-    try { localStorage.setItem("sl.cfg", JSON.stringify(cfg)); } catch (e) {}
+    try { localStorage.setItem("sl2.cfg", JSON.stringify({ cfg: cfg, baseline: baseline, saved: saved })); } catch (e) { /* trình duyệt chặn bộ nhớ */ }
   }
 
   (function init() {
     try {
-      var t = localStorage.getItem("sl.theme");
-      setTheme(t || null);
-    } catch (e) { setTheme(null); }
-
-    try {
-      var saved = localStorage.getItem("sl.cfg");
-      if (saved) cfg = coerce(JSON.parse(saved));
-    } catch (e) {}
-
+      var s = JSON.parse(localStorage.getItem("sl2.cfg") || "null");
+      if (s && s.cfg) {
+        cfg = coerce(s.cfg);
+        if (s.baseline) baseline = coerce(s.baseline);
+        saved = s.saved ? coerce(s.saved) : clone(cfg);
+      }
+    } catch (e) { /* bộ nhớ hỏng thì bắt đầu từ file hiện tại */ }
+    var t = "skin";
+    try { t = localStorage.getItem("sl2.tab") || t; } catch (e) { /* mặc định tab Da */ }
     buildPanel();
+    selectTab(t);
     syncAll();
+    showStyle();
     writeJson();
     applySplit();
     loadSample();

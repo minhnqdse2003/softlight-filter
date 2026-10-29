@@ -23,8 +23,28 @@ const PAGES = [
   { src: 'instax.html', out: 'instax-tuner.html', mark: '<div class="app">' },
 ];
 
+/*
+ * Trang Instax dùng ĐÚNG file src/filters/instax/look.js mà instax.exe chạy:
+ * chỗ đánh dấu bên dưới được thay bằng nguyên văn file đó, bỏ chữ `export` ở
+ * đầu dòng để chạy được như script thường. Một công thức, hai nơi dùng — ảnh
+ * xem trước và bản digital không thể lệch nhau.
+ *
+ * Các trang chỉnh dùng chung một bộ giao diện, web/ui.css, dán vào chỗ đánh dấu
+ * UI_CSS — sửa một chỗ là cả hai trang đổi theo.
+ */
+const INLINE = {
+  '/*@@LOOK_JS@@*/': () =>
+    readFileSync(join(here, '..', 'src', 'filters', 'instax', 'look.js'), 'utf8')
+      .replace(/^export (?=(?:async )?function|const|let|class)/gm, ''),
+  '/*@@UI_CSS@@*/': () => readFileSync(join(here, 'ui.css'), 'utf8'),
+};
+
 for (const page of PAGES) {
-  const src = readFileSync(join(here, page.src), 'utf8');
+  let src = readFileSync(join(here, page.src), 'utf8');
+  for (const [mark, body] of Object.entries(INLINE)) {
+    if (src.includes(mark)) src = src.replace(mark, () => body());
+  }
+  if (/^export /m.test(src)) throw new Error(`${page.src}: còn chữ export sau khi dán module`);
 
   const at = src.indexOf('\n' + page.mark);
   if (at < 0) throw new Error(`Không tìm thấy ${page.mark} trong ${page.src}`);

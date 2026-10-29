@@ -40,15 +40,15 @@ export const FILTERS = {
   instax: {
     id: 'instax',
     title: 'Instax Wide',
-    blurb: 'Chất phim lấy liền: vibrance chọn lọc, matte black, tách tông lam/kem, hạt phim.',
+    blurb: 'Chất phim lấy liền cho bản digital: Exposure, HDR, Curve, Color Balance, Film Grain… (cấu hình v2) hoặc sáu tầng cũ (v1).',
     configFile: 'instax.config.json',
     exeFile: 'instax.exe',
     tunerFile: 'instax-tuner.html',
     loadConfig: (path) => loadInstax(path),
     render: async (input, cfg, opts) =>
       (await import('./instax/pipeline.js')).renderInstax(input, cfg, opts),
-    renderComparison: async (input, cfg, maxWidth) =>
-      (await import('./instax/pipeline.js')).renderComparison(input, cfg, maxWidth),
+    renderComparison: async (input, cfg, maxWidth, opts) =>
+      (await import('./instax/pipeline.js')).renderComparison(input, cfg, maxWidth, opts),
     selftest: async (cfg) => (await import('./instax/pipeline.js')).selftest(cfg),
     verdicts: async (m) => (await import('./instax/pipeline.js')).verdicts(m),
   },
