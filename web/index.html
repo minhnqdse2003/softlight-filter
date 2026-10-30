@@ -225,6 +225,27 @@
       </div>
     </article>
 
+    <article class="card">
+      <div class="swatch" style="background: linear-gradient(90deg, #5f7b93, #9cb2c9 60%, #f4f6f8)"></div>
+      <div class="body">
+        <h3>Tuyết</h3>
+        <span class="id">--filter snow</span>
+        <p>
+          Rắc tuyết theo <strong>năm lớp độ sâu</strong> qua một ống kính ảo: bokeh sát ống kính,
+          hạt sắc quanh người, hạt sau lưng bị che theo <strong>dáng người tách tự động</strong>.
+          Hạt ăn màu phông nên hợp mọi phông in. Một thanh <strong>Lượng tuyết</strong> cho người vận hành.
+        </p>
+        <dl class="files">
+          <dt>exe</dt><dd>snow.exe</dd>
+          <dt>cấu hình</dt><dd>snow.config.json</dd>
+          <dt>log</dt><dd>logs/snow.log</dd>
+        </dl>
+        <div class="actions">
+          <a class="btn primary" href="snow-tuner.html">Mở trang chỉnh</a>
+        </div>
+      </div>
+    </article>
+
   </div>
 
   <h2>Cắm vào dslrBooth</h2>
@@ -252,6 +273,8 @@
     <tr><td>node src/cli.js --filter instax --dir thu-muc</td><td>xử lý cả thư mục</td></tr>
     <tr><td>node src/cli.js --filter instax --restore thu-muc</td><td>trả ảnh gốc từ backup về chỗ cũ</td></tr>
     <tr><td>node src/cli.js …</td><td>bỏ <code>--filter</code> thì chạy Soft Light, đúng như trước</td></tr>
+    <tr><td>node src/cli.js --filter snow --matte anh.jpg</td><td>Tuyết: ghi matte tách người ra anh.MATTE.png để nạp vào trang chỉnh (hoặc kéo thả ảnh vào tach-nguoi.bat)</td></tr>
+    <tr><td>npm run model</td><td>Tuyết: tải model tách người về models/ — chạy một lần trước dong-goi.bat</td></tr>
   </table>
 
   <h2>Thêm một bộ lọc mới</h2>

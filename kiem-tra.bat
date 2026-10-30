@@ -23,5 +23,6 @@ if errorlevel 1 (
 REM Kiem tung bo loc mot: moi bo co file exe va file cau hinh rieng.
 "%NODE%" "%~dp0src\cli.js" --filter softlight --doctor
 "%NODE%" "%~dp0src\cli.js" --filter instax    --doctor
+"%NODE%" "%~dp0src\cli.js" --filter snow      --doctor
 echo.
 pause

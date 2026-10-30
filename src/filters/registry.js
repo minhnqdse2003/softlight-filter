@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { loadConfig as loadSoftLight, ROOT } from '../config.js';
 import { loadConfig as loadInstax } from './instax/config.js';
+import { loadConfig as loadSnow } from './snow/config.js';
 
 /**
  * SỔ ĐĂNG KÝ BỘ LỌC.
@@ -51,6 +52,27 @@ export const FILTERS = {
       (await import('./instax/pipeline.js')).renderComparison(input, cfg, maxWidth, opts),
     selftest: async (cfg) => (await import('./instax/pipeline.js')).selftest(cfg),
     verdicts: async (m) => (await import('./instax/pipeline.js')).verdicts(m),
+  },
+
+  snow: {
+    id: 'snow',
+    title: 'Tuyết',
+    blurb: 'Rắc tuyết nhiều lớp độ sâu: bokeh sát ống kính, hạt quanh người, hạt sau lưng bị người che.',
+    configFile: 'snow.config.json',
+    exeFile: 'snow.exe',
+    tunerFile: 'snow-tuner.html',
+    loadConfig: (path) => loadSnow(path),
+    render: async (input, cfg, opts) =>
+      (await import('./snow/pipeline.js')).renderSnow(input, cfg, opts),
+    renderComparison: async (input, cfg, maxWidth, opts) =>
+      (await import('./snow/pipeline.js')).renderComparison(input, cfg, maxWidth, opts),
+    selftest: async (cfg) => (await import('./snow/pipeline.js')).selftest(cfg),
+    verdicts: async (m) => (await import('./snow/pipeline.js')).verdicts(m),
+    // Lệnh và dòng --doctor riêng: matte tách người cho trang chỉnh, kiểm tra model.
+    commands: {
+      '--matte': async (rest) => (await import('./snow/pipeline.js')).writeMatte(rest[0]),
+    },
+    doctor: async () => (await import('./snow/pipeline.js')).doctor(),
   },
 };
 

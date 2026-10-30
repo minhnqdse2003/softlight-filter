@@ -225,6 +225,9 @@ async function cmdDoctor() {
   const cfg = FILTER.loadConfig();
   line(cfg.enabled, 'Cấu hình', cfg.enabled ? 'đang bật' : 'ĐANG TẮT (enabled: false)');
 
+  // Mắt xích riêng của từng bộ lọc (ví dụ model tách người của Tuyết).
+  if (FILTER.doctor) for (const [good, label, detail] of await FILTER.doctor()) line(good, label, detail);
+
   const rule = '  ' + '─'.repeat(72);
   console.log('');
   console.log('  KIỂM TRA MÔI TRƯỜNG');
@@ -538,6 +541,8 @@ filmong-filter — hậu kỳ ảnh cho dslrBooth · đang chạy bộ lọc: ${
     thêm --force                           xử lý lại kể cả khi đã có backup
     thêm --bw                              ảnh của lượt B&W (Instax: bật Black & White)
     thêm --max-edge <px>                   thu nhỏ cạnh dài trước khi xử lý (Instax)
+    node src/cli.js --filter snow --matte <anh.jpg>
+                                           ghi matte tách người ra anh.MATTE.png (cho trang chỉnh Tuyết)
 
   Chọn bộ lọc (mặc định: ${FILTERS.softlight.id}):
     --filter <id>                          đặt TRƯỚC hoặc SAU lệnh đều được
@@ -623,7 +628,8 @@ async function main() {
       case '--selftest': return FILTER.selftest ? FILTER.selftest(cfg) : cmdSelftest(cfg);
       case '--doctor': return cmdDoctor();
       case '--bench': return cmdBench(rest[0], cfg);
-      default: return usage();
+      // Lệnh riêng của từng bộ lọc (khai báo ở registry, ví dụ --matte của Tuyết).
+      default: return FILTER.commands && FILTER.commands[first] ? FILTER.commands[first](rest, cfg) : usage();
     }
   }
 

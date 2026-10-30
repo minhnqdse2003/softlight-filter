@@ -4,16 +4,37 @@ Hậu kỳ ảnh cho dslrBooth. Chạy trên máy booth, được dslrBooth gọ
 **Post-Processing**, xử lý ghi đè lên chính file ảnh — nên hiệu ứng có mặt trên
 cả bản in lẫn bản digital.
 
-## Hai bộ lọc, một bộ xử lý
+## Ba bộ lọc, một bộ xử lý
 
 | Bộ lọc | id | Trỏ dslrBooth tới | Cấu hình | Trang chỉnh |
 |---|---|---|---|---|
 | **Soft Light** | `softlight` | `softlight.exe` | `softlight.config.json` | `web/softlight-tuner.html` |
 | **Instax Wide** | `instax` | `instax.exe` | `instax.config.json` | `web/instax-tuner.html` |
+| **Tuyết** | `snow` | `snow.exe` | `snow.config.json` | `web/snow-tuner.html` |
 
 Soft Light làm mềm da bằng bloom trên mặt nạ tông da, phông nền giữ nguyên nét.
 Instax Wide dựng chất phim lấy liền: vibrance chọn lọc, matte black, tách tông
 lam/kem, hạt phim.
+Tuyết rắc tuyết theo năm lớp độ sâu (sát ống kính, trước mặt, quanh người, sau
+lưng, xa trong phông) qua một ống kính ảo: hạt gần thành đĩa bokeh, hạt ở mặt
+phẳng nét sắc, hạt phía sau bị vùng người che. Không đổi màu ảnh. Toán nằm ở
+`src/filters/snow/snow.js`, dùng chung cho `snow.exe` và trang chỉnh.
+
+Vùng người của Tuyết được **tách tự động** trong từng ảnh bằng MODNet (Apache-2.0,
+chạy CPU qua `onnxruntime-node`, ~300 ms ở cạnh ngắn 512px). Model không nằm
+trong git — trên máy đóng gói chạy **`npm run model`** một lần (tải 26 MB, kiểm
+SHA-256) trước `dong-goi.bat`. Thiếu model hay model lỗi thì `snow.exe` ghi cảnh
+báo vào log và dùng elip đặt tay trong `snow.config.json`, không làm hỏng phiên
+chụp. Trang chỉnh không chạy được model: kéo thả ảnh vào **`tach-nguoi.bat`** để
+có file `.MATTE.png`, rồi nạp ở tab Người để xem trước đúng dáng người.
+
+Mỗi ảnh có bộ hạt riêng (seed theo tên file), và mục `vary` làm lượng tuyết, hướng
+gió, số bokeh lệch ngẫu nhiên giữa các tấm — chạy lại một tấm vẫn ra y hệt. Mục
+`look` chỉnh màu **sau** khi rắc tuyết, bằng đúng engine của Instax (`look.js`),
+có preset "Đông mercies", "Sương giá", "Instax chuẩn cộng đồng"; mặc định tắt.
+Clarity và Film Grain là hai công cụ tốn thời gian nhất (~0.45 s / ~0.3 s ở ảnh
+6MP). Trang chỉnh có ống hút cho White Balance và Color Editor, đầu dò dưới con
+trỏ (giá trị, vùng sáng/tối, dải màu), và Curve chỉnh tại chỗ trên ảnh.
 
 Mở **`web/index.html`** để đi tới trang chỉnh của từng bộ lọc — đó là chỗ tập
 trung mọi bộ lọc, kèm hướng dẫn cắm vào dslrBooth.

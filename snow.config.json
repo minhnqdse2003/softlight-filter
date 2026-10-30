@@ -1,0 +1,67 @@
+{
+  "_doc": "Bo loc Tuyet - cau hinh v1. Chinh bang web/snow-tuner.html roi bam Luu, dat file nay canh snow.exe. amount = luong tuyet (%, nhan so hat moi lop). vary = bien thien giua cac anh (+/- luong tuyet %, huong gio do, so bokeh %). seed 0 = moi anh mot bo hat rieng (theo ten file). camera: ong kinh AO de tinh do mo cua tuyet (met, mm). layers: lens = sat ong kinh, front = truoc mat mau, focus = quanh mau, behind = sau lung mau (bi nguoi che), far = xa trong phong. subject.mode: auto = tach nguoi tu dong (can models/modnet.onnx), neu khong chay duoc thi dung elip x/y/w/h (%); ellipse = luon dung elip; off = khong che. look: chinh mau SAU khi rac tuyet, cung bo cong cu voi Instax (enabled = bat/tat, strength = do dam); LUT .cube dat trong thu muc luts canh snow.exe.",
+  "version": 1,
+  "enabled": true,
+  "amount": 100,
+  "seed": 0,
+  "camera": { "focal": 35, "focus": 1.8, "backdrop": 2.6, "aperture": 2.8, "blades": 0 },
+  "flakes": { "minMm": 2.5, "maxMm": 14, "clump": 60, "chip": 40, "crystal": 0, "clumping": 40 },
+  "wind": { "angle": 10, "trail": 15 },
+  "vary": { "amount": 20, "wind": 8, "bokeh": 50 },
+  "light": { "brightness": 95, "ambient": 30, "backlight": 40, "glow": 30 },
+  "layers": {
+    "lens": { "enabled": true, "count": 5, "size": 100, "opacity": 60 },
+    "front": { "enabled": true, "count": 50, "size": 100, "opacity": 90 },
+    "focus": { "enabled": true, "count": 160, "size": 100, "opacity": 95 },
+    "behind": { "enabled": true, "count": 260, "size": 100, "opacity": 90 },
+    "far": { "enabled": true, "count": 420, "size": 100, "opacity": 70, "depth": 6 }
+  },
+  "subject": { "mode": "auto", "x": 50, "y": 60, "w": 70, "h": 100, "feather": 12 },
+  "faceGuard": { "enabled": true, "maxSize": 4 },
+  "look": {
+    "enabled": false,
+    "strength": 100,
+    "lut": { "file": "", "opacity": 100 },
+    "whiteBalance": { "kelvin": 5500, "tint": 0 },
+    "exposure": { "exposure": 0, "contrast": 0, "brightness": 0, "saturation": 0 },
+    "hdr": { "highlight": 0, "shadow": 0, "white": 0, "black": 0 },
+    "levels": {
+      "rgb": { "inBlack": 0, "inWhite": 255, "gamma": 1, "outBlack": 0, "outWhite": 255 },
+      "r": { "inBlack": 0, "inWhite": 255, "gamma": 1, "outBlack": 0, "outWhite": 255 },
+      "g": { "inBlack": 0, "inWhite": 255, "gamma": 1, "outBlack": 0, "outWhite": 255 },
+      "b": { "inBlack": 0, "inWhite": 255, "gamma": 1, "outBlack": 0, "outWhite": 255 }
+    },
+    "curve": {
+      "rgb": [[0, 0], [255, 255]],
+      "luma": [[0, 0], [255, 255]],
+      "r": [[0, 0], [255, 255]],
+      "g": [[0, 0], [255, 255]],
+      "b": [[0, 0], [255, 255]]
+    },
+    "colorBalance": {
+      "master": { "hue": 0, "saturation": 0 },
+      "shadow": { "hue": 0, "saturation": 0, "lightness": 0 },
+      "midtone": { "hue": 0, "saturation": 0, "lightness": 0 },
+      "highlight": { "hue": 0, "saturation": 0, "lightness": 0 }
+    },
+    "colorEditor": {
+      "red": { "hue": 0, "saturation": 0, "lightness": 0 },
+      "orange": { "hue": 0, "saturation": 0, "lightness": 0 },
+      "yellow": { "hue": 0, "saturation": 0, "lightness": 0 },
+      "green": { "hue": 0, "saturation": 0, "lightness": 0 },
+      "cyan": { "hue": 0, "saturation": 0, "lightness": 0 },
+      "blue": { "hue": 0, "saturation": 0, "lightness": 0 },
+      "magenta": { "hue": 0, "saturation": 0, "lightness": 0 }
+    },
+    "blackWhite": { "enabled": false, "red": 0, "yellow": 0, "green": 0, "cyan": 0, "blue": 0, "magenta": 0, "highlightHue": 0, "highlightSaturation": 0, "shadowHue": 0, "shadowSaturation": 0 },
+    "clarity": { "method": "natural", "clarity": 0, "structure": 0 },
+    "vignetting": { "amount": 0, "method": "elliptic" },
+    "grain": { "type": "fine", "impact": 0, "granularity": 50, "seed": 0 }
+  },
+  "output": { "quality": 95, "chromaSubsampling": "4:4:4" },
+  "backup": { "enabled": true, "folder": "_original" },
+  "skip": {
+    "pathContains": []
+  },
+  "limits": { "minEdge": 400, "maxMs": 2500 }
+}

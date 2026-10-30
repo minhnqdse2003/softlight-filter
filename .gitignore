@@ -9,3 +9,8 @@ node/
 *.softlight.lock
 *.instax.tmp
 *.instax.lock
+*.snow.tmp
+*.snow.lock
+*.MATTE.png
+# model tách người (26 MB) — tải bằng: npm run model
+models/*.onnx

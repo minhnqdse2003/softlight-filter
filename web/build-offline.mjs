@@ -21,6 +21,7 @@ const PAGES = [
   { src: 'hub.html', out: 'index.html', mark: '<div class="wrap">' },
   { src: 'tuner.html', out: 'softlight-tuner.html', mark: '<div class="app">' },
   { src: 'instax.html', out: 'instax-tuner.html', mark: '<div class="app">' },
+  { src: 'snow.html', out: 'snow-tuner.html', mark: '<div class="app">' },
 ];
 
 /*
@@ -35,6 +36,10 @@ const PAGES = [
 const INLINE = {
   '/*@@LOOK_JS@@*/': () =>
     readFileSync(join(here, '..', 'src', 'filters', 'instax', 'look.js'), 'utf8')
+      .replace(/^export (?=(?:async )?function|const|let|class)/gm, ''),
+  // Trang Tuyết: cùng cách làm với look.js — snow.exe và trang chỉnh chạy một file.
+  '/*@@SNOW_JS@@*/': () =>
+    readFileSync(join(here, '..', 'src', 'filters', 'snow', 'snow.js'), 'utf8')
       .replace(/^export (?=(?:async )?function|const|let|class)/gm, ''),
   '/*@@UI_CSS@@*/': () => readFileSync(join(here, 'ui.css'), 'utf8'),
 };

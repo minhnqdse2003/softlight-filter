@@ -12,8 +12,11 @@ export const LUT_DIR = join(ROOT, 'luts');
 
 const cubeCache = new Map();
 
-/** Đọc LUT của cấu hình v2 (có cache theo thời điểm sửa file). Trả về { lut, warn }. */
-function loadUserLut(cfg) {
+/**
+ * Đọc LUT của cấu hình v2 (có cache theo thời điểm sửa file). Trả về { lut, warn }.
+ * Bộ lọc Tuyết dùng lại cho mục `look` của nó (cùng thư mục luts).
+ */
+export function loadUserLut(cfg) {
   if (!cfg.lut || !cfg.lut.file || cfg.lut.opacity <= 0) return { lut: null };
   const path = join(LUT_DIR, cfg.lut.file);
   try {

@@ -13,9 +13,13 @@
     "bench": "node src/cli.js --bench",
     "selftest:instax": "node src/cli.js --filter instax --selftest",
     "preview:instax": "node src/cli.js --filter instax --preview",
+    "selftest:snow": "node src/cli.js --filter snow --selftest",
+    "preview:snow": "node src/cli.js --filter snow --preview",
+    "model": "node tools/fetch-model.mjs",
     "web": "node web/build-offline.mjs"
   },
   "dependencies": {
+    "onnxruntime-node": "1.30.0",
     "sharp": "^0.34.2"
   }
 }

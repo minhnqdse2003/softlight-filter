@@ -1,0 +1,3677 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dựng cảnh tuyết</title>
+
+<style>
+/* Giao diện chung của các trang chỉnh (instax.html, tuner.html).
+   web/build-offline.mjs dán file này vào chỗ đánh dấu UI_CSS của từng trang. */
+:root {
+  --bg:      #161616;
+  --viewer:  #202020;
+  --panel:   #262626;
+  --tool:    #2d2d2d;
+  --tool-hd: #333333;
+  --field:   #1b1b1b;
+  --line:    #3c3c3c;
+  --text:    #dcdcdc;
+  --dim:     #9a9a9a;
+  --mute:    #6f6f6f;
+  --accent:  #e0a23e;
+  --accent-soft: rgba(224, 162, 62, .18);
+  --good:    #6fbf73;
+  --warn:    #e0704e;
+  --sans: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 12px/1.35 var(--sans); }
+body { overflow: hidden; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+code { font-family: var(--mono); font-size: 11px; color: #cfcfcf; }
+
+.app { display: grid; grid-template-rows: 40px 1fr; height: 100vh; }
+
+/* ── thanh trên ── */
+.top { display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #1c1c1c; border-bottom: 1px solid #000; }
+.top h1 { font-size: 13px; font-weight: 600; margin: 0 10px 0 0; letter-spacing: .02em; }
+.top h1 span { color: var(--dim); font-weight: 400; }
+.top .spacer { flex: 1; }
+.status { color: var(--dim); font-family: var(--mono); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.btn { background: #3a3a3a; border: 1px solid #4a4a4a; border-radius: 3px; padding: 4px 10px; line-height: 16px; }
+.btn:hover { background: #444; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1a1a; font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.ghost { background: transparent; border-color: #444; }
+.btn:disabled { opacity: .45; cursor: default; }
+.filepick { position: relative; overflow: hidden; }
+.filepick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.seg { display: inline-flex; border: 1px solid #4a4a4a; border-radius: 3px; overflow: hidden; }
+.seg button { background: transparent; border: 0; padding: 4px 9px; color: var(--dim); }
+.seg button[aria-pressed="true"] { background: #4a4a4a; color: var(--text); }
+
+/* ── khung xem + bảng công cụ ── */
+.work { display: grid; grid-template-columns: 1fr 340px; min-height: 0; }
+.viewer { display: grid; grid-template-rows: 1fr 34px; min-width: 0; min-height: 0; background: var(--viewer); }
+.stage { position: relative; display: grid; place-items: center; min-height: 0; padding: 18px; overflow: hidden; }
+.stage.drop { outline: 2px dashed var(--accent); outline-offset: -10px; }
+.empty { text-align: center; color: var(--dim); max-width: 380px; }
+.empty h2 { color: var(--text); font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+.frame { position: relative; max-width: 100%; max-height: 100%; line-height: 0; box-shadow: 0 0 0 1px #000, 0 6px 30px rgba(0,0,0,.5); }
+.frame canvas { max-width: 100%; max-height: calc(100vh - 40px - 34px - 36px); display: block; }
+.frame canvas.before { position: absolute; inset: 0; width: 100%; height: 100%; }
+.divider { position: absolute; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,.85); cursor: ew-resize; }
+.divider .glyph { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #fff; color: #222;
+                  border-radius: 10px; font-size: 11px; line-height: 18px; padding: 0 5px; }
+.tag { position: absolute; top: 8px; font-size: 10px; line-height: 16px; padding: 0 6px; border-radius: 2px; background: rgba(0,0,0,.6); color: #ddd; }
+.tag.l { left: 8px; } .tag.r { right: 8px; }
+.viewbar { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-top: 1px solid #000; background: #1c1c1c; }
+
+.tools { display: grid; grid-template-rows: auto auto auto 1fr auto; min-height: 0; background: var(--panel); border-left: 1px solid #000; }
+.histo { padding: 8px 10px 6px; border-bottom: 1px solid #1a1a1a; }
+.histo canvas { width: 100%; height: 74px; display: block; background: #1a1a1a; border-radius: 2px; }
+
+/* thẻ trên cùng: thanh chính */
+.look { padding: 10px 12px 12px; background: #2f2a22; border-bottom: 1px solid #1a1a1a; }
+.look .row { display: flex; align-items: center; gap: 8px; }
+.look .title { font-weight: 600; letter-spacing: .06em; font-size: 11px; color: var(--accent); text-transform: uppercase; white-space: nowrap; }
+.look select { flex: 1; min-width: 0; }
+.look .big { margin-top: 10px; }
+.look .big .sl-head label { font-size: 12px; color: var(--text); }
+.look .big input[type=range] { height: 22px; }
+.look .big input[type=range]::-webkit-slider-runnable-track { height: 4px; }
+.look .big input[type=range]::-webkit-slider-thumb { width: 16px; height: 16px; margin-top: -6px; background: var(--accent); }
+.look .hint { color: var(--dim); font-size: 11px; margin-top: 4px; }
+.look .opts { display: flex; gap: 14px; margin-top: 8px; color: var(--dim); }
+
+.tabs { display: flex; background: #222; border-bottom: 1px solid #1a1a1a; }
+.tabs button { flex: 1; background: transparent; border: 0; padding: 7px 0; color: var(--dim); border-bottom: 2px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.panes { overflow-y: auto; min-height: 0; }
+.pane[hidden] { display: none; }
+
+/* một công cụ (gập / mở) */
+.tool { border-bottom: 1px solid #1d1d1d; background: var(--tool); }
+.tool > header { display: flex; align-items: center; gap: 6px; padding: 6px 8px 6px 10px; background: var(--tool-hd); cursor: pointer; user-select: none; }
+.tool > header .chev { width: 10px; color: var(--dim); transition: transform .12s; }
+.tool.open > header .chev { transform: rotate(90deg); }
+.tool > header h3 { margin: 0; font-size: 12px; font-weight: 600; flex: 1; }
+.tool > header .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); visibility: hidden; }
+.tool.changed > header .dot { visibility: visible; }
+.tool > header .reset { background: transparent; border: 0; color: var(--dim); font-size: 14px; line-height: 14px; padding: 2px 4px; border-radius: 2px; }
+.tool > header .reset:hover { background: #444; color: var(--text); }
+.tool > .body { padding: 6px 10px 10px; display: none; }
+.tool.open > .body { display: block; }
+.note { color: var(--mute); font-size: 11px; margin: 4px 0 2px; }
+
+/* thanh trượt: nhãn trái, ô số phải, rãnh mảnh bên dưới */
+.sl { margin: 5px 0 2px; }
+.sl-head { display: flex; align-items: center; }
+.sl-head label { flex: 1; color: #c8c8c8; cursor: default; }
+.sl-head input[type=number] { width: 58px; background: var(--field); border: 1px solid #3a3a3a; border-radius: 2px; padding: 1px 4px;
+                              text-align: right; font-family: var(--mono); font-size: 11px; color: var(--text); -moz-appearance: textfield; }
+.sl-head input[type=number]::-webkit-inner-spin-button { display: none; }
+.sl-head input[type=number].off { color: var(--dim); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 16px; margin: 0; background: transparent; cursor: pointer; }
+input[type=range]:focus { outline: none; }
+input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--trk, #555); border-radius: 1px; }
+input[type=range]::-moz-range-track { height: 2px; background: var(--trk, #555); }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 11px; height: 11px; border-radius: 50%; background: #e6e6e6;
+                                          margin-top: -4.5px; border: 1px solid #111; }
+input[type=range]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: #e6e6e6; border: 1px solid #111; }
+input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent-soft); }
+
+select, .field input[type=text], .field input[type=number] { background: var(--field); border: 1px solid #3a3a3a; border-radius: 2px; padding: 2px 4px; }
+.field { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+.field > span { flex: 1; color: #c8c8c8; }
+.field input[type=color] { width: 32px; height: 20px; padding: 0; border: 1px solid #3a3a3a; background: transparent; }
+.check { display: flex; align-items: center; gap: 6px; margin: 6px 0; color: #c8c8c8; cursor: pointer; }
+.chips { display: flex; gap: 2px; margin: 4px 0 6px; }
+.chips button { flex: 1; background: #383838; border: 1px solid #444; padding: 2px 0; font-size: 11px; color: var(--dim); }
+.chips button[aria-pressed="true"] { background: #555; color: var(--text); }
+.sub { color: var(--dim); font-size: 11px; margin: 10px 0 2px; text-transform: uppercase; letter-spacing: .05em; }
+textarea.plain { width: 100%; background: var(--field); border: 1px solid #3a3a3a; border-radius: 2px; padding: 6px; font-family: var(--mono); font-size: 11px; resize: vertical; }
+
+/* curve */
+.curve canvas { width: 100%; aspect-ratio: 1; display: block; background: #1b1b1b; border: 1px solid #3a3a3a; touch-action: none; cursor: crosshair; }
+.curve .readout { display: flex; justify-content: space-between; color: var(--dim); font-family: var(--mono); font-size: 11px; margin-top: 3px; }
+
+/* Color Balance: tab chữ gạch chân + vòng sắc độ có hai cung kéo */
+.cb-tabs { display: flex; justify-content: space-between; margin: 2px 0 8px; border-bottom: 1px solid #3a3a3a; }
+.cb-tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 4px 2px 5px; color: #cfcfcf; font-size: 12px; margin-bottom: -1px; }
+.cb-tabs button[aria-pressed="true"] { color: var(--accent); border-bottom-color: var(--accent); }
+.cb-pane[hidden] { display: none; }
+.cb-row { display: flex; justify-content: space-between; }
+.cb-row.center { justify-content: center; }
+.cbw { display: flex; flex-direction: column; align-items: center; }
+.cbw canvas { display: block; touch-action: none; cursor: crosshair; }
+.cbw-lbl { color: #cfcfcf; font-size: 12px; line-height: 14px; }
+.cbw-val { color: var(--mute); font-family: var(--mono); font-size: 10px; line-height: 12px; height: 12px; }
+
+/* Color Editor */
+.swatches { display: flex; gap: 6px; justify-content: space-between; margin: 4px 0 8px; }
+.swatches button { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; position: relative; padding: 0; }
+.swatches button[aria-pressed="true"] { border-color: #fff; }
+.swatches button.changed::after { content: ""; position: absolute; right: -2px; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+/* thẻ chấm ảnh (Soft Light) */
+.hcard { border-left: 3px solid var(--good); background: #252525; padding: 5px 8px; margin: 6px 0; }
+.hcard.warn { border-left-color: var(--warn); }
+.hcard .k { color: var(--dim); font-size: 11px; }
+.hcard .v { font-family: var(--mono); font-size: 12px; }
+.hcard .v .lim { color: var(--mute); margin-left: 8px; font-size: 10px; }
+.hcard .n { color: #c8c8c8; font-size: 11px; }
+
+/* tab File */
+.filepane { padding: 10px; }
+.filepane textarea { width: 100%; height: 300px; background: var(--field); border: 1px solid #3a3a3a; border-radius: 2px; padding: 6px;
+                     font-family: var(--mono); font-size: 10.5px; color: #cfcfcf; resize: vertical; }
+.filepane .btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+
+.savebar { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid #1a1a1a; background: #222; }
+.savebar .btn.primary { flex: 1; }
+
+.toast { position: fixed; left: 50%; bottom: 52px; transform: translateX(-50%) translateY(20px); opacity: 0; pointer-events: none;
+         background: #f0f0f0; color: #1a1a1a; padding: 7px 14px; border-radius: 3px; box-shadow: 0 4px 20px rgba(0,0,0,.5); transition: .18s; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 820px) {
+  body { overflow: auto; }
+  .app { height: auto; min-height: 100vh; }
+  .work { grid-template-columns: 1fr; }
+  .viewer { min-height: 60vh; }
+  .tools { border-left: 0; border-top: 1px solid #000; }
+  .panes { overflow: visible; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition-duration: .01ms !important; } }
+
+
+/* riêng trang tuyết: sơ đồ cảnh nhìn ngang thay chỗ histogram */
+.scene { padding: 8px 10px 6px; border-bottom: 1px solid #1a1a1a; }
+.scene canvas { width: 100%; height: 132px; display: block; background: #1a1a1a; border-radius: 2px; cursor: pointer; }
+.scene .cap { display: flex; justify-content: space-between; gap: 8px; color: var(--dim); font-family: var(--mono); font-size: 10.5px; margin-top: 4px; }
+.viewbar select { max-width: 160px; }
+.viewbar .check { margin: 0; color: var(--dim); }
+/* Giao diện tối cố định, có chủ ý: so màu cần nền trung tính tối quanh ảnh, ở mọi theme. */
+:root { color-scheme: dark; }
+.tabs button { font-size: 11px; }
+@media (max-width: 820px) {
+  /* minmax(0, …): chữ không xuống dòng (dòng trạng thái) không được kéo cột rộng quá màn hình */
+  .app { grid-template-rows: auto 1fr; grid-template-columns: minmax(0, 1fr); }
+  .work { grid-template-columns: minmax(0, 1fr); }
+  .top > *, .viewbar > *, .tools > * { min-width: 0; }
+  .top { flex-wrap: wrap; row-gap: 6px; padding-block: 6px;
+         padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .top .spacer { display: none; }
+  .top .status { flex-basis: 100%; }
+  .viewer { grid-template-rows: auto auto; }
+  .stage { padding: 10px; }
+  .viewbar { flex-wrap: wrap; row-gap: 6px; padding-block: 6px;
+             padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .viewbar .probe { flex-basis: 100%; white-space: normal; }
+  .tools { padding-left: max(6px, env(safe-area-inset-left, 0px)); padding-right: max(6px, env(safe-area-inset-right, 0px)); }
+}
+.look .row + .row { margin-top: 8px; }
+/* đầu dò dưới con trỏ + ống hút */
+.probe { color: var(--dim); font-family: var(--mono); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.probe b { color: var(--accent); font-weight: 600; }
+.stage.picking, .stage.picking canvas { cursor: crosshair; }
+.stage.picking .divider { pointer-events: none; opacity: .35; }
+.pickbtn { display: flex; align-items: center; gap: 6px; width: 100%; margin: 4px 0 6px; text-align: left; }
+.pickbtn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #1a1a1a; }
+.swatches button.probe-on { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.look .row .title { min-width: 74px; }
+.meta { color: var(--mute); font-family: var(--mono); font-size: 10.5px; margin: 2px 0 6px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Tuyết <span>· dựng cảnh</span></h1>
+    <label class="btn primary filepick">Mở ảnh<input type="file" id="file" accept="image/*"></label>
+    <button class="btn ghost" id="sampleBtn">Ảnh mẫu</button>
+    <div class="seg" role="group" aria-label="Độ phân giải xem trước">
+      <button id="qFast" aria-pressed="false">Nhanh</button>
+      <button id="qFine" aria-pressed="true">Nét</button>
+    </div>
+    <div class="spacer"></div>
+    <span class="status" id="status">chưa có ảnh</span>
+  </header>
+
+  <main class="work">
+    <section class="viewer">
+      <div class="stage" id="stage">
+        <div class="empty" id="empty">
+          <h2>Thả một tấm ảnh chụp ở booth vào đây</h2>
+          <p>Ảnh không rời khỏi máy — tuyết được vẽ ngay trong trình duyệt, đúng công thức snow.exe dùng.
+             Kéo thả, dán từ clipboard, hoặc bấm “Mở ảnh”.</p>
+          <button class="btn" id="sampleBtn2">Dùng ảnh mẫu</button>
+        </div>
+        <div class="frame" id="frame" hidden>
+          <canvas id="cvAfter"></canvas>
+          <canvas id="cvBefore" class="before"></canvas>
+          <span class="tag l">Gốc</span>
+          <span class="tag r">Tuyết</span>
+          <div class="divider" id="divider"><span class="glyph">↔</span></div>
+        </div>
+      </div>
+      <div class="viewbar">
+        <button class="btn ghost" id="holdBtn" title="Giữ phím Space cũng được">Giữ để xem ảnh gốc</button>
+        <button class="btn ghost" id="allAfterBtn">Xem toàn ảnh</button>
+        <select id="viewSel" aria-label="Xem lớp"></select>
+        <label class="check"><input type="checkbox" id="darkChk"> Chỉ tuyết</label>
+        <label class="check"><input type="checkbox" id="zoneChk"> Hiện vùng người</label>
+        <span class="probe" id="probe" style="flex:1" title="Rê chuột lên ảnh: giá trị điểm ảnh, vùng sáng/tối và dải màu của nó"></span>
+        <button class="btn ghost" id="reseedBtn" title="Chỉ đổi bộ hạt của bản xem trước. Trên booth mỗi ảnh tự có bộ hạt riêng theo tên file.">Đổi bộ hạt</button>
+      </div>
+    </section>
+
+    <aside class="tools">
+      <div class="scene">
+        <canvas id="scene" title="Cảnh nhìn ngang: máy ảnh bên trái, phông bên phải. Bấm vào một lớp để xem riêng lớp đó."></canvas>
+        <div class="cap"><span id="sceneCap"></span><span id="sceneCount"></span></div>
+      </div>
+
+      <div class="look">
+        <div class="row">
+          <span class="title">Cảnh tuyết</span>
+          <select id="styleSel" aria-label="Bộ dựng sẵn">
+            <option value="mercies">Giống mẫu mercies</option>
+            <option value="light">Tuyết nhẹ</option>
+            <option value="blizzard">Bão tuyết</option>
+            <option value="loaded" hidden>Từ file đã nạp</option>
+          </select>
+        </div>
+        <div class="row">
+          <span class="title">Màu</span>
+          <select id="lookSel" aria-label="Preset màu"></select>
+        </div>
+        <div class="big" id="amountHost"></div>
+        <div class="hint">Thường chỉ cần thanh này và preset màu. Từng lớp độ sâu ở tab Lớp, từng công cụ màu ở tab Màu.</div>
+      </div>
+
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="layers" aria-selected="true">Lớp</button>
+        <button role="tab" data-tab="lens" aria-selected="false" title="Ống kính ảo">Kính</button>
+        <button role="tab" data-tab="flakes" aria-selected="false" title="Hạt & gió">Hạt</button>
+        <button role="tab" data-tab="light" aria-selected="false" title="Ánh sáng trên hạt">Sáng</button>
+        <button role="tab" data-tab="subject" aria-selected="false" title="Vùng người">Người</button>
+        <button role="tab" data-tab="color" aria-selected="false" title="Chỉnh màu sau khi rắc tuyết">Màu</button>
+        <button role="tab" data-tab="file" aria-selected="false">File</button>
+      </nav>
+
+      <div class="panes">
+        <div class="pane" id="pane-layers"></div>
+        <div class="pane" id="pane-lens" hidden></div>
+        <div class="pane" id="pane-flakes" hidden></div>
+        <div class="pane" id="pane-light" hidden></div>
+        <div class="pane" id="pane-subject" hidden></div>
+        <div class="pane" id="pane-color" hidden></div>
+        <div class="pane filepane" id="pane-file" hidden>
+          <label class="check"><input type="checkbox" id="enabledChk"> Bật bộ lọc (tắt = ảnh đi qua không có tuyết)</label>
+          <div class="btns">
+            <label class="btn filepick">Mở snow.config.json<input type="file" id="cfgFile" accept=".json,application/json"></label>
+            <button class="btn ghost" id="pasteBtn">Dán JSON</button>
+            <button class="btn ghost" id="copyBtn">Sao chép</button>
+          </div>
+          <p class="note">Bấm <b>Lưu</b> rồi đặt file <code>snow.config.json</code> cạnh <code>snow.exe</code> (thay file cũ).
+             Không cần build lại — ảnh kế tiếp ăn ngay.</p>
+          <textarea id="jsonOut" spellcheck="false" readonly></textarea>
+        </div>
+      </div>
+
+      <footer class="savebar">
+        <button class="btn primary" id="saveBtn">Lưu snow.config.json</button>
+        <button class="btn ghost" id="undoBtn" title="Bỏ mọi thay đổi từ lần lưu / nạp gần nhất">Hoàn tác</button>
+      </footer>
+    </aside>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* Engine màu của Instax (src/filters/instax/look.js), bọc trong phạm vi riêng:
+   nó và snow.js cùng có hàm tên num / smooth / fmtValue (fmtValue khác cả chữ ký),
+   dán thẳng ra ngoài thì hàm khai báo sau đè hàm khai báo trước. */
+var LOOK = (function () {
+/**
+ * INSTAX LOOK v2 — các công cụ chỉnh màu / tông của bộ lọc Instax Wide.
+ *
+ * Một file, hai nơi chạy: bộ lọc Node (src/filters/instax/pipeline.js) import
+ * thẳng, còn trang chỉnh web/instax.html được build-offline.mjs dán nguyên văn
+ * file này vào (bỏ chữ `export`). Vì vậy ở đây chỉ được dùng JavaScript thuần —
+ * không fs, không sharp, không DOM — và chỉ `export function` / `export const`
+ * ở đầu dòng. Ảnh xem trước và ảnh exe ghi ra là MỘT phép tính, không phải hai
+ * bản viết tay giữ cho khớp nhau.
+ *
+ * Số trong cấu hình là đúng số trên thanh trượt (Contrast +12, Exposure 0.3 EV,
+ * Kelvin 5800…), không chia 100.
+ *
+ * Thứ tự xử lý:
+ *   LUT ngoài (.cube) → White Balance → Exposure (EV) → High Dynamic Range →
+ *   Contrast → Brightness → Levels → Curve → Saturation → Color Editor →
+ *   Color Balance → Black & White      (tất cả gộp vào MỘT LUT 3D)
+ *   → Clarity / Structure → Vignetting → Film Grain     (theo vùng, chạy sau)
+ *
+ * `strength` (0–100) là thanh "độ đậm" duy nhất người vận hành cần chạm: nó
+ * trộn cả look với ảnh gốc.
+ *
+ * Look làm sẵn ở nơi khác thì mang sang bằng LUT .cube (mục LUT), chạy trước
+ * mọi công cụ còn lại.
+ */
+
+/* ═════════════════════════ miền giá trị ═════════════════════════ */
+
+/** [min, max, mặc định trung tính] — dùng chung cho kẹp số, thanh trượt, reset. */
+const LOOK_RANGES = {
+  strength: [0, 100, 100],
+  lutOpacity: [0, 100, 100],
+  kelvin: [2500, 10000, 5500],
+  tint: [-50, 50, 0],
+  exposure: [-4, 4, 0],
+  contrast: [-50, 50, 0],
+  brightness: [-50, 50, 0],
+  saturation: [-100, 100, 0],
+  hdr: [-100, 100, 0],
+  level: [0, 255, 0],
+  gamma: [0.1, 9.99, 1],
+  hue: [0, 359, 0],
+  hueShift: [-30, 30, 0],
+  amount100: [-100, 100, 0],
+  sat100: [0, 100, 0],
+  vignette: [-4, 4, 0],
+  impact: [0, 100, 0],
+  granularity: [0, 100, 50],
+};
+
+const COLOR_EDITOR_BANDS = ["red", "orange", "yellow", "green", "cyan", "blue", "magenta"];
+const EDITOR_CENTERS = [0, 30, 60, 120, 180, 240, 300];
+const BW_BANDS = ["red", "yellow", "green", "cyan", "blue", "magenta"];
+const BW_CENTERS = [0, 60, 120, 180, 240, 300];
+const CURVE_CHANNELS = ["rgb", "luma", "r", "g", "b"];
+const LEVEL_CHANNELS = ["rgb", "r", "g", "b"];
+const CLARITY_METHODS = ["natural", "punch", "neutral", "classic"];
+const VIGNETTE_METHODS = ["elliptic", "circular"];
+const GRAIN_TYPES = ["fine", "silverRich", "soft", "cubic", "tabular", "harsh"];
+
+/* ═════════════════════════ bộ số ═════════════════════════ */
+
+function neutralLevels() {
+  return { inBlack: 0, inWhite: 255, gamma: 1, outBlack: 0, outWhite: 255 };
+}
+
+/** Không chỉnh gì: ảnh ra đúng bằng ảnh vào. */
+function neutralLook() {
+  const ce = {};
+  COLOR_EDITOR_BANDS.forEach((b) => { ce[b] = { hue: 0, saturation: 0, lightness: 0 }; });
+  const curve = {};
+  CURVE_CHANNELS.forEach((c) => { curve[c] = [[0, 0], [255, 255]]; });
+  const levels = {};
+  LEVEL_CHANNELS.forEach((c) => { levels[c] = neutralLevels(); });
+  return {
+    strength: 100,
+    lut: { file: "", opacity: 100 },
+    whiteBalance: { kelvin: 5500, tint: 0 },
+    exposure: { exposure: 0, contrast: 0, brightness: 0, saturation: 0 },
+    hdr: { highlight: 0, shadow: 0, white: 0, black: 0 },
+    levels,
+    curve,
+    colorBalance: {
+      master: { hue: 0, saturation: 0 },
+      shadow: { hue: 0, saturation: 0, lightness: 0 },
+      midtone: { hue: 0, saturation: 0, lightness: 0 },
+      highlight: { hue: 0, saturation: 0, lightness: 0 },
+    },
+    colorEditor: ce,
+    blackWhite: {
+      enabled: false,
+      red: 0, yellow: 0, green: 0, cyan: 0, blue: 0, magenta: 0,
+      highlightHue: 0, highlightSaturation: 0, shadowHue: 0, shadowSaturation: 0,
+    },
+    clarity: { method: "natural", clarity: 0, structure: 0 },
+    vignetting: { amount: 0, method: "elliptic" },
+    grain: { type: "fine", impact: 0, granularity: 50, seed: 0 },
+  };
+}
+
+/**
+ * Bộ mặc định "chuẩn cộng đồng" cho chất Instax. Không có bộ số Instax nào
+ * được công bố chính thức; các con số dưới đây theo đúng những nguyên tắc mà
+ * hướng dẫn film-look nào cũng nhắc: tương phản dịu, vùng sáng hạ xuống và
+ * trắng hơi đục, đáy đen nâng lên kiểu "sữa" (matte), vùng sáng ấm / bóng đổ
+ * lạnh, lục ngả về lam-lục và bớt rực, hạt dày ở trung tông nhưng mỏng ở vùng
+ * tối, vignetting nhẹ. Là điểm xuất phát để chỉnh tiếp, không phải đích đến.
+ */
+function communityLook() {
+  const l = neutralLook();
+  l.whiteBalance = { kelvin: 5800, tint: 2 };
+  l.exposure = { exposure: 0.1, contrast: -10, brightness: 5, saturation: -8 };
+  l.hdr = { highlight: 30, shadow: 15, white: -12, black: 0 };
+  l.curve.rgb = [[0, 20], [70, 72], [190, 194], [255, 248]];
+  l.colorBalance.shadow = { hue: 195, saturation: 12, lightness: 0 };
+  l.colorBalance.highlight = { hue: 45, saturation: 10, lightness: 0 };
+  l.colorEditor.green = { hue: 8, saturation: -15, lightness: 0 };
+  l.colorEditor.orange = { hue: 0, saturation: -5, lightness: 5 };
+  l.colorEditor.blue = { hue: 0, saturation: -10, lightness: 0 };
+  l.blackWhite = {
+    enabled: false,
+    red: 10, yellow: 5, green: 0, cyan: 0, blue: -10, magenta: 0,
+    highlightHue: 40, highlightSaturation: 5, shadowHue: 0, shadowSaturation: 0,
+  };
+  l.clarity = { method: "natural", clarity: -10, structure: 0 };
+  l.vignetting = { amount: -0.3, method: "elliptic" };
+  l.grain = { type: "fine", impact: 20, granularity: 45, seed: 0 };
+  return l;
+}
+
+/* ═════════════════════════ kẹp số ═════════════════════════ */
+
+function num(v, range, dflt) {
+  const d = dflt === undefined ? range[2] : dflt;
+  const n = typeof v === "number" && Number.isFinite(v) ? v : d;
+  return Math.min(range[1], Math.max(range[0], n));
+}
+function obj(v) { return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
+function pick(v, list, dflt) { return list.indexOf(v) >= 0 ? v : dflt; }
+
+function normPoints(v, dflt) {
+  if (!Array.isArray(v)) return dflt.map((p) => p.slice());
+  const pts = v
+    .filter((p) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]))
+    .map((p) => [Math.min(255, Math.max(0, p[0])), Math.min(255, Math.max(0, p[1]))])
+    .sort((a, b) => a[0] - b[0]);
+  const out = [];
+  pts.forEach((p) => { if (!out.length || p[0] > out[out.length - 1][0]) out.push(p); });
+  return out.length >= 2 ? out : dflt.map((p) => p.slice());
+}
+
+/**
+ * Trộn với `base` (mặc định: bộ chuẩn cộng đồng) và kẹp mọi số về miền hợp lệ.
+ * File cấu hình do người sửa tay giữa các buổi chụp: số sai phải bị kẹp im
+ * lặng, không được ném lỗi làm hỏng một bản digital.
+ */
+function normalizeLook(raw, base) {
+  const d = base || communityLook();
+  const r = obj(raw);
+  const R = LOOK_RANGES;
+  const o = neutralLook();
+
+  o.strength = num(r.strength, R.strength, d.strength);
+  const lut = obj(r.lut);
+  o.lut = {
+    file: typeof lut.file === "string" ? lut.file.trim() : d.lut.file,
+    opacity: num(lut.opacity, R.lutOpacity, d.lut.opacity),
+  };
+  const wb = obj(r.whiteBalance);
+  o.whiteBalance = { kelvin: num(wb.kelvin, R.kelvin, d.whiteBalance.kelvin), tint: num(wb.tint, R.tint, d.whiteBalance.tint) };
+  const ex = obj(r.exposure);
+  o.exposure = {
+    exposure: num(ex.exposure, R.exposure, d.exposure.exposure),
+    contrast: num(ex.contrast, R.contrast, d.exposure.contrast),
+    brightness: num(ex.brightness, R.brightness, d.exposure.brightness),
+    saturation: num(ex.saturation, R.saturation, d.exposure.saturation),
+  };
+  const hd = obj(r.hdr);
+  o.hdr = {};
+  ["highlight", "shadow", "white", "black"].forEach((k) => { o.hdr[k] = num(hd[k], R.hdr, d.hdr[k]); });
+
+  const lv = obj(r.levels);
+  LEVEL_CHANNELS.forEach((c) => {
+    const s = obj(lv[c]), dd = d.levels[c];
+    const inBlack = Math.min(254, num(s.inBlack, R.level, dd.inBlack));
+    const inWhite = Math.max(inBlack + 1, num(s.inWhite, R.level, dd.inWhite));
+    o.levels[c] = {
+      inBlack, inWhite,
+      gamma: num(s.gamma, R.gamma, dd.gamma),
+      outBlack: num(s.outBlack, R.level, dd.outBlack),
+      outWhite: num(s.outWhite, R.level, dd.outWhite),
+    };
+  });
+
+  const cv = obj(r.curve);
+  CURVE_CHANNELS.forEach((c) => { o.curve[c] = normPoints(cv[c], d.curve[c]); });
+
+  const cb = obj(r.colorBalance);
+  const cbm = obj(cb.master);
+  o.colorBalance.master = { hue: num(cbm.hue, R.hue, d.colorBalance.master.hue), saturation: num(cbm.saturation, R.sat100, d.colorBalance.master.saturation) };
+  ["shadow", "midtone", "highlight"].forEach((z) => {
+    const s = obj(cb[z]), dd = d.colorBalance[z];
+    o.colorBalance[z] = {
+      hue: num(s.hue, R.hue, dd.hue),
+      saturation: num(s.saturation, R.sat100, dd.saturation),
+      lightness: num(s.lightness, R.amount100, dd.lightness),
+    };
+  });
+
+  const ce = obj(r.colorEditor);
+  COLOR_EDITOR_BANDS.forEach((b) => {
+    const s = obj(ce[b]), dd = d.colorEditor[b];
+    o.colorEditor[b] = {
+      hue: num(s.hue, R.hueShift, dd.hue),
+      saturation: num(s.saturation, R.amount100, dd.saturation),
+      lightness: num(s.lightness, R.amount100, dd.lightness),
+    };
+  });
+
+  const bw = obj(r.blackWhite), dbw = d.blackWhite;
+  o.blackWhite = { enabled: typeof bw.enabled === "boolean" ? bw.enabled : dbw.enabled };
+  BW_BANDS.forEach((b) => { o.blackWhite[b] = num(bw[b], R.amount100, dbw[b]); });
+  o.blackWhite.highlightHue = num(bw.highlightHue, R.hue, dbw.highlightHue);
+  o.blackWhite.highlightSaturation = num(bw.highlightSaturation, R.sat100, dbw.highlightSaturation);
+  o.blackWhite.shadowHue = num(bw.shadowHue, R.hue, dbw.shadowHue);
+  o.blackWhite.shadowSaturation = num(bw.shadowSaturation, R.sat100, dbw.shadowSaturation);
+
+  const cl = obj(r.clarity);
+  o.clarity = {
+    method: pick(cl.method, CLARITY_METHODS, d.clarity.method),
+    clarity: num(cl.clarity, R.amount100, d.clarity.clarity),
+    structure: num(cl.structure, R.amount100, d.clarity.structure),
+  };
+  const vg = obj(r.vignetting);
+  o.vignetting = { amount: num(vg.amount, R.vignette, d.vignetting.amount), method: pick(vg.method, VIGNETTE_METHODS, d.vignetting.method) };
+  const gr = obj(r.grain);
+  o.grain = {
+    type: pick(gr.type, GRAIN_TYPES, d.grain.type),
+    impact: num(gr.impact, R.impact, d.grain.impact),
+    granularity: num(gr.granularity, R.granularity, d.grain.granularity),
+    seed: Math.round(num(gr.seed, [0, 4294967295, 0], d.grain.seed)),
+  };
+  return o;
+}
+
+/* ═════════════════════════ mục về file ═════════════════════════ */
+
+/** Chất lượng JPEG, backup, bỏ qua, giới hạn — không thuộc look, giữ nguyên qua trang chỉnh. */
+function normalizeFileOptions(raw) {
+  const r = obj(raw);
+  const o = obj(r.output), b = obj(r.backup), sk = obj(r.skip), l = obj(r.limits);
+  return {
+    output: {
+      quality: Math.round(num(o.quality, [60, 100, 95])),
+      chromaSubsampling: o.chromaSubsampling === "4:2:0" ? "4:2:0" : "4:4:4",
+    },
+    backup: {
+      enabled: b.enabled !== false,
+      folder: typeof b.folder === "string" && b.folder.trim() ? b.folder.trim() : "_original",
+    },
+    skip: {
+      pathContains: Array.isArray(sk.pathContains)
+        ? sk.pathContains.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim())
+        : [],
+    },
+    limits: {
+      minEdge: Math.round(num(l.minEdge, [0, 20000, 400])),
+      maxMs: Math.round(num(l.maxMs, [100, 60000, 2500])),
+    },
+  };
+}
+
+/* Ghi chú đi kèm file cấu hình. Không dấu, để mở bằng Notepad trên máy booth nào
+   cũng đọc được. */
+const CONFIG_DOC =
+  "Bo loc Instax Wide - cau hinh v2. Moi so = dung so tren thanh truot " +
+  "(Contrast 12, Exposure 0.3 EV, Kelvin 5800...). strength = do dam cua ca look (0 = anh goc, 100 = du). " +
+  "Chinh bang web/instax-tuner.html roi bam Luu, dat file nay canh instax.exe. LUT .cube dat trong thu muc " +
+  "luts canh instax.exe. Thu tu: LUT > White Balance > Exposure > HDR > Contrast > Brightness > Levels > " +
+  "Curve > Saturation > Color Editor > Color Balance > Black & White > Clarity > Vignetting > Film Grain.";
+
+function fmtNum(v) {
+  const r = Math.round(v * 1000) / 1000;
+  return Object.is(r, -0) ? "0" : String(r);
+}
+function fmtValue(v, depth, indent) {
+  if (Array.isArray(v)) return "[" + v.map((x) => fmtValue(x, depth + 1, indent)).join(", ") + "]";
+  if (typeof v === "number") return fmtNum(v);
+  if (v && typeof v === "object") {
+    const keys = Object.keys(v);
+    if (depth >= 2) return "{ " + keys.map((k) => JSON.stringify(k) + ": " + fmtValue(v[k], depth + 1, indent)).join(", ") + " }";
+    const pad = indent + "  ";
+    return "{\n" + keys.map((k) => pad + JSON.stringify(k) + ": " + fmtValue(v[k], depth + 1, pad)).join(",\n") + "\n" + indent + "}";
+  }
+  return JSON.stringify(v);
+}
+
+/** Nội dung file instax.config.json (v2) cho một bộ số — trang chỉnh và bộ cài cùng dùng. */
+function configToJson(cfg) {
+  const look = normalizeLook(cfg, neutralLook());
+  const out = {
+    _doc: CONFIG_DOC,
+    version: 2,
+    enabled: cfg.enabled !== false,
+    ...look,
+    ...normalizeFileOptions(cfg),
+  };
+  return fmtValue(out, 0, "") + "\n";
+}
+
+/* ═════════════════════════ toán màu ═════════════════════════ */
+
+const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
+function smooth(e0, e1, x) {
+  let t = (x - e0) / (e1 - e0);
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return t * t * (3 - 2 * t);
+}
+/** Độ sáng cảm nhận trên giá trị sRGB đã mã hoá (Rec.601) — đủ cho chỉnh tông. */
+const luma = (r, g, b) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+function toLinear(v) {
+  if (v <= 0) return 0;
+  return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+}
+function toSrgb(v) {
+  if (v <= 0) return 0;
+  return v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
+}
+
+/** Màu của nguồn sáng ở nhiệt độ K (xấp xỉ vật đen), tuyến tính. */
+function kelvinRgb(k) {
+  const t = k / 100;
+  let r, g, b;
+  if (t <= 66) {
+    r = 255;
+    g = 99.4708025861 * Math.log(t) - 161.1195681661;
+    b = t <= 19 ? 0 : 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+  } else {
+    r = 329.698727446 * Math.pow(t - 60, -0.1332047592);
+    g = 288.1221695283 * Math.pow(t - 60, -0.0755148492);
+    b = 255;
+  }
+  return [toLinear(clamp01(r / 255)), toLinear(clamp01(g / 255)), toLinear(clamp01(b / 255))];
+}
+
+/**
+ * Hệ số nhân từng kênh (tuyến tính) cho White Balance. Kelvin cao hơn 5500 thì
+ * ảnh ấm lên, thấp hơn thì lạnh đi.
+ * Tint dương ngả hồng (magenta), âm ngả lục. Chuẩn hoá để độ sáng không đổi.
+ */
+function wbGains(kelvin, tint) {
+  const ref = 5500;
+  const a = kelvinRgb((ref * ref) / kelvin), z = kelvinRgb(ref);
+  const g = [a[0] / z[0], a[1] / z[1], a[2] / z[2]];
+  g[1] *= 1 - (tint / 50) * 0.12;
+  const y = 0.2126 * g[0] + 0.7152 * g[1] + 0.0722 * g[2];
+  return [g[0] / y, g[1] / y, g[2] / y];
+}
+
+/** HSV với h tính bằng độ. */
+function rgbToHsv(r, g, b) {
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d > 1e-9) {
+    if (max === r) h = 60 * (((g - b) / d) % 6);
+    else if (max === g) h = 60 * ((b - r) / d + 2);
+    else h = 60 * ((r - g) / d + 4);
+  }
+  if (h < 0) h += 360;
+  return [h, max <= 0 ? 0 : d / max, max];
+}
+function hsvToRgb(h, s, v) {
+  h = ((h % 360) + 360) % 360;
+  const c = v * s, x = c * (1 - Math.abs(((h / 60) % 2) - 1)), m = v - c;
+  let r, g, b;
+  if (h < 60) { r = c; g = x; b = 0; }
+  else if (h < 120) { r = x; g = c; b = 0; }
+  else if (h < 180) { r = 0; g = c; b = x; }
+  else if (h < 240) { r = 0; g = x; b = c; }
+  else if (h < 300) { r = x; g = 0; b = c; }
+  else { r = c; g = 0; b = x; }
+  return [r + m, g + m, b + m];
+}
+
+/** Hướng màu của một sắc độ, độ sáng 0: cộng vào ảnh là nhuộm mà không đổi sáng. */
+function tintVector(hue) {
+  const c = hsvToRgb(hue, 1, 1);
+  const y = luma(c[0], c[1], c[2]);
+  return [c[0] - y, c[1] - y, c[2] - y];
+}
+
+/**
+ * Trọng số của từng dải màu cho một sắc độ: nội suy tuyến tính giữa hai tâm
+ * kề nhau, nên mọi sắc độ đều có tổng trọng số = 1 và không có vết gãy màu.
+ */
+function bandWeights(h, centers) {
+  const n = centers.length, w = new Array(n).fill(0);
+  for (let i = 0; i < n; i++) {
+    const a = centers[i], b = i + 1 < n ? centers[i + 1] : centers[0] + 360;
+    let x = h;
+    if (x < a) x += 360;
+    if (x >= a && x <= b) {
+      const t = (x - a) / (b - a);
+      w[i] += 1 - t;
+      w[(i + 1) % n] += t;
+      return w;
+    }
+  }
+  return w;
+}
+
+/** Spline đơn điệu (Fritsch–Carlson) qua các điểm curve, lấy mẫu thành bảng 0..1. */
+function curveTable(points, size) {
+  const pts = points.map((p) => [p[0] / 255, p[1] / 255]);
+  const n = pts.length;
+  const t = new Float32Array(size);
+  const identity = n === 2 && pts[0][0] === 0 && pts[0][1] === 0 && pts[1][0] === 1 && pts[1][1] === 1;
+  if (identity) {
+    for (let i = 0; i < size; i++) t[i] = i / (size - 1);
+    return t;
+  }
+  const dx = [], dy = [], m = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx.push(pts[i + 1][0] - pts[i][0]);
+    dy.push((pts[i + 1][1] - pts[i][1]) / dx[i]);
+  }
+  m.push(dy[0]);
+  for (let i = 1; i < n - 1; i++) m.push(dy[i - 1] * dy[i] <= 0 ? 0 : (dy[i - 1] + dy[i]) / 2);
+  m.push(dy[n - 2]);
+  for (let i = 0; i < n - 1; i++) {
+    if (dy[i] === 0) { m[i] = 0; m[i + 1] = 0; continue; }
+    const a = m[i] / dy[i], b = m[i + 1] / dy[i], s = a * a + b * b;
+    if (s > 9) { const k = 3 / Math.sqrt(s); m[i] = k * a * dy[i]; m[i + 1] = k * b * dy[i]; }
+  }
+  let seg = 0;
+  for (let i = 0; i < size; i++) {
+    const x = i / (size - 1);
+    if (x <= pts[0][0]) { t[i] = pts[0][1]; continue; }
+    if (x >= pts[n - 1][0]) { t[i] = pts[n - 1][1]; continue; }
+    while (seg < n - 2 && x > pts[seg + 1][0]) seg++;
+    const h = dx[seg], u = (x - pts[seg][0]) / h;
+    const h00 = (1 + 2 * u) * (1 - u) * (1 - u), h10 = u * (1 - u) * (1 - u);
+    const h01 = u * u * (3 - 2 * u), h11 = u * u * (u - 1);
+    t[i] = clamp01(h00 * pts[seg][1] + h10 * h * m[seg] + h01 * pts[seg + 1][1] + h11 * h * m[seg + 1]);
+  }
+  return t;
+}
+
+/** Tra bảng 0..1 có nội suy. */
+function lookup(t, x) {
+  const n = t.length - 1;
+  const f = clamp01(x) * n, i = f | 0;
+  return i >= n ? t[n] : t[i] + (t[i + 1] - t[i]) * (f - i);
+}
+
+function isNeutralCurve(p) { return p.length === 2 && p[0][0] === 0 && p[0][1] === 0 && p[1][0] === 255 && p[1][1] === 255; }
+function isNeutralLevels(l) { return l.inBlack === 0 && l.inWhite === 255 && l.gamma === 1 && l.outBlack === 0 && l.outWhite === 255; }
+function levelsFn(l) {
+  const ib = l.inBlack / 255, iw = l.inWhite / 255, ob = l.outBlack / 255, ow = l.outWhite / 255, ig = 1 / l.gamma;
+  return (x) => ob + (ow - ob) * Math.pow(clamp01((x - ib) / (iw - ib)), ig);
+}
+
+/* ═════════════════════════ chuỗi màu (một điểm ảnh) ═════════════════════════ */
+
+/**
+ * Dựng hàm biến đổi màu từ bộ số, tính trước mọi thứ không phụ thuộc điểm ảnh.
+ * Trả về f(r, g, b) -> [r, g, b], vào/ra sRGB 0..1.
+ */
+function colourChain(look, opts) {
+  const L = look;
+  const userLut = opts.userLut && L.lut.opacity > 0 ? opts.userLut : null;
+  const lutMix = L.lut.opacity / 100;
+  const forceBw = !!opts.bw || L.blackWhite.enabled;
+
+  const wb = L.whiteBalance.kelvin !== 5500 || L.whiteBalance.tint !== 0 ? wbGains(L.whiteBalance.kelvin, L.whiteBalance.tint) : null;
+  const ev = L.exposure.exposure !== 0 ? Math.pow(2, L.exposure.exposure) : 1;
+  const linear = wb || ev !== 1;
+
+  const h = L.hdr;
+  const hdr = h.highlight || h.shadow || h.white || h.black;
+  const kC = (L.exposure.contrast / 50) * 0.9;
+  const gB = L.exposure.brightness ? Math.pow(2, -(L.exposure.brightness / 50) * 0.75) : 1;
+
+  const lv = LEVEL_CHANNELS.map((c) => (isNeutralLevels(L.levels[c]) ? null : levelsFn(L.levels[c])));
+  const cvSize = 1024;
+  const cv = {};
+  CURVE_CHANNELS.forEach((c) => { cv[c] = isNeutralCurve(L.curve[c]) ? null : curveTable(L.curve[c], cvSize); });
+
+  const sat = 1 + L.exposure.saturation / 100;
+
+  const ce = COLOR_EDITOR_BANDS.map((b) => L.colorEditor[b]);
+  const ceOn = ce.some((b) => b.hue || b.saturation || b.lightness);
+
+  const cb = L.colorBalance;
+  const cbm = cb.master.saturation ? tintVector(cb.master.hue).map((v) => v * (cb.master.saturation / 100) * 0.2) : null;
+  const zones = ["shadow", "midtone", "highlight"].map((z) => ({
+    t: cb[z].saturation ? tintVector(cb[z].hue).map((v) => v * (cb[z].saturation / 100) * 0.2) : null,
+    l: (cb[z].lightness / 100) * 0.25,
+  }));
+  const cbOn = cbm || zones.some((z) => z.t || z.l);
+
+  const bw = L.blackWhite;
+  const bwSens = BW_BANDS.map((b) => bw[b] / 100);
+  const bwHi = bw.highlightSaturation ? tintVector(bw.highlightHue).map((v) => v * (bw.highlightSaturation / 100) * 0.25) : null;
+  const bwSh = bw.shadowSaturation ? tintVector(bw.shadowHue).map((v) => v * (bw.shadowSaturation / 100) * 0.25) : null;
+
+  return function (r, g, b) {
+    // ── LUT ngoài: nền look làm sẵn ở nơi khác ──
+    if (userLut) {
+      const o = sampleLut(userLut, r, g, b);
+      r += (o[0] - r) * lutMix; g += (o[1] - g) * lutMix; b += (o[2] - b) * lutMix;
+    }
+
+    // ── White Balance + Exposure: làm trên ánh sáng tuyến tính, như máy ảnh ──
+    if (linear) {
+      let lr = toLinear(r) * ev, lg = toLinear(g) * ev, lb = toLinear(b) * ev;
+      if (wb) { lr *= wb[0]; lg *= wb[1]; lb *= wb[2]; }
+      r = toSrgb(lr); g = toSrgb(lg); b = toSrgb(lb);
+    }
+
+    // ── High Dynamic Range: dời độ sáng theo vùng, giữ nguyên độ màu ──
+    if (hdr) {
+      const y = luma(r, g, b), x = y > 1 ? 1 : y;
+      let d = 0;
+      if (h.highlight) d -= (h.highlight / 100) * 0.3 * smooth(0.45, 0.85, x) * (1 - 0.6 * smooth(0.9, 1, x)) * (y > 1 ? y : 1);
+      if (h.shadow) d += (h.shadow / 100) * 0.25 * smooth(0, 0.1, x) * (1 - smooth(0.1, 0.55, x));
+      if (h.white) d += (h.white / 100) * 0.25 * smooth(0.5, 1, x);
+      if (h.black) d += (h.black / 100) * 0.25 * (1 - smooth(0, 0.5, x));
+      r += d; g += d; b += d;
+    }
+    r = clamp01(r); g = clamp01(g); b = clamp01(b);
+
+    // ── Contrast: chữ S neo giữa, hai đầu đen/trắng đứng yên (không cắt cụt) ──
+    if (kC) {
+      r += kC * (r * r * (3 - 2 * r) - r);
+      g += kC * (g * g * (3 - 2 * g) - g);
+      b += kC * (b * b * (3 - 2 * b) - b);
+    }
+    // ── Brightness: dời trung tông, đen/trắng đứng yên ──
+    if (gB !== 1) { r = Math.pow(r, gB); g = Math.pow(g, gB); b = Math.pow(b, gB); }
+
+    // ── Levels: tổng rồi từng kênh ──
+    if (lv[0]) { r = lv[0](r); g = lv[0](g); b = lv[0](b); }
+    if (lv[1]) r = lv[1](r);
+    if (lv[2]) g = lv[2](g);
+    if (lv[3]) b = lv[3](b);
+
+    // ── Curve: RGB, rồi từng kênh, rồi Luma (chỉ đổi sáng, không đổi màu) ──
+    if (cv.rgb) { r = lookup(cv.rgb, r); g = lookup(cv.rgb, g); b = lookup(cv.rgb, b); }
+    if (cv.r) r = lookup(cv.r, r);
+    if (cv.g) g = lookup(cv.g, g);
+    if (cv.b) b = lookup(cv.b, b);
+    if (cv.luma) {
+      const y = luma(r, g, b), d = lookup(cv.luma, y) - y;
+      r += d; g += d; b += d;
+    }
+
+    // ── Saturation ──
+    if (sat !== 1) {
+      const y = luma(r, g, b);
+      r = y + (r - y) * sat; g = y + (g - y) * sat; b = y + (b - y) * sat;
+    }
+    r = clamp01(r); g = clamp01(g); b = clamp01(b);
+
+    // ── Color Editor: từng dải màu, xám thì không đụng ──
+    if (ceOn) {
+      const hsv = rgbToHsv(r, g, b);
+      const k = smooth(0.02, 0.25, hsv[1]);
+      if (k > 0) {
+        const w = bandWeights(hsv[0], EDITOR_CENTERS);
+        let dh = 0, ds = 0, dl = 0;
+        for (let i = 0; i < 7; i++) {
+          if (!w[i]) continue;
+          dh += w[i] * ce[i].hue; ds += w[i] * ce[i].saturation; dl += w[i] * ce[i].lightness;
+        }
+        const s = clamp01(hsv[1] * (1 + (ds / 100) * k));
+        const c = hsvToRgb(hsv[0] + dh * k, s, hsv[2]);
+        const d = (dl / 100) * 0.25 * k;
+        r = c[0] + d; g = c[1] + d; b = c[2] + d;
+      }
+    }
+
+    // ── Color Balance: master + 3 vùng (bóng / trung / sáng) ──
+    if (cbOn) {
+      const y = clamp01(luma(r, g, b));
+      const ws = (1 - y) * (1 - y), wh = y * y, wm = 1 - ws - wh;
+      const zw = [ws, wm, wh];
+      if (cbm) { r += cbm[0]; g += cbm[1]; b += cbm[2]; }
+      for (let z = 0; z < 3; z++) {
+        const zz = zones[z], w = zw[z];
+        if (zz.t) { r += zz.t[0] * w; g += zz.t[1] * w; b += zz.t[2] * w; }
+        if (zz.l) { r += zz.l * w; g += zz.l * w; b += zz.l * w; }
+      }
+    }
+
+    // ── Black & White: trộn kênh theo dải màu, rồi Split Tones ──
+    if (forceBw) {
+      const hsv = rgbToHsv(clamp01(r), clamp01(g), clamp01(b));
+      const chroma = Math.max(r, g, b) - Math.min(r, g, b);
+      const w = bandWeights(hsv[0], BW_CENTERS);
+      let y = luma(r, g, b), d = 0;
+      for (let i = 0; i < 6; i++) d += w[i] * bwSens[i];
+      y = clamp01(y + d * 0.5 * chroma);
+      r = y; g = y; b = y;
+      if (bwHi) { const k = y * y; r += bwHi[0] * k; g += bwHi[1] * k; b += bwHi[2] * k; }
+      if (bwSh) { const k = (1 - y) * (1 - y); r += bwSh[0] * k; g += bwSh[1] * k; b += bwSh[2] * k; }
+    }
+
+    return [clamp01(r), clamp01(g), clamp01(b)];
+  };
+}
+
+/* ═════════════════════════ LUT 3D ═════════════════════════ */
+
+/** Tra một LUT 3D {size, data} (nội suy ba chiều), vào/ra 0..1. */
+function sampleLut(lut, r, g, b) {
+  const n = lut.size - 1, d = lut.data;
+  const fr = clamp01(r) * n, fg = clamp01(g) * n, fb = clamp01(b) * n;
+  const r0 = Math.min(fr | 0, n - 1), g0 = Math.min(fg | 0, n - 1), b0 = Math.min(fb | 0, n - 1);
+  const tr = fr - r0, tg = fg - g0, tb = fb - b0;
+  const S = lut.size, S2 = S * S;
+  const out = [0, 0, 0];
+  for (let c = 0; c < 3; c++) {
+    // .cube: chỉ số chạy R nhanh nhất, rồi G, rồi B.
+    const at = (ri, gi, bi) => d[(bi * S2 + gi * S + ri) * 3 + c];
+    const c00 = at(r0, g0, b0) * (1 - tr) + at(r0 + 1, g0, b0) * tr;
+    const c10 = at(r0, g0 + 1, b0) * (1 - tr) + at(r0 + 1, g0 + 1, b0) * tr;
+    const c01 = at(r0, g0, b0 + 1) * (1 - tr) + at(r0 + 1, g0, b0 + 1) * tr;
+    const c11 = at(r0, g0 + 1, b0 + 1) * (1 - tr) + at(r0 + 1, g0 + 1, b0 + 1) * tr;
+    out[c] = (c00 * (1 - tg) + c10 * tg) * (1 - tb) + (c01 * (1 - tg) + c11 * tg) * tb;
+  }
+  return out;
+}
+
+/**
+ * Đọc file .cube (định dạng LUT 3D thông dụng). Chỉ LUT 3D.
+ * Ném lỗi kèm lý do khi file không đọc được — nơi gọi quyết định bỏ qua hay báo.
+ */
+function parseCube(text) {
+  let size = 0, min = [0, 0, 0], max = [1, 1, 1];
+  const vals = [];
+  const lines = String(text).split(/\r?\n/);
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line || line[0] === "#") continue;
+    const parts = line.split(/\s+/);
+    const key = parts[0].toUpperCase();
+    if (key === "LUT_3D_SIZE") { size = parseInt(parts[1], 10); continue; }
+    if (key === "LUT_1D_SIZE") throw new Error("LUT 1D không được hỗ trợ, cần LUT 3D");
+    if (key === "DOMAIN_MIN") { min = parts.slice(1, 4).map(Number); continue; }
+    if (key === "DOMAIN_MAX") { max = parts.slice(1, 4).map(Number); continue; }
+    if (key === "TITLE" || /^[A-Z_]+$/.test(key)) continue;
+    if (parts.length >= 3) vals.push(+parts[0], +parts[1], +parts[2]);
+  }
+  if (!(size >= 2 && size <= 256)) throw new Error("thiếu hoặc sai LUT_3D_SIZE");
+  if (vals.length !== size * size * size * 3) {
+    throw new Error(`cần ${size * size * size} dòng màu, file có ${vals.length / 3}`);
+  }
+  const data = new Float32Array(vals.length);
+  for (let i = 0; i < vals.length; i++) {
+    const c = i % 3;
+    data[i] = clamp01((vals[i] - min[c]) / (max[c] - min[c] || 1));
+  }
+  return { size, data };
+}
+
+/**
+ * Gộp mọi công cụ màu/tông thành một LUT 3D, đã trộn với ảnh gốc theo
+ * `strength`. Dựng một lần cho mỗi bộ số (vài chục ms), rồi mỗi điểm ảnh chỉ
+ * còn là một phép tra bảng — đủ nhanh để kéo thanh trượt mà ảnh chạy theo.
+ */
+function buildLut(look, opts = {}, size = 33) {
+  const f = colourChain(look, opts);
+  const s = look.strength / 100;
+  const data = new Float32Array(size * size * size * 3);
+  const n = size - 1;
+  let p = 0;
+  for (let bi = 0; bi < size; bi++) {
+    for (let gi = 0; gi < size; gi++) {
+      for (let ri = 0; ri < size; ri++) {
+        const r = ri / n, g = gi / n, b = bi / n;
+        const o = f(r, g, b);
+        data[p++] = r + (o[0] - r) * s;
+        data[p++] = g + (o[1] - g) * s;
+        data[p++] = b + (o[2] - b) * s;
+      }
+    }
+  }
+  return { size, data };
+}
+
+/* ═════════════════════════ công cụ theo vùng ═════════════════════════ */
+
+/** Làm mờ hộp tách trục, chạy 3 lần ≈ Gauss. Trả về mảng mới. */
+function boxBlur(src, w, h, radius, passes = 3) {
+  let a = Float32Array.from(src), b = new Float32Array(src.length);
+  const r = Math.max(0, Math.round(radius));
+  if (r < 1) return a;
+  for (let p = 0; p < passes; p++) {
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      let acc = 0;
+      for (let x = -r; x <= r; x++) acc += a[row + Math.min(w - 1, Math.max(0, x))];
+      for (let x = 0; x < w; x++) {
+        b[row + x] = acc / (2 * r + 1);
+        acc += a[row + Math.min(w - 1, x + r + 1)] - a[row + Math.max(0, x - r)];
+      }
+    }
+    for (let x = 0; x < w; x++) {
+      let acc = 0;
+      for (let y = -r; y <= r; y++) acc += b[Math.min(h - 1, Math.max(0, y)) * w + x];
+      for (let y = 0; y < h; y++) {
+        a[y * w + x] = acc / (2 * r + 1);
+        acc += b[Math.min(h - 1, y + r + 1) * w + x] - b[Math.max(0, y - r) * w + x];
+      }
+    }
+  }
+  return a;
+}
+
+/** Bộ sinh số giả ngẫu nhiên có hạt giống: cùng seed thì cùng hạt phim. */
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * Đặc tính của sáu kiểu hạt Film Grain: cỡ cụm, độ mềm
+ * (số lần làm mờ), độ gắt, và "khối" (cubic: hạt vuông, lấy mẫu thưa).
+ */
+const GRAIN_PROFILE = {
+  fine: { size: 0.8, passes: 1, gain: 1.0, block: 1 },
+  silverRich: { size: 1.1, passes: 2, gain: 1.15, block: 1 },
+  soft: { size: 1.6, passes: 3, gain: 0.85, block: 1 },
+  cubic: { size: 1.0, passes: 1, gain: 1.2, block: 2 },
+  tabular: { size: 0.9, passes: 2, gain: 0.95, block: 1 },
+  harsh: { size: 1.3, passes: 0, gain: 1.6, block: 1 },
+};
+
+/** Lớp hạt chuẩn hoá (trung bình 0, độ lệch 1), cỡ cụm theo cạnh dài của ảnh. */
+function grainPlane(w, h, grain, seed) {
+  const prof = GRAIN_PROFILE[grain.type] || GRAIN_PROFILE.fine;
+  const long = Math.max(w, h);
+  const sizePx = prof.size * (0.4 + (grain.granularity / 100) * 2.2) * (long / 1500);
+  const block = Math.max(1, Math.round(prof.block * Math.max(1, sizePx * 0.6)));
+  const rnd = mulberry32(seed || 1);
+  const n = w * h;
+  let p = new Float32Array(n);
+  if (block > 1) {
+    const bw = Math.ceil(w / block), bh = Math.ceil(h / block);
+    const cells = new Float32Array(bw * bh);
+    for (let i = 0; i < cells.length; i++) cells[i] = rnd() + rnd() - 1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) p[y * w + x] = cells[((y / block) | 0) * bw + ((x / block) | 0)];
+    }
+  } else {
+    for (let i = 0; i < n; i++) p[i] = rnd() + rnd() - 1;
+  }
+  if (prof.passes > 0 && sizePx >= 0.75) p = boxBlur(p, w, h, sizePx * 0.5, prof.passes);
+  let s = 0, sq = 0;
+  for (let i = 0; i < n; i++) { s += p[i]; sq += p[i] * p[i]; }
+  const mean = s / n, sd = Math.sqrt(Math.max(1e-12, sq / n - mean * mean));
+  const k = prof.gain / sd;
+  for (let i = 0; i < n; i++) p[i] = (p[i] - mean) * k;
+  return p;
+}
+
+/* ═════════════════════════ xử lý cả ảnh ═════════════════════════ */
+
+const TO_LIN = new Float32Array(256);
+for (let i = 0; i < 256; i++) TO_LIN[i] = toLinear(i / 255);
+
+/**
+ * Áp look lên ảnh, sửa tại chỗ. `data` là mảng byte xen kênh, `stride` = 3
+ * (RGB, từ sharp) hoặc 4 (RGBA, từ canvas — kênh alpha giữ nguyên).
+ *
+ * opts:
+ *   bw        — lượt B&W: bật công cụ Black & White dù cấu hình đang tắt.
+ *   userLut   — LUT .cube đã đọc (parseCube), dùng cho mục LUT.
+ *   lut       — LUT 3D dựng sẵn (buildLut) để khỏi dựng lại khi chỉ đổi ảnh.
+ *   grain     — lớp hạt dựng sẵn (grainPlane) cùng cỡ ảnh, cho trang chỉnh.
+ *   seed      — hạt giống cho hạt phim; 0/không có = ngẫu nhiên.
+ */
+function renderLook(data, w, h, stride, look, opts = {}) {
+  const n = w * h;
+  const s = look.strength / 100;
+  const lut = opts.lut || buildLut(look, opts);
+
+  // ── 1. LUT: mọi công cụ màu/tông trong một lần quét ──
+  const S = lut.size, S2 = S * S, N = S - 1, D = lut.data;
+  const idx = new Int32Array(256), frac = new Float32Array(256);
+  for (let v = 0; v < 256; v++) {
+    const f = (v / 255) * N;
+    idx[v] = Math.min(f | 0, N - 1);
+    frac[v] = f - idx[v];
+  }
+  for (let i = 0, p = 0; i < n; i++, p += stride) {
+    const r0 = idx[data[p]], g0 = idx[data[p + 1]], b0 = idx[data[p + 2]];
+    const tr = frac[data[p]], tg = frac[data[p + 1]], tb = frac[data[p + 2]];
+    const base = (b0 * S2 + g0 * S + r0) * 3;
+    const oR = 3, oG = S * 3, oB = S2 * 3;
+    for (let c = 0; c < 3; c++) {
+      const q = base + c;
+      const c00 = D[q] + (D[q + oR] - D[q]) * tr;
+      const c10 = D[q + oG] + (D[q + oG + oR] - D[q + oG]) * tr;
+      const c01 = D[q + oB] + (D[q + oB + oR] - D[q + oB]) * tr;
+      const c11 = D[q + oB + oG] + (D[q + oB + oG + oR] - D[q + oB + oG]) * tr;
+      const v = (c00 + (c10 - c00) * tg) * (1 - tb) + (c01 + (c11 - c01) * tg) * tb;
+      data[p + c] = v <= 0 ? 0 : v >= 1 ? 255 : (v * 255 + 0.5) | 0;
+    }
+  }
+
+  const long = Math.max(w, h);
+
+  // ── 2. Clarity / Structure: tương phản cục bộ trên kênh sáng ──
+  const cl = look.clarity;
+  const kc = (cl.clarity / 100) * s, ks = (cl.structure / 100) * s;
+  if (kc || ks) {
+    const Y = new Float32Array(n);
+    for (let i = 0, p = 0; i < n; i++, p += stride) Y[i] = luma(data[p], data[p + 1], data[p + 2]) / 255;
+    const big = kc ? boxBlur(Y, w, h, long * 0.02) : null;
+    const small = ks ? boxBlur(Y, w, h, long * 0.003) : null;
+    const m = cl.method;
+    const gainC = m === "punch" ? 0.9 : m === "classic" ? 0.8 : 0.6;
+    const protect = m !== "classic";
+    const satK = m === "punch" ? 0.25 * kc : 0;
+    for (let i = 0, p = 0; i < n; i++, p += stride) {
+      const y = Y[i];
+      let d = 0;
+      if (big) d += kc * gainC * (y - big[i]) * (protect ? 4 * y * (1 - y) : 1);
+      if (small) d += ks * 1.2 * (y - small[i]);
+      let r = data[p] / 255 + d, g = data[p + 1] / 255 + d, b = data[p + 2] / 255 + d;
+      if (satK) {
+        const yy = luma(r, g, b);
+        r = yy + (r - yy) * (1 + satK); g = yy + (g - yy) * (1 + satK); b = yy + (b - yy) * (1 + satK);
+      }
+      data[p] = r <= 0 ? 0 : r >= 1 ? 255 : (r * 255 + 0.5) | 0;
+      data[p + 1] = g <= 0 ? 0 : g >= 1 ? 255 : (g * 255 + 0.5) | 0;
+      data[p + 2] = b <= 0 ? 0 : b >= 1 ? 255 : (b * 255 + 0.5) | 0;
+    }
+  }
+
+  // ── 3. Vignetting: tối/sáng góc theo EV, trên ánh sáng tuyến tính ──
+  const ev = look.vignetting.amount * s;
+  if (ev) {
+    const cx = (w - 1) / 2, cy = (h - 1) / 2;
+    const ax = look.vignetting.method === "circular" ? Math.min(w, h) / 2 : w / 2;
+    const ay = look.vignetting.method === "circular" ? Math.min(w, h) / 2 : h / 2;
+    for (let y = 0, p = 0; y < h; y++) {
+      const ny = (y - cy) / ay;
+      for (let x = 0; x < w; x++, p += stride) {
+        const nx = (x - cx) / ax;
+        const rr = Math.sqrt(nx * nx + ny * ny) / Math.SQRT2;
+        const fall = smooth(0.25, 1.15, rr);
+        if (!fall) continue;
+        const k = Math.pow(2, ev * fall);
+        for (let c = 0; c < 3; c++) {
+          const v = toSrgb(TO_LIN[data[p + c]] * k);
+          data[p + c] = v >= 1 ? 255 : (v * 255 + 0.5) | 0;
+        }
+      }
+    }
+  }
+
+  // ── 4. Film Grain: sau cùng, hạt xám, dày ở trung tông, mỏng ở vùng tối ──
+  const g = look.grain;
+  const amt = (g.impact / 100) * 0.1 * s;
+  if (amt > 0) {
+    const seed = g.seed || opts.seed || ((Math.random() * 4294967295) >>> 0) || 1;
+    const plane = opts.grain && opts.grain.length === n ? opts.grain : grainPlane(w, h, g, seed);
+    for (let i = 0, p = 0; i < n; i++, p += stride) {
+      const y = luma(data[p], data[p + 1], data[p + 2]) / 255;
+      const wgt = smooth(0, 0.2, y) * (1 - 0.6 * smooth(0.8, 1, y));
+      const d = plane[i] * amt * wgt * 255;
+      if (!d) continue;
+      for (let c = 0; c < 3; c++) {
+        const v = data[p + c] + d;
+        data[p + c] = v <= 0 ? 0 : v >= 255 ? 255 : (v + 0.5) | 0;
+      }
+    }
+  }
+}
+
+return {
+  LOOK_RANGES: LOOK_RANGES, COLOR_EDITOR_BANDS: COLOR_EDITOR_BANDS, neutralLook: neutralLook, communityLook: communityLook,
+  normalizeLook: normalizeLook, buildLut: buildLut, renderLook: renderLook, parseCube: parseCube,
+  grainPlane: grainPlane, curveTable: curveTable,
+  // cho ống hút / đầu dò: đúng các phép tính mà chuỗi màu dùng
+  sampleLut: sampleLut, wbGains: wbGains, toLinear: toLinear, bandWeights: bandWeights, EDITOR_CENTERS: EDITOR_CENTERS
+};
+})();
+</script>
+
+<script>
+/**
+ * BỘ LỌC TUYẾT — rắc tuyết nhiều lớp độ sâu lên ảnh booth.
+ *
+ * File này dùng CHUNG cho snow.exe (src/filters/snow/pipeline.js) và trang
+ * chỉnh web/snow.html (build-offline.mjs dán nguyên văn vào trang, bỏ chữ
+ * `export`). Không import gì, không đụng DOM hay Node — chỉ là toán trên một
+ * mảng điểm ảnh 8-bit, 3 hoặc 4 kênh. Một công thức, hai nơi dùng.
+ *
+ * Mô hình là cảnh 2.5D, không phải 3D thật:
+ *   - Mỗi hạt có vị trí trên khung (u, v), độ sâu Z (mét, tính từ máy ảnh),
+ *     đường kính thật (mm), kiểu hạt, góc xoay, độ nghiêng.
+ *   - Một ống kính ảo (tiêu cự, khoảng lấy nét, khẩu độ) quy Z ra hai con số
+ *     theo công thức thấu kính mỏng: đường kính hạt trên ảnh D và đường kính
+ *     vòng mờ C. Hạt sát ống kính thành đĩa bokeh to, hạt ở mặt phẳng nét sắc,
+ *     hạt sau lưng mẫu mờ dần.
+ *   - "Trước hay sau người" không phải một cờ riêng: hạt có Z lớn hơn khoảng
+ *     lấy nét thì nằm sau người và bị vùng người che.
+ *
+ * Vì sao không dựng mesh 3D cho bông tuyết: ở khung bán thân, một bông 3–5mm
+ * chỉ còn vài pixel, nhánh tinh thể nhỏ hơn một pixel. Thứ làm tuyết trông
+ * thật là độ sâu, vòng mờ, ánh sáng và việc bị người che — tất cả nằm ở đây.
+ *
+ * Vị trí tính theo tỉ lệ khung, kích thước tính theo mm cảm biến, nên cùng một
+ * cấu hình cho ra cùng một bức ảnh ở mọi độ phân giải: trang chỉnh xem ở
+ * 1200px mà snow.exe chạy ở 6000px vẫn khớp.
+ */
+
+/* ═════════════════════════ miền giá trị ═════════════════════════ */
+
+/** [min, max, mặc định] — dùng chung cho kẹp số, thanh trượt, reset. */
+const SNOW_RANGES = {
+  amount: [0, 300, 100],       // % — nhân số hạt của mọi lớp, thanh chính của trang chỉnh
+  focal: [18, 135, 35],        // mm, quy đổi full-frame
+  focus: [0.8, 5, 1.8],        // m, máy ảnh → người
+  backdrop: [1.2, 8, 2.6],     // m, máy ảnh → phông
+  aperture: [1.2, 16, 2.8],    // khẩu độ ẢO, chỉ dùng để tính vòng mờ của tuyết
+  blades: [0, 9, 0],           // 0 = bokeh tròn, 5…9 = đa giác theo số lá khẩu
+  angle: [-60, 60, 10],        // độ lệch hướng rơi so với phương thẳng đứng
+  trail: [0, 100, 15],         // vệt chuyển động
+  brightness: [30, 120, 95],
+  ambient: [0, 100, 30],       // hạt ăn màu của vùng ảnh phía sau
+  backlight: [0, 100, 40],     // ngược sáng: hạt mờ vẫn sáng rõ
+  glow: [0, 100, 30],
+  weight: [0, 100, 0],
+  sizeMm: [0.5, 40, 3],
+  clumping: [0, 100, 40],
+  count: [0, 4000, 0],
+  sizePct: [25, 400, 100],
+  opacity: [0, 100, 100],
+  farDepth: [0.5, 30, 6],      // m, độ sâu ảo "trong phông" của lớp xa
+  pct: [0, 100, 50],
+  feather: [0, 50, 12],
+  guard: [1, 30, 4],           // % cạnh dài
+  seed: [0, 4294967295, 0],
+  varyAmount: [0, 60, 20],     // ± % lượng tuyết giữa các ảnh
+  varyWind: [0, 45, 8],        // ± độ hướng rơi
+  varyBokeh: [0, 100, 50],     // ± % số đĩa bokeh sát ống kính
+};
+
+/** Năm lớp độ sâu, từ gần máy ảnh ra xa. Thứ tự này là thứ tự trong file cấu hình. */
+const SNOW_LAYERS = ["lens", "front", "focus", "behind", "far"];
+/** Chế độ vùng người — xem chú thích ở phần "vùng người" bên dưới. */
+const SNOW_SUBJECT_MODES = ["auto", "ellipse", "off"];
+
+const SNOW_LAYER_NAMES = {
+  lens: "Sát ống kính",
+  front: "Trước mặt mẫu",
+  focus: "Quanh mẫu",
+  behind: "Sau lưng mẫu",
+  far: "Xa, trong phông",
+};
+
+/** Bộ "Giống mẫu": tuyết giả cỡ to, vài đĩa bokeh sát ống kính, nhiều hạt li ti phía sau. */
+function defaultSnow() {
+  return {
+    amount: 100,
+    seed: 0,
+    camera: { focal: 35, focus: 1.8, backdrop: 2.6, aperture: 2.8, blades: 0 },
+    flakes: { minMm: 2.5, maxMm: 14, clump: 60, chip: 40, crystal: 0, clumping: 40 },
+    wind: { angle: 10, trail: 15 },
+    vary: { amount: 20, wind: 8, bokeh: 50 },
+    light: { brightness: 95, ambient: 30, backlight: 40, glow: 30 },
+    layers: {
+      lens: { enabled: true, count: 5, size: 100, opacity: 60 },
+      front: { enabled: true, count: 50, size: 100, opacity: 90 },
+      focus: { enabled: true, count: 160, size: 100, opacity: 95 },
+      behind: { enabled: true, count: 260, size: 100, opacity: 90 },
+      far: { enabled: true, count: 420, size: 100, opacity: 70, depth: 6 },
+    },
+    subject: { mode: "auto", x: 50, y: 60, w: 70, h: 100, feather: 12 },
+    faceGuard: { enabled: true, maxSize: 4 },
+  };
+}
+
+/** Các bộ dựng sẵn cho trang chỉnh. Mỗi mục là một hàm, để không ai sửa nhầm bản gốc. */
+const SNOW_PRESETS = {
+  mercies: defaultSnow,
+  light() {
+    const s = defaultSnow();
+    s.layers.lens.count = 2;
+    s.layers.front.count = 15;
+    s.layers.focus.count = 50;
+    s.layers.behind.count = 90;
+    s.layers.far.count = 180;
+    s.wind.trail = 8;
+    return s;
+  },
+  blizzard() {
+    const s = defaultSnow();
+    s.layers.lens.count = 9;
+    s.layers.front.count = 110;
+    s.layers.focus.count = 320;
+    s.layers.behind.count = 600;
+    s.layers.far.count = 1400;
+    s.wind = { angle: 28, trail: 55 };
+    s.flakes.clumping = 55;
+    return s;
+  },
+};
+
+/*
+ * Preset MÀU cho bộ lọc Tuyết — chạy bằng engine của Instax (look.js), sau khi
+ * đã rắc tuyết, nên hạt tuyết cũng ăn màu và ăn hạt phim như mọi thứ khác trong
+ * khung. Ở đây chỉ là dữ liệu thô (khoá nào thiếu = trung tính); snow.exe và
+ * trang chỉnh tự chuẩn hoá bằng normalizeLook(raw, neutralLook()) — file này
+ * không import look.js để còn dán được vào trang chỉnh.
+ *   neutral   : giữ màu gốc.
+ *   mercies   : theo ảnh mẫu mercies — da sứ sáng và nhạt, trắng ngả kem không
+ *               cháy, xanh dời về xanh thép, đen nâng nhẹ, mềm.
+ *   frost     : sương giá — lạnh, trong, hợp mọi phông (kể cả phông ấm).
+ *   community : bộ "chuẩn cộng đồng" của Instax (communityLook).
+ */
+const SNOW_LOOKS = {
+  neutral: { label: "Giữ màu gốc", raw: {} },
+  mercies: {
+    label: "Đông mercies — da sứ, trắng kem",
+    raw: {
+      whiteBalance: { kelvin: 5700, tint: 3 },
+      exposure: { exposure: 0.2, contrast: -12, brightness: 6, saturation: -15 },
+      hdr: { highlight: 35, shadow: 10, white: -15, black: 6 },
+      curve: { rgb: [[0, 12], [64, 62], [192, 198], [255, 246]] },
+      colorEditor: {
+        red: { hue: 0, saturation: -10, lightness: 5 },
+        orange: { hue: -4, saturation: -22, lightness: 12 },
+        yellow: { hue: -6, saturation: -30, lightness: 5 },
+        green: { hue: 0, saturation: -60, lightness: 0 },
+        cyan: { hue: 12, saturation: -15, lightness: 0 },
+        blue: { hue: -8, saturation: -25, lightness: 6 },
+        magenta: { hue: 0, saturation: -20, lightness: 0 },
+      },
+      colorBalance: {
+        shadow: { hue: 30, saturation: 4, lightness: 0 },
+        midtone: { hue: 205, saturation: 5, lightness: 0 },
+        highlight: { hue: 40, saturation: 10, lightness: 0 },
+      },
+      clarity: { method: "natural", clarity: -15, structure: -5 },
+      grain: { type: "fine", impact: 10, granularity: 40, seed: 0 },
+    },
+  },
+  frost: {
+    label: "Sương giá — lạnh, trong",
+    raw: {
+      whiteBalance: { kelvin: 4900, tint: 4 },
+      exposure: { exposure: 0.15, contrast: -10, brightness: 4, saturation: -18 },
+      hdr: { highlight: 30, shadow: 12, white: -10, black: 4 },
+      curve: { rgb: [[0, 14], [64, 64], [192, 196], [255, 248]] },
+      colorEditor: {
+        orange: { hue: -3, saturation: -10, lightness: 8 },
+        green: { hue: 0, saturation: -40, lightness: 0 },
+        blue: { hue: -6, saturation: -10, lightness: 5 },
+      },
+      colorBalance: {
+        shadow: { hue: 210, saturation: 10, lightness: 0 },
+        highlight: { hue: 195, saturation: 4, lightness: 0 },
+      },
+      clarity: { method: "natural", clarity: -12, structure: 0 },
+      grain: { type: "fine", impact: 8, granularity: 40, seed: 0 },
+    },
+  },
+  community: { label: "Instax chuẩn cộng đồng", raw: null },
+};
+
+/* ═════════════════════════ chuẩn hoá cấu hình ═════════════════════════ */
+
+function num(v, range, dflt) {
+  const d = dflt === undefined ? range[2] : dflt;
+  const n = typeof v === "number" && Number.isFinite(v) ? v : d;
+  return Math.min(range[1], Math.max(range[0], n));
+}
+function obj(v) { return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
+function bool(v, d) { return typeof v === "boolean" ? v : d; }
+
+/**
+ * Kẹp mọi số về miền an toàn, khoá nào thiếu thì lấy từ `base` (mặc định là
+ * bộ "Giống mẫu"). Cùng nguyên tắc với các bộ lọc khác: file do người vận hành
+ * sửa tay, số sai phải bị kẹp im lặng chứ không làm gián đoạn phiên chụp.
+ */
+function normalizeSnow(raw, base) {
+  const d = base || defaultSnow();
+  const r = obj(raw);
+  const R = SNOW_RANGES;
+  const cam = obj(r.camera), fl = obj(r.flakes), wi = obj(r.wind), li = obj(r.light);
+  const ly = obj(r.layers), su = obj(r.subject), fg = obj(r.faceGuard);
+
+  const o = { amount: num(r.amount, R.amount, d.amount), seed: Math.round(num(r.seed, R.seed, d.seed)) };
+
+  o.camera = {
+    focal: num(cam.focal, R.focal, d.camera.focal),
+    focus: num(cam.focus, R.focus, d.camera.focus),
+    backdrop: num(cam.backdrop, R.backdrop, d.camera.backdrop),
+    aperture: num(cam.aperture, R.aperture, d.camera.aperture),
+    blades: Math.round(num(cam.blades, R.blades, d.camera.blades)),
+  };
+  // Phông phải nằm sau người; 1–4 lá khẩu không tạo ra đa giác nào nhận ra được.
+  o.camera.backdrop = Math.max(o.camera.backdrop, Math.min(R.backdrop[1], o.camera.focus + 0.3));
+  if (o.camera.blades > 0 && o.camera.blades < 5) o.camera.blades = 5;
+
+  o.flakes = {
+    minMm: num(fl.minMm, R.sizeMm, d.flakes.minMm),
+    maxMm: num(fl.maxMm, R.sizeMm, d.flakes.maxMm),
+    clump: num(fl.clump, R.weight, d.flakes.clump),
+    chip: num(fl.chip, R.weight, d.flakes.chip),
+    crystal: num(fl.crystal, R.weight, d.flakes.crystal),
+    clumping: num(fl.clumping, R.clumping, d.flakes.clumping),
+  };
+  if (o.flakes.maxMm < o.flakes.minMm) o.flakes.maxMm = o.flakes.minMm;
+  if (o.flakes.clump + o.flakes.chip + o.flakes.crystal <= 0) o.flakes.clump = 100;
+
+  o.wind = { angle: num(wi.angle, R.angle, d.wind.angle), trail: num(wi.trail, R.trail, d.wind.trail) };
+  const va = obj(r.vary), dv = d.vary || { amount: 0, wind: 0, bokeh: 0 };
+  o.vary = {
+    amount: num(va.amount, R.varyAmount, dv.amount),
+    wind: num(va.wind, R.varyWind, dv.wind),
+    bokeh: num(va.bokeh, R.varyBokeh, dv.bokeh),
+  };
+  o.light = {
+    brightness: num(li.brightness, R.brightness, d.light.brightness),
+    ambient: num(li.ambient, R.ambient, d.light.ambient),
+    backlight: num(li.backlight, R.backlight, d.light.backlight),
+    glow: num(li.glow, R.glow, d.light.glow),
+  };
+
+  o.layers = {};
+  SNOW_LAYERS.forEach((k) => {
+    const s = obj(ly[k]), dd = d.layers[k];
+    o.layers[k] = {
+      enabled: bool(s.enabled, dd.enabled),
+      count: Math.round(num(s.count, R.count, dd.count)),
+      size: num(s.size, R.sizePct, dd.size),
+      opacity: num(s.opacity, R.opacity, dd.opacity),
+    };
+  });
+  o.layers.far.depth = num(obj(ly.far).depth, R.farDepth, d.layers.far.depth);
+
+  // File của bản đầu dùng `enabled` thay cho `mode`: false = tắt, true = elip.
+  let mode = SNOW_SUBJECT_MODES.indexOf(su.mode) >= 0 ? su.mode : d.subject.mode;
+  if (su.mode === undefined && typeof su.enabled === "boolean") mode = su.enabled ? "ellipse" : "off";
+  o.subject = {
+    mode,
+    x: num(su.x, R.pct, d.subject.x),
+    y: num(su.y, R.pct, d.subject.y),
+    w: num(su.w, R.pct, d.subject.w),
+    h: num(su.h, R.pct, d.subject.h),
+    feather: num(su.feather, R.feather, d.subject.feather),
+  };
+  o.faceGuard = { enabled: bool(fg.enabled, d.faceGuard.enabled), maxSize: num(fg.maxSize, R.guard, d.faceGuard.maxSize) };
+  return o;
+}
+
+/** Chất lượng JPEG, backup, bỏ qua, giới hạn — cùng hình dạng với các bộ lọc khác. */
+function snowFileOptions(raw) {
+  const r = obj(raw);
+  const o = obj(r.output), b = obj(r.backup), sk = obj(r.skip), l = obj(r.limits);
+  return {
+    output: {
+      quality: Math.round(num(o.quality, [60, 100, 95])),
+      chromaSubsampling: o.chromaSubsampling === "4:2:0" ? "4:2:0" : "4:4:4",
+    },
+    backup: {
+      enabled: b.enabled !== false,
+      folder: typeof b.folder === "string" && b.folder.trim() ? b.folder.trim() : "_original",
+    },
+    skip: {
+      pathContains: Array.isArray(sk.pathContains)
+        ? sk.pathContains.filter((x) => typeof x === "string" && x.trim()).map((x) => x.trim())
+        : [],
+    },
+    limits: {
+      minEdge: Math.round(num(l.minEdge, [0, 20000, 400])),
+      maxMs: Math.round(num(l.maxMs, [100, 60000, 2500])),
+    },
+  };
+}
+
+/* Ghi chú đi kèm file cấu hình. Không dấu, để Notepad trên máy booth nào cũng đọc được. */
+const SNOW_DOC =
+  "Bo loc Tuyet - cau hinh v1. Chinh bang web/snow-tuner.html roi bam Luu, dat file nay canh snow.exe. " +
+  "amount = luong tuyet (%, nhan so hat moi lop). vary = bien thien giua cac anh (+/- luong tuyet %, huong gio do, so bokeh %). seed 0 = moi anh mot bo hat rieng (theo ten file). camera: ong kinh AO de tinh do mo cua tuyet (met, mm). " +
+  "layers: lens = sat ong kinh, front = truoc mat mau, focus = quanh mau, behind = sau lung mau (bi nguoi che), " +
+  "far = xa trong phong. subject.mode: auto = tach nguoi tu dong (can models/modnet.onnx), " +
+  "neu khong chay duoc thi dung elip x/y/w/h (%); ellipse = luon dung elip; off = khong che. " +
+  "look: chinh mau SAU khi rac tuyet, cung bo cong cu voi Instax (enabled = bat/tat, strength = do dam); " +
+  "LUT .cube dat trong thu muc luts canh snow.exe.";
+
+/**
+ * File cấu hình dạng dễ đọc: nhóm nào toàn số thì nằm trên một dòng. Mục `look`
+ * được ghi nguyên như lớp gọi đưa vào — chuẩn hoá nó là việc của look.js.
+ */
+function snowConfigToJson(cfg) {
+  const n = normalizeSnow(cfg);
+  const out = Object.assign(
+    { _doc: SNOW_DOC, version: 1, enabled: cfg.enabled !== false },
+    n,
+    cfg.look ? { look: cfg.look } : {},
+    snowFileOptions(cfg),
+  );
+  return fmtValue(out, "") + "\n";
+}
+
+function fmtValue(v, ind) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map((x) => fmtValue(x, ind)).join(", ") + "]";
+  const keys = Object.keys(v);
+  if (keys.every((k) => v[k] === null || typeof v[k] !== "object")) {
+    return "{ " + keys.map((k) => JSON.stringify(k) + ": " + JSON.stringify(v[k])).join(", ") + " }";
+  }
+  const ni = ind + "  ";
+  return "{\n" + keys.map((k) => ni + JSON.stringify(k) + ": " + fmtValue(v[k], ni)).join(",\n") + "\n" + ind + "}";
+}
+
+/* ═════════════════════════ ngẫu nhiên có seed ═════════════════════════ */
+
+/** mulberry32: nhanh, đủ đều, và cho đúng cùng một dãy trên Node lẫn trình duyệt. */
+function rngOf(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/** Seed theo tên file (FNV-1a): mỗi tấm một bộ hạt, chạy lại vẫn ra y hệt. */
+function seedFromName(name) {
+  let h = 0x811c9dc5;
+  const s = String(name || "");
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0 || 1;
+}
+
+/** Nhiễu giá trị 2D, nội suy mượt — dùng cho độ tụ đám và cho viền xù của hạt. */
+function noise2(salt) {
+  const H = (ix, iy) => {
+    let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ salt;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  return (x, y) => {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    let fx = x - ix, fy = y - iy;
+    fx = fx * fx * (3 - 2 * fx);
+    fy = fy * fy * (3 - 2 * fy);
+    const a = H(ix, iy), b = H(ix + 1, iy), c = H(ix, iy + 1), d = H(ix + 1, iy + 1);
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+  };
+}
+
+function smooth(e0, e1, x) {
+  let t = (x - e0) / (e1 - e0);
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return t * t * (3 - 2 * t);
+}
+
+/* ═════════════════════════ ống kính ảo ═════════════════════════ */
+
+/**
+ * Khoảng độ sâu (m) của từng lớp, suy ra từ khoảng lấy nét S và khoảng phông B.
+ * Lớp "xa" nằm SAU phông — vật lý thì không thể, nhưng trên phông in cảnh tuyết
+ * nó đọc thành hạt rơi trong cảnh, và đó chính là chiều sâu ta cần.
+ */
+function layerDepths(cfg) {
+  const c = cfg.camera, S = c.focus, B = Math.max(c.backdrop, S + 0.3);
+  const near = Math.max(0.12, (2 * c.focal) / 1000);  // gần hơn 2f thì công thức thấu kính mỏng vô nghĩa
+  const half = Math.min(0.3, (B - S) * 0.4);          // nửa bề dày vùng nét quanh người
+  const lensEnd = Math.max(near + 0.05, Math.min(0.45, S * 0.4));
+  const frontEnd = Math.max(lensEnd + 0.05, S - half);
+  const behindEnd = Math.max(S + half + 0.02, B - 0.03);
+  return {
+    lens: [near, lensEnd],
+    front: [lensEnd, frontEnd],
+    focus: [S - half, S + half],
+    behind: [S + half, behindEnd],
+    far: [B, B + cfg.layers.far.depth],
+  };
+}
+
+/**
+ * Hai phép quy đổi của thấu kính mỏng, ra pixel của ảnh đang vẽ. Cạnh dài của
+ * ảnh ứng với 36mm cảm biến full-frame — nên D và C tự co giãn theo độ phân giải.
+ *   size(d, Z) : vật đường kính d (mm) ở khoảng cách Z (m) → đường kính trên ảnh
+ *   blur(Z)    : đường kính vòng mờ của một điểm ở khoảng cách Z
+ */
+function optics(cfg, longPx) {
+  const c = cfg.camera, f = c.focal, S = c.focus * 1000;
+  const pxPerMm = longPx / 36;
+  const A = f / c.aperture, k = f / (S - f);
+  return {
+    size: (dMm, Zm) => ((dMm * f) / Math.max(Zm * 1000 - f, 1)) * pxPerMm,
+    blur: (Zm) => {
+      const Z = Zm * 1000;
+      return ((A * Math.abs(Z - S)) / Z) * k * pxPerMm;
+    },
+  };
+}
+
+/** Cỡ hạt điển hình và độ mờ ở giữa mỗi lớp — cho sơ đồ trong trang chỉnh. */
+function describeLayers(cfg, longPx) {
+  const d = layerDepths(cfg), op = optics(cfg, longPx || 3000), fl = cfg.flakes;
+  const dm = Math.sqrt(fl.minMm * fl.maxMm);
+  return SNOW_LAYERS.map((k) => {
+    const [z0, z1] = d[k], zm = (z0 + z1) / 2;
+    return { key: k, z0, z1, size: op.size((dm * cfg.layers[k].size) / 100, zm), blur: op.blur(zm) };
+  });
+}
+
+/* ═════════════════════════ vùng người ═════════════════════════ */
+
+/*
+ * Ba chế độ của cfg.subject.mode:
+ *   "auto"    — matte tách người (snow.exe tính bằng model, trang chỉnh nạp file
+ *               PNG). Không có matte thì dùng elip bên dưới thay thế.
+ *   "ellipse" — luôn dùng elip đặt tay (đơn vị %, viền mềm theo `feather`).
+ *   "off"     — không che gì, không chặn mặt.
+ * Hạt phía sau người bị che; hạt to phía trước tránh dải mặt.
+ */
+function useMatte(cfg, matte) {
+  return cfg.subject.mode === "auto" && !!(matte && matte.data);
+}
+
+function subjectZone(cfg, w, h) {
+  const s = cfg.subject;
+  if (s.mode === "off") return null;
+  return {
+    cx: (s.x / 100) * w, cy: (s.y / 100) * h,
+    rx: Math.max(1, (s.w / 200) * w), ry: Math.max(1, (s.h / 200) * h),
+    f: s.feather / 100,
+  };
+}
+
+function zoneCover(z, x, y) {
+  const dx = (x - z.cx) / z.rx, dy = (y - z.cy) / z.ry;
+  const r = Math.sqrt(dx * dx + dy * dy);
+  if (z.f < 0.001) return r < 1 ? 1 : 0;
+  return 1 - smooth(1 - z.f, 1 + z.f, r);
+}
+
+function inFaceBand(z, x, y) {
+  const dx = (x - z.cx) / z.rx, dy = (y - z.cy) / z.ry;
+  return dx * dx + dy * dy < 1 && y < z.cy - 0.1 * z.ry;
+}
+
+/**
+ * Hàm che cho hạt phía sau: `any` loại nhanh theo khung bao, `at` cho độ che
+ * 0…1 tại một điểm ảnh. Matte (cỡ model, ~512px cạnh ngắn) được nội suy song
+ * tuyến lên cỡ ảnh — lấy điểm gần nhất thì viền người thành bậc thang khi hạt
+ * sau lưng nằm vắt ngang mép.
+ */
+function coverFor(cfg, w, h, matte) {
+  if (useMatte(cfg, matte)) {
+    const mw = matte.width, mh = matte.height, md = matte.data, sx = mw / w, sy = mh / h;
+    return {
+      any: () => true,
+      at: (x, y) => {
+        const fx0 = Math.min(mw - 1, Math.max(0, (x + 0.5) * sx - 0.5));
+        const fy0 = Math.min(mh - 1, Math.max(0, (y + 0.5) * sy - 0.5));
+        const ix = fx0 | 0, iy = fy0 | 0, fx = fx0 - ix, fy = fy0 - iy;
+        const o = iy * mw + ix, dx = ix < mw - 1 ? 1 : 0, dy = iy < mh - 1 ? mw : 0;
+        const top = md[o] + (md[o + dx] - md[o]) * fx;
+        const bot = md[o + dy] + (md[o + dy + dx] - md[o + dy]) * fx;
+        return (top + (bot - top) * fy) / 255;
+      },
+    };
+  }
+  const z = subjectZone(cfg, w, h);
+  if (!z) return null;
+  const ex = z.rx * (1 + z.f), ey = z.ry * (1 + z.f);
+  return {
+    any: (x0, y0, x1, y1) => !(x1 < z.cx - ex || x0 > z.cx + ex || y1 < z.cy - ey || y0 > z.cy + ey),
+    at: (x, y) => zoneCover(z, x + 0.5, y + 0.5),
+  };
+}
+
+/**
+ * Hàm thử "điểm (x, y) có nằm trong dải mặt không" — null nếu không chặn.
+ *
+ * Có matte: dải mặt của từng cột ảnh là từ đỉnh dáng người ở cột đó xuống thêm
+ * 25% chiều cao khung. Đi theo từng cột nên nhóm nhiều người đứng cao thấp khác
+ * nhau vẫn đúng mặt từng người — một elip chung không làm được điều đó. Cột có
+ * tay giơ lên thì dải nằm ở tay; hạt to tránh luôn chỗ đó, không hại gì.
+ */
+function faceTest(cfg, w, h, matte) {
+  if (!cfg.faceGuard.enabled) return null;
+  if (useMatte(cfg, matte)) {
+    const mw = matte.width, mh = matte.height, md = matte.data;
+    const top = new Int32Array(mw).fill(-1);
+    for (let x = 0; x < mw; x++) {
+      for (let y = 0; y < mh; y++) {
+        if (md[y * mw + x] >= 128) { top[x] = y; break; }
+      }
+    }
+    const band = 0.25 * mh, lead = 0.02 * mh;
+    return (x, y) => {
+      const mx = Math.min(mw - 1, Math.max(0, ((x * mw) / w) | 0)), t = top[mx];
+      if (t < 0) return false;
+      const my = (y * mh) / h;
+      return my >= t - lead && my <= t + band;
+    };
+  }
+  const z = subjectZone(cfg, w, h);
+  return z ? (x, y) => inFaceBand(z, x, y) : null;
+}
+
+/** Hạt có đường kính E đặt ở (x, y) có lấn vào dải mặt không: thử tâm và bốn điểm quanh tâm. */
+function hitsFace(test, x, y, E) {
+  const r = E * 0.35;
+  return test(x, y) || test(x - r, y) || test(x + r, y) || test(x, y - r) || test(x, y + r);
+}
+
+/* ═════════════════════════ dựng cảnh ═════════════════════════ */
+
+/**
+ * Biến thể của MỘT ảnh: lượng tuyết, hướng gió và số đĩa bokeh sát ống kính lệch
+ * ngẫu nhiên quanh giá trị đặt, rút từ chính seed của ảnh. Không có bước này thì
+ * bốn tấm trong một phiên chỉ khác vị trí hạt — mật độ, hướng rơi y hệt nhau,
+ * nhìn ra ngay là cùng một khuôn. Cùng seed → cùng biến thể, nên chạy lại vẫn y hệt.
+ */
+function variedSnow(cfg, seed) {
+  const v = cfg.vary;
+  if (!v || (!v.amount && !v.wind && !v.bokeh)) return cfg;
+  const rng = rngOf((seed ^ 0x51ed270b) >>> 0);
+  const a = rng() * 2 - 1, b = rng() * 2 - 1, c = rng() * 2 - 1;
+  const lens = cfg.layers.lens;
+  return Object.assign({}, cfg, {
+    amount: Math.max(0, cfg.amount * (1 + (a * v.amount) / 100)),
+    wind: Object.assign({}, cfg.wind, { angle: Math.max(-60, Math.min(60, cfg.wind.angle + b * v.wind)) }),
+    layers: Object.assign({}, cfg.layers, {
+      lens: Object.assign({}, lens, { count: Math.max(0, Math.round(lens.count * (1 + (c * v.bokeh) / 100))) }),
+    }),
+  });
+}
+
+/** Trường mật độ tần thấp: tuyết thật rơi thành chùm, không rải đều như lưới. */
+function densityField(seed) {
+  const n = noise2(seed);
+  return (u, v) => smooth(0.25, 0.8, n(u * 4.5, v * 3.5));
+}
+
+const SPRITE_COUNT = [6, 6, 3];   // clump, chip, crystal
+
+/**
+ * Sinh toàn bộ hạt của một ảnh, đã xếp từ xa đến gần (thứ tự vẽ).
+ *
+ * Mỗi hạt rút ĐÚNG bảy số ngẫu nhiên theo thứ tự cố định, còn vị trí lấy từ một
+ * dãy riêng của chính hạt đó. Nhờ vậy kéo một thanh trượt (độ tụ đám, chặn mặt)
+ * chỉ dời những hạt bị ảnh hưởng, không xáo trộn cả cảnh — so trước/sau mới có
+ * nghĩa.
+ *
+ * `matte` (tuỳ chọn) chỉ dùng để chặn mặt; việc che hạt phía sau làm lúc vẽ.
+ */
+function buildScene(w, h, cfg, seed, matte) {
+  const longPx = Math.max(w, h);
+  const op = optics(cfg, longPx);
+  const depths = layerDepths(cfg);
+  const face = faceTest(cfg, w, h, matte);
+  const fl = cfg.flakes;
+  const wsum = fl.clump + fl.chip + fl.crystal || 1;
+  const guardPx = face ? (cfg.faceGuard.maxSize / 100) * longPx : Infinity;
+  const S = cfg.camera.focus;
+  const dens = densityField((seed ^ 0x9e3779b9) >>> 0);
+  const kc = fl.clumping / 100;
+  const particles = [];
+  const stats = { guarded: 0 };
+
+  SNOW_LAYERS.forEach((name, li) => {
+    const L = cfg.layers[name];
+    stats[name] = 0;
+    // Thêm lượng tuyết chỉ thêm hạt vào cuối dãy, không xáo lại hạt đã có.
+    const n = Math.round((L.count * cfg.amount) / 100);
+    if (!L.enabled || !n) return;
+    const rng = rngOf((seed + Math.imul(li + 1, 0x85ebca6b)) >>> 0);
+    const [z0, z1] = depths[name];
+    for (let i = 0; i < n; i++) {
+      const rz = rng(), rd = rng(), rk = rng(), rs = rng(), rr = rng(), rt = rng(), rb = rng();
+      const Z = z0 + (z1 - z0) * rz;
+      // Lệch về phía hạt nhỏ: nhiều hạt li ti, ít hạt to — như tuyết thật.
+      const dMm = fl.minMm * Math.pow(fl.maxMm / fl.minMm, Math.pow(rd, 2.2)) * (L.size / 100);
+      const D = op.size(dMm, Z), C = op.blur(Z), E = D + C;
+      const kind = rk * wsum < fl.clump ? 0 : rk * wsum < fl.clump + fl.chip ? 1 : 2;
+
+      const pr = rngOf((Math.imul(seed ^ (li * 7919), 2654435761) + Math.imul(i + 1, 40503)) >>> 0);
+      const mu = E / 2 / w, mv = E / 2 / h;
+      let u = 0, v = 0, ok = false;
+      for (let t = 0; t < 12 && !ok; t++) {
+        u = -mu + pr() * (1 + 2 * mu);
+        v = -mv + pr() * (1 + 2 * mv);
+        if (kc > 0 && pr() > 1 - kc + kc * dens(u, v)) continue;
+        // Hạt to phía trước không được đè lên mặt khách.
+        if (Z < S && E > guardPx && hitsFace(face, u * w, v * h, E)) continue;
+        ok = true;
+      }
+      if (!ok) {
+        if (Z < S && E > guardPx) stats.guarded++;
+        continue;
+      }
+      particles.push({
+        layer: li, Z, D, C, x: u * w, y: v * h, kind,
+        sprite: Math.floor(rs * SPRITE_COUNT[kind]),
+        rot: rr * Math.PI * 2,
+        tilt: kind === 0 ? 0.75 + 0.25 * rt : 0.3 + 0.7 * rt,
+        bright: 0.7 + 0.35 * rb,
+        alpha: L.opacity / 100,
+        behind: Z > S,
+      });
+      stats[name]++;
+    }
+  });
+
+  particles.sort((a, b) => b.Z - a.Z);
+  return { particles, stats };
+}
+
+/* ═════════════════════════ sprite hạt ═════════════════════════ */
+
+/*
+ * Mỗi sprite là một mặt nạ alpha 128×128, hình nằm trong vòng tròn bán kính 32
+ * ở giữa (chừa viền cho bản làm mờ). Mỗi sprite có năm bản làm mờ sẵn; lúc vẽ,
+ * độ mờ cần dùng (vòng mờ của ống kính, cộng phần lọc chống răng cưa khi thu
+ * nhỏ) được nội suy giữa hai bản gần nhất. Bản mờ nhất ứng với vòng mờ ≈ 0.85
+ * lần cỡ hạt — mờ hơn nữa thì hình hạt không còn, drawSnow chuyển sang đĩa.
+ */
+const SP_N = 128, SP_C = 64, SP_R = 32;
+const SP_SIGMA = [0, 2, 4.5, 8, 13];
+const SPRITES = [null, null, null];
+
+/**
+ * Sprite của một kiểu hạt, sinh lần đầu cần đến. snow.exe là một tiến trình mới
+ * mỗi tấm ảnh, nên kiểu nào không có hạt nào đủ nét để dùng sprite (tinh thể ở
+ * bộ mặc định) thì không tốn thời gian sinh.
+ */
+function spritesOf(kind) {
+  if (!SPRITES[kind]) {
+    const rng = rngOf(0x5eed5 + kind * 7919);
+    const shape = [clumpShape, chipShape, crystalShape][kind];
+    SPRITES[kind] = [];
+    for (let i = 0; i < SPRITE_COUNT[kind]; i++) SPRITES[kind].push(variants(rasterize(shape(rng))));
+  }
+  return SPRITES[kind];
+}
+
+function rasterize(fn) {
+  const a = new Float32Array(SP_N * SP_N);
+  for (let py = 0; py < SP_N; py++) {
+    for (let px = 0; px < SP_N; px++) {
+      let s = 0;
+      for (let sy = 0; sy < 2; sy++) {
+        for (let sx = 0; sx < 2; sx++) {
+          s += fn((px + 0.25 + sx * 0.5 - SP_C) / SP_R, (py + 0.25 + sy * 0.5 - SP_C) / SP_R);
+        }
+      }
+      a[py * SP_N + px] = s / 4;
+    }
+  }
+  return a;
+}
+
+function variants(a) {
+  return SP_SIGMA.map((s) => {
+    if (!s) return a;
+    const b = Math.max(1, Math.round((-1 + Math.sqrt(1 + 4 * s * s)) / 2));
+    return boxBlur3(a, SP_N, SP_N, b);
+  });
+}
+
+/** Ba lượt box blur ngang + dọc ≈ Gauss. */
+function boxBlur3(src, w, h, r) {
+  let a = Float32Array.from(src), t = new Float32Array(src.length);
+  const pass = (from, to, horiz) => {
+    const n = horiz ? w : h, m = horiz ? h : w, st = horiz ? 1 : w, ln = horiz ? w : 1;
+    for (let j = 0; j < m; j++) {
+      const o = j * ln;
+      let acc = 0;
+      for (let k = -r; k <= r; k++) acc += from[o + Math.min(n - 1, Math.max(0, k)) * st];
+      for (let i = 0; i < n; i++) {
+        to[o + i * st] = acc / (2 * r + 1);
+        acc += from[o + Math.min(n - 1, i + r + 1) * st] - from[o + Math.max(0, i - r) * st];
+      }
+    }
+  };
+  for (let p = 0; p < 3; p++) {
+    pass(a, t, true);
+    pass(t, a, false);
+  }
+  return a;
+}
+
+/** Cục bông: vài đốm tròn dính nhau, viền xù, ruột trong mờ không đều. */
+function clumpShape(rng) {
+  const n = 6 + Math.floor(rng() * 8), b = [];
+  let ext = 0;
+  for (let i = 0; i < n; i++) {
+    const a = rng() * Math.PI * 2, d = Math.sqrt(rng()) * 0.5, r = 0.22 + rng() * 0.3;
+    b.push([Math.cos(a) * d, Math.sin(a) * d, r]);
+    ext = Math.max(ext, d + r);
+  }
+  const s = 0.92 / ext;
+  b.forEach((q) => { q[0] *= s; q[1] *= s; q[2] *= s; });
+  const nz = noise2((rng() * 4294967296) >>> 0);
+  return (x, y) => {
+    const fuzz = (nz(x * 5, y * 5) - 0.5) * 0.35;
+    let best = 0;
+    for (let i = 0; i < b.length; i++) {
+      const dx = x - b[i][0], dy = y - b[i][1];
+      const v = 1 - smooth(0.7, 1.05, Math.sqrt(dx * dx + dy * dy) / b[i][2] + fuzz);
+      if (v > best) best = v;
+    }
+    return best * (0.72 + 0.28 * nz(x * 9 + 7, y * 9 + 3));
+  };
+}
+
+/** Mảnh tuyết giả (giấy, bọt): đa giác méo, phẳng, một mép bắt sáng hơn. */
+function chipShape(rng) {
+  const n = 5 + Math.floor(rng() * 4), pts = [];
+  const off = rng() * Math.PI * 2;
+  for (let i = 0; i < n; i++) {
+    const a = off + ((i + (rng() - 0.5) * 0.6) * Math.PI * 2) / n, r = 0.6 + rng() * 0.38;
+    pts.push([Math.cos(a) * r, Math.sin(a) * r]);
+  }
+  const gx = Math.cos(off * 1.7), gy = Math.sin(off * 1.7);
+  return (x, y) => (insidePoly(pts, x, y) ? 0.82 + 0.18 * (0.5 + 0.5 * (x * gx + y * gy)) : 0);
+}
+
+function insidePoly(pts, x, y) {
+  let c = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const xi = pts[i][0], yi = pts[i][1], xj = pts[j][0], yj = pts[j][1];
+    if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+
+/** Tinh thể sáu nhánh — kiểu cách điệu, chỉ nhận ra được khi hạt to sát ống kính. */
+function crystalShape(rng) {
+  const segs = [], w0 = 0.055 + rng() * 0.03;
+  const at = [0.3 + rng() * 0.1, 0.52 + rng() * 0.1, 0.74 + rng() * 0.08];
+  for (let k = 0; k < 6; k++) {
+    const a = (k * Math.PI) / 3, dx = Math.cos(a), dy = Math.sin(a);
+    segs.push([0, 0, dx * 0.96, dy * 0.96, w0]);
+    for (const t of at) {
+      const L = (1 - t) * 0.6, px = dx * t * 0.96, py = dy * t * 0.96;
+      for (const s of [-1, 1]) {
+        const b = a + (s * Math.PI) / 3;
+        segs.push([px, py, px + Math.cos(b) * L, py + Math.sin(b) * L, w0 * 0.75]);
+      }
+    }
+  }
+  const plate = 0.16 + rng() * 0.08;
+  return (x, y) => {
+    if (x * x + y * y < plate * plate) return 0.95;
+    for (let i = 0; i < segs.length; i++) {
+      const g = segs[i];
+      if (segDist(x, y, g[0], g[1], g[2], g[3]) < g[4]) return 0.9;
+    }
+    return 0;
+  };
+}
+
+function segDist(x, y, x0, y0, x1, y1) {
+  const vx = x1 - x0, vy = y1 - y0;
+  let t = ((x - x0) * vx + (y - y0) * vy) / (vx * vx + vy * vy);
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  const dx = x - x0 - t * vx, dy = y - y0 - t * vy;
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+/* ═════════════════════════ màu nền ═════════════════════════ */
+
+/** Bản thu nhỏ rất thô của ảnh (rộng 48 ô): hạt lấy màu môi trường từ đây. */
+function ambientGrid(data, w, h, ch) {
+  const GW = 48, GH = Math.max(1, Math.round((48 * h) / w));
+  const acc = new Float32Array(GW * GH * 3), cnt = new Float32Array(GW * GH);
+  const step = Math.max(1, Math.floor(Math.min(w, h) / 300));
+  for (let y = 0; y < h; y += step) {
+    const gy = Math.min(GH - 1, ((y * GH) / h) | 0);
+    for (let x = 0; x < w; x += step) {
+      const g = gy * GW + Math.min(GW - 1, ((x * GW) / w) | 0), i = (y * w + x) * ch;
+      acc[g * 3] += data[i]; acc[g * 3 + 1] += data[i + 1]; acc[g * 3 + 2] += data[i + 2];
+      cnt[g]++;
+    }
+  }
+  for (let g = 0; g < GW * GH; g++) {
+    const n = cnt[g] || 1;
+    acc[g * 3] /= n; acc[g * 3 + 1] /= n; acc[g * 3 + 2] /= n;
+  }
+  const out = new Float32Array(acc.length);
+  for (let y = 0; y < GH; y++) {
+    for (let x = 0; x < GW; x++) {
+      let r = 0, gg = 0, b = 0, n = 0;
+      for (let j = -1; j <= 1; j++) {
+        for (let i = -1; i <= 1; i++) {
+          const xx = x + i, yy = y + j;
+          if (xx < 0 || yy < 0 || xx >= GW || yy >= GH) continue;
+          const q = (yy * GW + xx) * 3;
+          r += acc[q]; gg += acc[q + 1]; b += acc[q + 2]; n++;
+        }
+      }
+      const q = (y * GW + x) * 3;
+      out[q] = r / n; out[q + 1] = gg / n; out[q + 2] = b / n;
+    }
+  }
+  return { GW, GH, a: out };
+}
+
+function ambientAt(amb, u, v) {
+  const x = Math.min(amb.GW - 1, Math.max(0, u * amb.GW - 0.5));
+  const y = Math.min(amb.GH - 1, Math.max(0, v * amb.GH - 0.5));
+  const x0 = x | 0, y0 = y | 0, x1 = Math.min(amb.GW - 1, x0 + 1), y1 = Math.min(amb.GH - 1, y0 + 1);
+  const fx = x - x0, fy = y - y0, a = amb.a, out = [0, 0, 0];
+  for (let c = 0; c < 3; c++) {
+    const p = a[(y0 * amb.GW + x0) * 3 + c], q = a[(y0 * amb.GW + x1) * 3 + c];
+    const r = a[(y1 * amb.GW + x0) * 3 + c], s = a[(y1 * amb.GW + x1) * 3 + c];
+    out[c] = (p + (q - p) * fx) * (1 - fy) + (r + (s - r) * fx) * fy;
+  }
+  return out;
+}
+
+/* ═════════════════════════ vẽ ═════════════════════════ */
+
+/**
+ * Rắc tuyết lên `data` (Uint8Array, 3 hoặc 4 kênh), sửa tại chỗ.
+ *
+ * opts.seed   : bộ hạt (bắt buộc khác 0 để ổn định; pipeline lấy theo tên file)
+ * opts.matte  : { data: Uint8Array w×h 0…255, width, height } — vùng người thật,
+ *               thay cho elip tạm thời của cfg.subject
+ * opts.only   : mảng tên lớp — chỉ vẽ các lớp này (trang chỉnh dùng để xem riêng)
+ *
+ * Trả về số hạt đã vẽ theo từng lớp và số hạt bị chặn khỏi vùng mặt.
+ *
+ * Mảng phải là Uint8Array, KHÔNG phải Uint8ClampedArray: phép làm tròn bên dưới
+ * dựa vào việc gán số thực thì bị cắt phần lẻ. Trang chỉnh bọc ImageData lại
+ * thành Uint8Array cho đúng cách làm tròn của snow.exe.
+ */
+function drawSnow(data, w, h, ch, cfg0, opts = {}) {
+  const seed = opts.seed >>> 0 || 1;
+  const cfg = variedSnow(cfg0, seed);
+  const scene = buildScene(w, h, cfg, seed, opts.matte);
+  const only = opts.only ? new Set(opts.only) : null;
+  const amb = ambientGrid(data, w, h, ch);
+  const cover = coverFor(cfg, w, h, opts.matte);
+
+  const li = cfg.light;
+  const backK = (0.6 * li.backlight) / 100;
+  const glowK = li.glow / 100;
+  const ambK = li.ambient / 100;
+  const bright = li.brightness / 100;
+  const ang = (cfg.wind.angle * Math.PI) / 180, mx = Math.sin(ang), my = Math.cos(ang);
+  const trailK = cfg.wind.trail / 100;
+  const blades = cfg.camera.blades;
+  const S = cfg.camera.focus;
+  const col = [0, 0, 0], gcol = [0, 0, 0];
+
+  for (const p of scene.particles) {
+    if (only && !only.has(SNOW_LAYERS[p.layer])) continue;
+    const E = Math.max(1.2, p.D + p.C);
+    const sharp = Math.min(1, Math.max(p.D, 0.7) / E);
+    const useSprite = p.D >= 4 && p.C < 0.85 * p.D;
+    // Độ che: hạt còn nét che đúng bằng độ đậm (sprite tự trải mờ). Hạt đã mờ
+    // hẳn thì lượng che trải ra cả vòng mờ, nên càng mờ càng trong.
+    const cov = p.alpha * (useSprite ? 1 : sharp);
+    if (cov < 0.004) continue;
+
+    // Độ sáng: flash đặt gần máy ảnh, nên hạt sát ống kính nhận nhiều sáng hơn
+    // người và hơi cháy — vì thế bokeh tuyết sáng lên chứ không phải một lớp
+    // xám đục. Chặn ở 1.6: mạnh hơn nữa thì đĩa mờ thành hình dán trắng đặc.
+    // Hạt sau lưng tối đi, có sàn vì phông thường được chiếu riêng. Ngược sáng
+    // làm hạt mờ tán xạ mạnh hơn hạt nét.
+    const fz = S / p.Z;
+    const L = bright * p.bright * (fz > 1.6 ? 1.6 : fz < 0.8 ? 0.8 : fz) * (1 + backK * (1 - sharp));
+    const c = ambientAt(amb, p.x / w, p.y / h);
+    const cm = Math.max(c[0], c[1], c[2], 1);
+    // Tuyết trắng dưới cùng nguồn sáng luôn sáng hơn bề mặt phía sau nó. Thiếu
+    // sàn này, hạt sau lưng trên phông màu ra tối hơn kênh mạnh nhất của phông
+    // và trông như bụi xám chứ không phải tuyết.
+    const lv = Math.max(L * 255, cm * 1.12 * p.bright);
+    for (let k = 0; k < 3; k++) {
+      col[k] = lv * (1 - ambK + (ambK * c[k]) / cm);     // có thể vượt 255: cháy sáng là có chủ ý
+      gcol[k] = col[k] > 255 ? 255 : col[k];
+    }
+
+    const R = E / 2 + 1;
+    const mask = p.behind && cover && cover.any(p.x - R * 2, p.y - R * 2, p.x + R * 2, p.y + R * 2) ? cover : null;
+
+    if (glowK > 0) glow(data, w, h, ch, p.x, p.y, E * 1.6 + 2, glowK * 0.22 * cov * Math.min(2, L), gcol, mask);
+
+    if (trailK > 0 && p.C < p.D) {
+      // Flash đóng băng hạt; ánh sáng môi trường để lại vệt mờ phía trên đầu hạt.
+      const T = trailK * 4 * p.D, n = Math.min(8, Math.ceil(T / Math.max(1, p.D * 0.5)));
+      for (let s = 1; s <= n; s++) {
+        const t = s / n;
+        disc(data, w, h, ch, p.x - mx * T * t, p.y - my * T * t, E * 0.8, cov * 0.3 * (1 - t), col, 0.6, 0, 0, 0, mask);
+      }
+    }
+
+    if (useSprite) {
+      sprite(data, w, h, ch, p, spritesOf(p.kind)[p.sprite], cov, col, mask);
+    } else {
+      // Tuyết là vật mờ, đang rơi, không phải nguồn sáng điểm: bokeh của nó
+      // mềm viền hơn hẳn bokeh đèn. Mép sáng chỉ còn chút ít ở hạt rất mờ.
+      const soft = Math.min(1, Math.max(0.3, 0.3 + 0.5 * sharp + 1.2 / (E / 2)));
+      const rim = p.C > 3 * p.D ? 1 : 0;
+      disc(data, w, h, ch, p.x, p.y, E, cov, col, soft, rim, blades, p.rot, mask);
+    }
+  }
+  return scene.stats;
+}
+
+function blend(data, i, a, col) {
+  const ia = 1 - a;
+  let v = data[i] * ia + col[0] * a;
+  data[i] = v >= 254.5 ? 255 : v + 0.5;
+  v = data[i + 1] * ia + col[1] * a;
+  data[i + 1] = v >= 254.5 ? 255 : v + 0.5;
+  v = data[i + 2] * ia + col[2] * a;
+  data[i + 2] = v >= 254.5 ? 255 : v + 0.5;
+}
+
+/**
+ * Đĩa mềm: hạt đã mờ hẳn (vòng mờ lớn hơn nửa cỡ hạt) thì hình dạng hạt không
+ * còn — thứ còn lại là hình của khẩu độ. `rim` làm sáng mép như bokeh thật;
+ * `blades` ≥ 5 cho đĩa đa giác. Đĩa nhỏ hơn 4px thì vẽ thành chấm Gauss để
+ * không răng cưa.
+ */
+function disc(data, w, h, ch, cx, cy, E, peak, col, soft, rim, blades, rot, mask) {
+  const R = E / 2;
+  if (R < 2) {
+    // Cùng "lượng sáng" với đĩa bán kính R: p·πR² = pk·2πσ².
+    const sg = Math.max(0.5, R * 0.6), pk = Math.min(1, (peak * R * R) / (2 * sg * sg));
+    const ext = sg * 3;
+    const x0 = Math.max(0, Math.floor(cx - ext)), x1 = Math.min(w - 1, Math.ceil(cx + ext));
+    const y0 = Math.max(0, Math.floor(cy - ext)), y1 = Math.min(h - 1, Math.ceil(cy + ext));
+    const k = 1 / (2 * sg * sg);
+    for (let y = y0; y <= y1; y++) {
+      const dy = y + 0.5 - cy;
+      for (let x = x0; x <= x1; x++) {
+        const dx = x + 0.5 - cx;
+        let a = pk * Math.exp(-(dx * dx + dy * dy) * k);
+        if (mask) a *= 1 - mask.at(x, y);
+        if (a > 0.003) blend(data, (y * w + x) * ch, a, col);
+      }
+    }
+    return;
+  }
+  const x0 = Math.max(0, Math.floor(cx - R - 1)), x1 = Math.min(w - 1, Math.ceil(cx + R + 1));
+  const y0 = Math.max(0, Math.floor(cy - R - 1)), y1 = Math.min(h - 1, Math.ceil(cy + R + 1));
+  const inv = 1 / R, seg = blades ? (Math.PI * 2) / blades : 0, cosHalf = blades ? Math.cos(seg / 2) : 1;
+  for (let y = y0; y <= y1; y++) {
+    const dy = y + 0.5 - cy;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x + 0.5 - cx;
+      let rho = Math.sqrt(dx * dx + dy * dy) * inv;
+      if (blades && rho > 0) {
+        let t = (Math.atan2(dy, dx) - rot) % seg;
+        if (t < 0) t += seg;
+        rho *= cosHalf / Math.cos(t - seg / 2);
+      }
+      if (rho >= 1) continue;
+      let a = peak * (1 - smooth(1 - soft, 1, rho));
+      if (rim) a *= 0.85 + 0.25 * smooth(0.35, 0.8, rho);
+      if (mask) a *= 1 - mask.at(x, y);
+      if (a > 0.003) blend(data, (y * w + x) * ch, a > 1 ? 1 : a, col);
+    }
+  }
+}
+
+/** Hạt còn nét: lấy mẫu sprite đã xoay + nghiêng, độ mờ nội suy giữa hai bản làm mờ sẵn. */
+function sprite(data, w, h, ch, p, sv, peak, col, mask) {
+  const D = p.D;
+  // Độ mờ cần trên lưới sprite: vòng mờ ống kính (σ ≈ C/4) hoặc chống răng cưa khi thu nhỏ.
+  const need = Math.max((16 * p.C) / D, 25.6 / D);
+  let j = 0;
+  while (j < SP_SIGMA.length - 1 && SP_SIGMA[j + 1] <= need) j++;
+  const A = sv[j], B = j < SP_SIGMA.length - 1 ? sv[j + 1] : null;
+  const t = B ? (need - SP_SIGMA[j]) / (SP_SIGMA[j + 1] - SP_SIGMA[j]) : 0;
+
+  const s = SP_R / (D / 2), cs = Math.cos(p.rot), sn = Math.sin(p.rot), it = 1 / p.tilt;
+  const ext = (SP_C / SP_R) * (D / 2) + 1;
+  const x0 = Math.max(0, Math.floor(p.x - ext)), x1 = Math.min(w - 1, Math.ceil(p.x + ext));
+  const y0 = Math.max(0, Math.floor(p.y - ext)), y1 = Math.min(h - 1, Math.ceil(p.y + ext));
+  for (let y = y0; y <= y1; y++) {
+    const dy = y + 0.5 - p.y;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x + 0.5 - p.x;
+      const qx = SP_C + (dx * cs + dy * sn) * s - 0.5;
+      const qy = SP_C + (-dx * sn + dy * cs) * it * s - 0.5;
+      if (qx < 0 || qy < 0 || qx >= SP_N - 1 || qy >= SP_N - 1) continue;
+      const ix = qx | 0, iy = qy | 0, fx = qx - ix, fy = qy - iy, o = iy * SP_N + ix;
+      let v = (A[o] * (1 - fx) + A[o + 1] * fx) * (1 - fy) + (A[o + SP_N] * (1 - fx) + A[o + SP_N + 1] * fx) * fy;
+      if (B) {
+        const v2 = (B[o] * (1 - fx) + B[o + 1] * fx) * (1 - fy) + (B[o + SP_N] * (1 - fx) + B[o + SP_N + 1] * fx) * fy;
+        v += (v2 - v) * t;
+      }
+      let a = peak * v;
+      if (mask) a *= 1 - mask.at(x, y);
+      if (a > 0.003) blend(data, (y * w + x) * ch, a > 1 ? 1 : a, col);
+    }
+  }
+}
+
+/** Quầng sáng quanh hạt, hoà kiểu screen: chỉ làm sáng, không bao giờ làm tối. */
+function glow(data, w, h, ch, cx, cy, R, k, col, mask) {
+  if (k < 0.004) return;
+  const x0 = Math.max(0, Math.floor(cx - R)), x1 = Math.min(w - 1, Math.ceil(cx + R));
+  const y0 = Math.max(0, Math.floor(cy - R)), y1 = Math.min(h - 1, Math.ceil(cy + R));
+  const inv = 1 / (R * R), c0 = col[0] / 255, c1 = col[1] / 255, c2 = col[2] / 255;
+  for (let y = y0; y <= y1; y++) {
+    const dy = y + 0.5 - cy;
+    for (let x = x0; x <= x1; x++) {
+      const dx = x + 0.5 - cx, q = (dx * dx + dy * dy) * inv;
+      if (q >= 1) continue;
+      let g = k * (1 - q) * (1 - q);
+      if (mask) g *= 1 - mask.at(x, y);
+      if (g < 0.002) continue;
+      const i = (y * w + x) * ch;
+      data[i] = 255 - (255 - data[i]) * (1 - g * c0) + 0.5;
+      data[i + 1] = 255 - (255 - data[i + 1]) * (1 - g * c1) + 0.5;
+      data[i + 2] = 255 - (255 - data[i + 2]) * (1 - g * c2) + 0.5;
+    }
+  }
+}
+
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     1. TRẠNG THÁI
+     cfg   = bộ số đang chỉnh (cảnh + màu `look` + bật/tắt + mục file)
+     base  = bộ dựng sẵn đang chọn (cảnh + màu): nút ↺ và bấm đúp đưa về đây
+     saved = bản ở lần lưu / nạp gần nhất, cho nút Hoàn tác
+     Cảnh và màu chọn độc lập: đổi cảnh giữ nguyên màu và ngược lại.
+     ═══════════════════════════════════════════════════════════════ */
+  function presetCfg(name) { return normalizeSnow(SNOW_PRESETS[name]()); }
+  /** Mục `look` chuẩn hoá — khoá thiếu là trung tính, đúng như src/filters/snow/config.js. */
+  function normLook(raw) {
+    var r = raw && typeof raw === "object" ? raw : {};
+    return Object.assign({ enabled: r.enabled === true }, LOOK.normalizeLook(r, LOOK.neutralLook()));
+  }
+  /** Một preset trong SNOW_LOOKS. "Giữ màu gốc" = tắt chỉnh màu. */
+  function lookPreset(name) {
+    var p = SNOW_LOOKS[name];
+    var v = name === "community" ? LOOK.communityLook() : LOOK.normalizeLook(p && p.raw ? p.raw : {}, LOOK.neutralLook());
+    return Object.assign({ enabled: name !== "neutral" }, v);
+  }
+  function compose(scene, look, extra) {
+    return Object.assign(extra || {}, clone(scene), { look: clone(look) });
+  }
+  var loadedStyle = null, loadedLook = null;
+  var styleName = "mercies", lookName = "neutral";
+  var base = compose(presetCfg("mercies"), lookPreset("neutral"));
+  var fileOpts = snowFileOptions({});
+  var cfg = compose(base, base.look, { enabled: true });
+  Object.assign(cfg, clone(fileOpts));
+  var saved = clone(cfg);
+  var userLut = null;          // LUT .cube đã đọc (chỉ để xem trước)
+  var grainCache = null;
+  var GRAIN_SEED = 20240611;   // hạt phim cố định cho bản xem
+  // Đầu dò & ống hút. preLook = ảnh ĐI VÀO bước màu (đã có tuyết) — thứ các công cụ màu
+  // thực sự nhìn thấy. probe = điểm ảnh dưới con trỏ, đã quy về đầu vào của từng công cụ.
+  var preLook = null, probe = null, probeXY = null, pickMode = null;
+  var probeHooks = [];         // công cụ vẽ lại khi con trỏ đổi điểm (curve, color editor)
+  var curveUi = null, ceSelect = null, pickBtns = [];
+
+  /* ═══════════════════════════════════════════════════════════════
+     2. XEM TRƯỚC
+     Cảnh không phụ thuộc độ phân giải (xem snow.js), nên bản xem 1200px
+     cho đúng bố cục tuyết của snow.exe ở ảnh gốc — chỉ thô hơn.
+     ═══════════════════════════════════════════════════════════════ */
+  var srcImage = null, work = null, quality = 1200, splitPct = 0.5;
+  var cvA = $("cvAfter"), cvB = $("cvBefore");
+  var ctxA = cvA.getContext("2d"), ctxB = cvB.getContext("2d");
+  var previewSeed = 20241130;   // seed cố định cho bản xem: kéo thanh trượt mà hạt nhảy thì không so được
+  var viewOnly = "all", darkBg = false, showZone = false;
+  // Matte tách người của ẢNH ĐANG XEM (file .MATTE.png do snow.exe / tach-nguoi.bat ghi ra).
+  // Trình duyệt không chạy model; không có matte thì chế độ Tự động xem trước bằng elip.
+  var matte = null, matteName = "", matteTint = null;
+  function seedNow() { return cfg.seed || previewSeed; }
+  function matteOn() { return cfg.subject.mode === "auto" && !!matte; }
+
+  function prepare(longEdge) {
+    var iw = srcImage.naturalWidth || srcImage.width, ih = srcImage.naturalHeight || srcImage.height;
+    var s = Math.min(1, longEdge / Math.max(iw, ih));
+    var w = Math.max(2, Math.round(iw * s)), h = Math.max(2, Math.round(ih * s));
+    var tmp = document.createElement("canvas");
+    tmp.width = w; tmp.height = h;
+    var tc = tmp.getContext("2d", { willReadFrequently: true });
+    tc.imageSmoothingQuality = "high";
+    tc.drawImage(srcImage, 0, 0, w, h);
+    var img = tc.getImageData(0, 0, w, h);
+    work = { w: w, h: h, src: img.data, srcW: iw, srcH: ih };
+    grainCache = null;
+    cvA.width = w; cvA.height = h; cvB.width = w; cvB.height = h;
+    ctxB.putImageData(img, 0, 0);
+  }
+
+  function grainFor(w, h) {
+    var g = cfg.look.grain, key = [w, h, g.type, g.granularity].join("|");
+    if (!grainCache || grainCache.key !== key) grainCache = { key: key, plane: LOOK.grainPlane(w, h, g, GRAIN_SEED) };
+    return grainCache.plane;
+  }
+
+  function paint() {
+    drawScene();
+    if (!work) return;
+    var t0 = performance.now();
+    var out = ctxA.createImageData(work.w, work.h), d = out.data;
+    if (darkBg) {
+      for (var i = 0; i < d.length; i += 4) { d[i] = 34; d[i + 1] = 35; d[i + 2] = 40; d[i + 3] = 255; }
+    } else {
+      d.set(work.src);
+    }
+    var stats = null;
+    if (cfg.enabled) {
+      // Uint8Array chứ không phải Uint8ClampedArray: cùng cách làm tròn với snow.exe.
+      var u8 = new Uint8Array(d.buffer);
+      stats = drawSnow(u8, work.w, work.h, 4, cfg,
+        { seed: seedNow(), matte: matte, only: viewOnly === "all" ? null : [viewOnly] });
+      preLook = u8.slice();
+      // Màu SAU tuyết, đúng thứ tự của snow.exe. Chế độ "Chỉ tuyết" bỏ qua màu để soi hạt.
+      if (cfg.look.enabled && !darkBg) {
+        var lo = { userLut: userLut, seed: GRAIN_SEED };
+        lo.lut = LOOK.buildLut(cfg.look, lo);
+        if (cfg.look.grain.impact > 0) lo.grain = grainFor(work.w, work.h);
+        LOOK.renderLook(u8, work.w, work.h, 4, cfg.look, lo);
+      }
+    }
+    if (!cfg.enabled) preLook = new Uint8Array(d.buffer).slice();
+    ctxA.putImageData(out, 0, 0);
+    if (showZone) drawZone();
+    if (probeXY) setProbe(probeXY);   // công cụ vừa đổi → đầu vào của các bước sau cũng đổi
+    var ms = performance.now() - t0, n = 0;
+    if (stats) SNOW_LAYERS.forEach(function (k) { n += stats[k]; });
+    var who = cfg.subject.mode === "off" ? " · không che" : matteOn() ? " · che theo matte" :
+      cfg.subject.mode === "auto" ? " · chưa nạp matte, xem bằng elip" : " · che theo elip";
+    var lutNote = cfg.look.enabled && cfg.look.lut.file && !userLut ? " · LUT chưa nạp nên đang bỏ qua" : "";
+    $("status").textContent = work.srcW + "×" + work.srcH + " → xem " + work.w + "×" + work.h + " · " + Math.round(ms) + " ms · " +
+      n + " hạt" + (stats && stats.guarded ? " (" + stats.guarded + " bị chặn khỏi mặt)" : "") + who +
+      (cfg.look.enabled ? " · có chỉnh màu" : "") + lutNote +
+      (cfg.seed ? " · seed cố định " + cfg.seed : "") + (cfg.enabled ? "" : " · BỘ LỌC ĐANG TẮT");
+  }
+
+  var rafId = 0;
+  function schedule() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(function () { rafId = 0; paint(); });
+  }
+
+  /* Vùng người: matte tô xanh + dải mặt tô cam, hoặc elip nét đứt + dải mặt tô cam.
+     Hạt to phía trước tránh dải mặt; hạt phía sau bị vùng người che. */
+  function drawZone() {
+    var s = cfg.subject;
+    if (s.mode === "off") return;
+    if (matteOn()) {
+      if (!matteTint || matteTint.fg !== cfg.faceGuard.enabled) matteTint = makeMatteTint();
+      ctxA.drawImage(matteTint, 0, 0, work.w, work.h);
+      return;
+    }
+    var W = work.w, H = work.h, cx = s.x / 100 * W, cy = s.y / 100 * H, rx = s.w / 200 * W, ry = s.h / 200 * H;
+    ctxA.save();
+    ctxA.beginPath(); ctxA.ellipse(cx, cy, Math.max(1, rx), Math.max(1, ry), 0, 0, Math.PI * 2);
+    ctxA.save(); ctxA.clip();
+    if (cfg.faceGuard.enabled) { ctxA.fillStyle = "rgba(224,162,62,.16)"; ctxA.fillRect(0, cy - ry, W, 0.9 * ry); }
+    ctxA.restore();
+    ctxA.lineWidth = Math.max(1.5, W / 600); ctxA.setLineDash([8, 6]);
+    ctxA.strokeStyle = "rgba(255,255,255,.85)"; ctxA.stroke();
+    ctxA.restore();
+  }
+
+  /* Lớp phủ của matte, dựng một lần mỗi khi nạp matte hoặc đổi chặn mặt. Dải mặt
+     tính đúng như snow.js: từ đỉnh dáng người ở mỗi cột xuống thêm 25% chiều cao. */
+  function makeMatteTint() {
+    var mw = matte.width, mh = matte.height, c = document.createElement("canvas");
+    c.width = mw; c.height = mh;
+    var x = c.getContext("2d"), id = x.createImageData(mw, mh), d = id.data, band = 0.25 * mh;
+    for (var col = 0; col < mw; col++) {
+      var top = -1;
+      for (var y = 0; y < mh; y++) if (matte.data[y * mw + col] >= 128) { top = y; break; }
+      for (y = 0; y < mh; y++) {
+        var i = y * mw + col, p = i * 4, a = matte.data[i] / 255;
+        var face = cfg.faceGuard.enabled && top >= 0 && y >= top - 0.02 * mh && y <= top + band;
+        d[p] = face ? 224 : 80; d[p + 1] = face ? 162 : 170; d[p + 2] = face ? 62 : 255;
+        d[p + 3] = Math.round((face ? Math.max(a, 0.35) : a) * 90);
+      }
+    }
+    x.putImageData(id, 0, 0);
+    c.fg = cfg.faceGuard.enabled;
+    return c;
+  }
+
+  /* ── sơ đồ cảnh nhìn ngang ──
+     Trục ngang = độ sâu, nhưng là sơ đồ nguyên lý chứ không theo tỉ lệ: mỗi lớp
+     một đoạn cố định (theo tỉ lệ thì lớp xa sâu 6 m nuốt gần hết trục, ba lớp
+     quanh người dồn thành một vạch). Trong từng đoạn, hạt nằm đúng vị trí tương
+     đối theo độ sâu thật. Trục dọc = vị trí trong khung. Chấm là CHÍNH các hạt
+     của cảnh hiện tại. */
+  var scv = $("scene"), sctx = scv.getContext("2d"), bands = [];
+  var LAYER_COL = { lens: "127,184,255", front: "150,205,255", focus: "224,162,62", behind: "180,156,255", far: "120,136,170" };
+  var SHORT = { lens: "kính", front: "trước", focus: "quanh", behind: "sau", far: "xa" };
+  var SPAN = { lens: 0.13, front: 0.22, focus: 0.17, behind: 0.17, far: 0.31 };
+
+  function drawScene() {
+    var dpr = Math.max(1, window.devicePixelRatio || 1), Wc = scv.clientWidth || 300, Hc = scv.clientHeight || 132;
+    if (scv.width !== Math.round(Wc * dpr) || scv.height !== Math.round(Hc * dpr)) {
+      scv.width = Math.round(Wc * dpr); scv.height = Math.round(Hc * dpr);
+    }
+    var x = sctx;
+    x.setTransform(dpr, 0, 0, dpr, 0, 0);
+    x.clearRect(0, 0, Wc, Hc);
+    var d = layerDepths(cfg);
+    var x0 = 26, x1 = Wc - 6, top = 16, bot = Hc - 6;
+    var seg = {}, acc = x0;
+    SNOW_LAYERS.forEach(function (k) { seg[k] = [acc, acc + SPAN[k] * (x1 - x0)]; acc = seg[k][1]; });
+    var X = function (z) {
+      for (var i = 0; i < SNOW_LAYERS.length; i++) {
+        var k = SNOW_LAYERS[i], r = d[k], s = seg[k];
+        if (z <= r[1] || i === SNOW_LAYERS.length - 1) return s[0] + (s[1] - s[0]) * clamp((z - r[0]) / (r[1] - r[0]), 0, 1);
+      }
+      return x1;
+    };
+
+    bands = [];
+    x.font = "10px " + getComputedStyle(document.body).fontFamily;
+    x.textBaseline = "top";
+    SNOW_LAYERS.forEach(function (k) {
+      var a = seg[k][0], b = seg[k][1], L = cfg.layers[k];
+      var on = L.enabled && Math.round(L.count * cfg.amount / 100) > 0;
+      var dim = viewOnly !== "all" && viewOnly !== k;
+      x.fillStyle = "rgba(" + LAYER_COL[k] + "," + (on ? (dim ? 0.05 : 0.16) : 0.03) + ")";
+      x.fillRect(a, top, Math.max(1, b - a), bot - top);
+      if (viewOnly === k) { x.strokeStyle = "rgba(" + LAYER_COL[k] + ",.9)"; x.lineWidth = 1; x.strokeRect(a + 0.5, top + 0.5, b - a - 1, bot - top - 1); }
+      x.fillStyle = on ? "rgba(" + LAYER_COL[k] + ",.95)" : "#555";
+      var lbl = SHORT[k];
+      if (b - a > x.measureText(lbl).width + 2) x.fillText(lbl, a + 2, 2);
+      bands.push([a, b, k]);
+    });
+
+    // phông: ranh giới giữa lớp sau lưng và lớp xa
+    var xb = seg.far[0];
+    x.fillStyle = "#6a6a6a"; x.fillRect(xb - 1.5, top, 3, bot - top);
+    // vạch nét
+    var xf = X(cfg.camera.focus);
+    x.strokeStyle = "rgba(224,162,62,.6)"; x.setLineDash([3, 3]); x.beginPath(); x.moveTo(xf + 0.5, top); x.lineTo(xf + 0.5, bot); x.stroke(); x.setLineDash([]);
+    // người: đầu + vai, đứng ở mặt phẳng nét
+    var ph = bot - top, hy = top + ph * 0.22, hr = ph * 0.09;
+    x.fillStyle = "#4a4a4a";
+    x.beginPath(); x.arc(xf, hy, hr, 0, Math.PI * 2); x.fill();
+    x.beginPath(); x.moveTo(xf - hr * 1.7, bot); x.lineTo(xf - hr * 1.5, hy + hr * 1.6); x.lineTo(xf + hr * 1.5, hy + hr * 1.6); x.lineTo(xf + hr * 1.7, bot); x.fill();
+    // máy ảnh
+    x.fillStyle = "#8a8a8a";
+    x.fillRect(4, top + ph * 0.4, 12, ph * 0.2);
+    x.beginPath(); x.moveTo(16, top + ph * 0.44); x.lineTo(22, top + ph * 0.38); x.lineTo(22, top + ph * 0.62); x.lineTo(16, top + ph * 0.56); x.fill();
+
+    // hạt: dựng cảnh ở khung ảo 300px (rẻ), cùng seed với bản xem
+    var vw = 300, vh = work ? Math.max(2, Math.round(300 * work.h / work.w)) : 200;
+    // Hạt đã xếp từ xa đến gần, nên lấy mẫu đều theo bước chứ không lấy N hạt đầu.
+    var sc = buildScene(vw, vh, variedSnow(cfg, seedNow()), seedNow(), matte), cnt = {}, step = {}, total = 0;
+    SNOW_LAYERS.forEach(function (k) { cnt[k] = 0; step[k] = Math.max(1, Math.ceil(sc.stats[k] / 90)); total += sc.stats[k]; });
+    sc.particles.forEach(function (p) {
+      var k = SNOW_LAYERS[p.layer];
+      if (cnt[k]++ % step[k]) return;
+      if (viewOnly !== "all" && viewOnly !== k) return;
+      var r = clamp((p.D + p.C) / vw * 70, 0.7, 6);
+      x.fillStyle = p.C > p.D ? "rgba(255,255,255,.3)" : "rgba(255,255,255,.85)";
+      x.beginPath(); x.arc(X(p.Z), top + (bot - top) * clamp(p.y / vh, 0, 1), r, 0, Math.PI * 2); x.fill();
+    });
+
+    $("sceneCap").textContent = "nét " + cfg.camera.focus.toFixed(2) + " m · phông " + cfg.camera.backdrop.toFixed(2) + " m · f/" + cfg.camera.aperture;
+    $("sceneCount").textContent = total + " hạt";
+  }
+  scv.addEventListener("click", function (e) {
+    var r = scv.getBoundingClientRect(), px = e.clientX - r.left;
+    var hit = bands.filter(function (b) { return px >= b[0] && px <= b[1]; })[0];
+    setView(hit && viewOnly !== hit[2] ? hit[2] : "all");
+  });
+
+  /* ── vạch so sánh trước / sau ── */
+  function applySplit() {
+    var pct = (splitPct * 100).toFixed(2);
+    cvB.style.clipPath = "inset(0 " + (100 - pct) + "% 0 0)";
+    $("divider").style.left = "calc(" + pct + "% - 1px)";
+  }
+  function setSplit(p) { splitPct = clamp(p, 0, 1); applySplit(); }
+  (function () {
+    var stage = $("stage"), drag = false, tat = null;
+    function at(e) { var r = cvA.getBoundingClientRect(); if (r.width) setSplit((e.clientX - r.left) / r.width); }
+    function imgXY(e) {
+      var r = cvA.getBoundingClientRect();
+      if (!r.width) return null;
+      var x = Math.floor((e.clientX - r.left) / r.width * work.w), y = Math.floor((e.clientY - r.top) / r.height * work.h);
+      return x >= 0 && y >= 0 && x < work.w && y < work.h ? { x: x, y: y } : null;
+    }
+    stage.addEventListener("pointerdown", function (e) {
+      if (!work) return;
+      // Đang bật ống hút: bấm lên ảnh là chấm / kéo, không phải kéo vạch so sánh.
+      if (pickMode) {
+        var p = imgXY(e);
+        if (!p) return;
+        e.preventDefault();
+        stage.setPointerCapture(e.pointerId);
+        tat = startPick(p, e.clientY);
+        return;
+      }
+      drag = true; stage.setPointerCapture(e.pointerId); at(e);
+    });
+    stage.addEventListener("pointermove", function (e) {
+      if (tat) { tat.move(e.clientY); return; }
+      if (drag) { at(e); return; }
+      if (work) setProbe(imgXY(e));
+    });
+    function up() { if (tat) { tat.end(); tat = null; } drag = false; }
+    stage.addEventListener("pointerup", up);
+    stage.addEventListener("pointercancel", up);
+    stage.addEventListener("pointerleave", function () { if (!drag && !tat) setProbe(null); });
+    document.addEventListener("keydown", function (e) { if (e.key === "Escape" && pickMode) setPick(null); });
+  })();
+
+  /* ── đầu dò: điểm ảnh dưới con trỏ, quy về ĐẦU VÀO của từng công cụ màu ──
+     Chuỗi màu là WB → Exposure → HDR → Contrast → Levels → Curve → Saturation →
+     Color Editor → Color Balance. Muốn biết một điểm nằm đâu trên Curve thì phải
+     chạy chuỗi tới ngay trước Curve, chứ không đọc thẳng điểm ảnh gốc. */
+  var stageCache = {};
+  function stageLut(stage) {
+    var L = clone(cfg.look), N = LOOK.neutralLook();
+    L.strength = 100;
+    L.colorEditor = N.colorEditor; L.colorBalance = N.colorBalance; L.blackWhite = N.blackWhite;
+    if (stage === "curve") { L.curve = N.curve; L.exposure.saturation = 0; }
+    var key = JSON.stringify(L) + "|" + (userLut ? userLut.size : 0);
+    if (!stageCache[stage] || stageCache[stage].key !== key) stageCache[stage] = { key: key, lut: LOOK.buildLut(L, { userLut: userLut }) };
+    return stageCache[stage].lut;
+  }
+  var BAND_NAME = { red: "Red", orange: "Orange · tông da", yellow: "Yellow", green: "Green", cyan: "Cyan", blue: "Blue · trời/phông xanh", magenta: "Magenta" };
+  var ZONE_NAME = { shadow: "Shadow", midtone: "Midtone", highlight: "Highlight" };
+  function hsv(c) {
+    var mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]), d = mx - mn, h = 0;
+    if (d > 1e-6) {
+      if (mx === c[0]) h = 60 * (((c[1] - c[2]) / d) % 6);
+      else if (mx === c[1]) h = 60 * ((c[2] - c[0]) / d + 2);
+      else h = 60 * ((c[0] - c[1]) / d + 4);
+    }
+    return [h < 0 ? h + 360 : h, mx ? d / mx : 0, mx];
+  }
+  function probeAt(x, y) {
+    var i = (y * work.w + x) * 4, src = [preLook[i] / 255, preLook[i + 1] / 255, preLook[i + 2] / 255];
+    var c = LOOK.sampleLut(stageLut("curve"), src[0], src[1], src[2]);
+    var e = LOOK.sampleLut(stageLut("editor"), src[0], src[1], src[2]);
+    var hv = hsv(e), band = null;
+    if (hv[1] > 0.08 && hv[2] > 0.06) {
+      var w = LOOK.bandWeights(hv[0], LOOK.EDITOR_CENTERS), best = 0;
+      for (var k = 1; k < w.length; k++) if (w[k] > w[best]) best = k;
+      band = LOOK.COLOR_EDITOR_BANDS[best];
+    }
+    var ye = 0.299 * e[0] + 0.587 * e[1] + 0.114 * e[2];
+    return {
+      src: src,
+      curve: { r: c[0] * 255, g: c[1] * 255, b: c[2] * 255, y: (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) * 255 },
+      band: band, hue: hv[0], sat: hv[1],
+      zone: ye < 0.33 ? "shadow" : ye < 0.66 ? "midtone" : "highlight"
+    };
+  }
+  function setProbe(p) {
+    probeXY = p;
+    probe = p && preLook ? probeAt(p.x, p.y) : null;
+    var el2 = $("probe");
+    if (!probe) el2.textContent = pickMode ? pickHint() : "";
+    else {
+      var s = probe.src;
+      el2.innerHTML = (pickMode ? "<b>" + pickHint() + "</b> · " : "") +
+        "RGB " + Math.round(s[0] * 255) + " " + Math.round(s[1] * 255) + " " + Math.round(s[2] * 255) +
+        " · vào Curve " + Math.round(probe.curve.y) + " · " + ZONE_NAME[probe.zone] +
+        " · " + (probe.band ? BAND_NAME[probe.band] : "gần như không màu");
+    }
+    probeHooks.forEach(function (f) { f(); });
+  }
+
+  /* ── ống hút ── */
+  var PICK_HINT = {
+    wb: "Ống hút WB: chấm vào chỗ đáng lẽ trắng/xám",
+    editor: "Ống hút màu: chấm vào màu cần chỉnh",
+    curve: "Curve: giữ chuột trên ảnh rồi kéo lên/xuống"
+  };
+  function pickHint() { return PICK_HINT[pickMode] || ""; }
+  function setPick(mode) {
+    pickMode = mode;
+    $("stage").classList.toggle("picking", !!mode);
+    pickBtns.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.mode === mode)); });
+    if (mode) toast(pickHint() + " · Esc để thoát");
+    setProbe(probeXY);
+  }
+  function pickButton(host, mode, label) {
+    var b = el("button", "btn ghost pickbtn", "⌖ " + label); b.dataset.mode = mode;
+    b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function () { setPick(pickMode === mode ? null : mode); });
+    pickBtns.push(b);
+    host.appendChild(b);
+  }
+  function lookOn() {
+    if (cfg.look.enabled) return;
+    cfg.look.enabled = true;
+    toast("Đã bật chỉnh màu.");
+  }
+  function startPick(p, y0) {
+    var pr = probeAt(p.x, p.y);
+    if (pickMode === "wb") { pickWb(pr); setPick(null); return null; }
+    if (pickMode === "editor") {
+      if (!pr.band) toast("Điểm này gần như không màu — chấm vào vùng có màu.");
+      else if (ceSelect) { ceSelect(pr.band); toast("Đã chọn dải " + BAND_NAME[pr.band] + " — chỉnh Hue / Saturation / Lightness bên dưới."); }
+      setPick(null);
+      return null;
+    }
+    if (pickMode === "curve" && curveUi) return curveDrag(pr, y0);
+    return null;
+  }
+
+  /** WB: tìm Kelvin/Tint làm điểm được chấm thành trung tính (WB áp trên ánh sáng tuyến tính, đầu chuỗi). */
+  function pickWb(pr) {
+    var s = pr.src;
+    if (userLut && cfg.look.lut.opacity > 0) {
+      var u = LOOK.sampleLut(userLut, s[0], s[1], s[2]), m = cfg.look.lut.opacity / 100;
+      s = [s[0] + (u[0] - s[0]) * m, s[1] + (u[1] - s[1]) * m, s[2] + (u[2] - s[2]) * m];
+    }
+    if (Math.max(s[0], s[1], s[2]) < 0.06) { toast("Chỗ này quá tối — chấm vào vùng xám/trắng sáng hơn."); return; }
+    if (Math.min(s[0], s[1], s[2]) > 0.985) { toast("Chỗ này đã cháy trắng — chấm vào vùng xám/trắng còn chi tiết."); return; }
+    var l = [LOOK.toLinear(s[0]), LOOK.toLinear(s[1]), LOOK.toLinear(s[2])], best = null;
+    for (var k = 2500; k <= 10000; k += 25) {
+      for (var t = -50; t <= 50; t++) {
+        var g = LOOK.wbGains(k, t), a = l[0] * g[0], b = l[1] * g[1], c = l[2] * g[2];
+        var mx = Math.max(a, b, c), e = mx > 0 ? (mx - Math.min(a, b, c)) / mx : 1;
+        if (!best || e < best.e) best = { e: e, k: k, t: t };
+      }
+    }
+    lookOn();
+    cfg.look.whiteBalance = { kelvin: best.k, tint: best.t };
+    syncAll(); commit();
+    toast("White Balance: " + best.k + " K · tint " + best.t + (best.e > 0.04 ? " (màu quá đậm, chỉ trung tính được một phần)" : ""));
+  }
+
+  /** Curve kiểu "chỉnh tại chỗ": giữ chuột trên ảnh, kéo lên sáng / xuống tối đúng vùng sáng đó. */
+  function curveDrag(pr, y0) {
+    var ch = curveUi.ch(), list = cfg.look.curve[ch];
+    var vin = ch === "rgb" || ch === "luma" ? pr.curve.y : pr.curve[ch];
+    vin = clamp(Math.round(vin), 1, 254);
+    var j = -1;
+    list.forEach(function (q, i) { if (Math.abs(q[0] - vin) <= 6 && (j < 0 || Math.abs(q[0] - vin) < Math.abs(list[j][0] - vin))) j = i; });
+    if (j < 0) {
+      var tb = LOOK.curveTable(list, 256);
+      list.push([vin, Math.round(tb[vin] * 255)]);
+      list.sort(function (a, b) { return a[0] - b[0]; });
+      for (var i = 0; i < list.length; i++) if (list[i][0] === vin) j = i;
+    }
+    lookOn();
+    var startY = list[j][1];
+    curveUi.setActive(j);
+    curveUi.draw();
+    return {
+      move: function (cy) {
+        list[j] = [list[j][0], clamp(Math.round(startY + (y0 - cy) * 0.6), 0, 255)];
+        curveUi.draw(); schedule();
+      },
+      end: function () { syncAll(); commit(); }
+    };
+  }
+  var holdSaved = null;
+  function holdOn() { if (holdSaved === null) { holdSaved = splitPct; setSplit(1); } }
+  function holdOff() { if (holdSaved !== null) { setSplit(holdSaved); holdSaved = null; } }
+  var holdBtn = $("holdBtn");
+  holdBtn.addEventListener("pointerdown", function (e) { holdBtn.setPointerCapture(e.pointerId); holdOn(); });
+  ["pointerup", "pointercancel", "pointerleave", "blur"].forEach(function (ev) { holdBtn.addEventListener(ev, holdOff); });
+  document.addEventListener("keydown", function (e) {
+    if (e.code === "Space" && !/^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName)) { e.preventDefault(); holdOn(); }
+  });
+  document.addEventListener("keyup", function (e) { if (e.code === "Space") holdOff(); });
+  $("allAfterBtn").addEventListener("click", function () { setSplit(0); });
+
+  /* ── chế độ xem ── */
+  var viewSel = $("viewSel");
+  [["all", "Mọi lớp"]].concat(SNOW_LAYERS.map(function (k) { return [k, "Riêng: " + SNOW_LAYER_NAMES[k]]; })).forEach(function (o) {
+    var op = document.createElement("option"); op.value = o[0]; op.textContent = o[1]; viewSel.appendChild(op);
+  });
+  function setView(v) { viewOnly = v; viewSel.value = v; schedule(); }
+  viewSel.addEventListener("change", function () { setView(viewSel.value); });
+  $("darkChk").addEventListener("change", function (e) { darkBg = e.target.checked; schedule(); });
+  $("zoneChk").addEventListener("change", function (e) { showZone = e.target.checked; schedule(); });
+  $("reseedBtn").addEventListener("click", function () {
+    previewSeed = (Math.random() * 4294967295) >>> 0 || 1;
+    if (cfg.seed) toast("Đang dùng seed cố định trong cấu hình — đặt Seed về 0 để đổi bộ hạt.");
+    schedule();
+  });
+
+  /* ── nạp ảnh ── */
+  function useImage(img) {
+    // Matte thuộc về một tấm ảnh cụ thể — đổi ảnh thì bỏ matte cũ.
+    if (matte) { setMatte(null, ""); toast("Đã bỏ matte của ảnh trước."); }
+    srcImage = img;
+    $("empty").hidden = true; $("frame").hidden = false;
+    prepare(quality); applySplit(); syncAll(); paint();
+  }
+  function loadImageFile(f) {
+    if (!f || !/^image\//.test(f.type)) { toast("Đó không phải là file ảnh."); return; }
+    var url = URL.createObjectURL(f), img = new Image();
+    img.onload = function () { useImage(img); URL.revokeObjectURL(url); };
+    img.onerror = function () { toast("Không đọc được ảnh này."); URL.revokeObjectURL(url); };
+    img.src = url;
+  }
+  $("file").addEventListener("change", function (e) { loadImageFile(e.target.files[0]); e.target.value = ""; });
+  var stage = $("stage");
+  ["dragenter", "dragover"].forEach(function (ev) { stage.addEventListener(ev, function (e) { e.preventDefault(); stage.classList.add("drop"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { stage.addEventListener(ev, function (e) { e.preventDefault(); stage.classList.remove("drop"); }); });
+  stage.addEventListener("drop", function (e) { if (e.dataTransfer.files.length) loadImageFile(e.dataTransfer.files[0]); });
+  document.addEventListener("paste", function (e) {
+    var f = e.clipboardData && e.clipboardData.files;
+    if (f && f.length && /^image\//.test(f[0].type)) loadImageFile(f[0]);
+  });
+
+  /** Ảnh mẫu: phông xanh chuyển sắc, hai người đứng giữa khung — đủ để thấy hạt trước / sau người. */
+  function makeSample() {
+    var w = 1500, h = 1000, c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    var x = c.getContext("2d");
+    var bg = x.createLinearGradient(0, 0, 0, h);
+    bg.addColorStop(0, "#6f8aa6"); bg.addColorStop(0.6, "#9cb2c9"); bg.addColorStop(1, "#c9d3dc");
+    x.fillStyle = bg; x.fillRect(0, 0, w, h);
+    function person(cx, skin, coat) {
+      x.fillStyle = coat; x.beginPath(); x.ellipse(cx, h * 0.98, w * 0.13, h * 0.42, 0, 0, Math.PI * 2); x.fill();
+      x.fillStyle = "#3b2a20"; x.beginPath(); x.ellipse(cx, h * 0.33, w * 0.07, h * 0.15, 0, 0, Math.PI * 2); x.fill();
+      x.fillStyle = skin; x.beginPath(); x.ellipse(cx, h * 0.36, w * 0.055, h * 0.11, 0, 0, Math.PI * 2); x.fill();
+    }
+    person(w * 0.4, "#e6c3a8", "#f1ece2");
+    person(w * 0.61, "#d9b090", "#2b2b30");
+    var id = x.getImageData(0, 0, w, h), d = id.data;
+    for (var k = 0; k < d.length; k += 4) { var n = (Math.random() - 0.5) * 6; d[k] += n; d[k + 1] += n; d[k + 2] += n; }
+    x.putImageData(id, 0, 0);
+    return c;
+  }
+  function loadSample() {
+    var img = new Image();
+    img.onload = function () { useImage(img); };
+    img.src = makeSample().toDataURL("image/jpeg", 0.95);
+  }
+  $("sampleBtn").addEventListener("click", loadSample);
+  $("sampleBtn2").addEventListener("click", loadSample);
+
+  function setQuality(px, fast) {
+    quality = px;
+    $("qFast").setAttribute("aria-pressed", String(fast));
+    $("qFine").setAttribute("aria-pressed", String(!fast));
+    if (srcImage) { prepare(quality); paint(); }
+  }
+  $("qFast").addEventListener("click", function () { setQuality(720, true); });
+  $("qFine").addEventListener("click", function () { setQuality(1200, false); });
+
+  /* ═══════════════════════════════════════════════════════════════
+     3. THÀNH PHẦN GIAO DIỆN
+     ═══════════════════════════════════════════════════════════════ */
+  function el(tag, cls, html) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+
+  var refreshers = [];      // mỗi điều khiển tự đọc lại cfg khi bộ số đổi từ ngoài
+  var toolMarks = [];       // cập nhật chấm "đã chỉnh" trên tiêu đề công cụ
+
+  function commit() {
+    schedule();
+    toolMarks.forEach(function (f) { f(); });
+    writeJson();
+    remember();
+  }
+  function syncAll() { refreshers.forEach(function (f) { f(); }); toolMarks.forEach(function (f) { f(); }); }
+
+  function getPath(o, path) { return path.split(".").reduce(function (a, k) { return a[k]; }, o); }
+  function setPath(o, path, v) {
+    var ks = path.split("."), last = ks.pop();
+    ks.reduce(function (a, k) { return a[k]; }, o)[last] = v;
+  }
+
+  /**
+   * Thanh trượt. spec: label, path, min, max, step, zero, digits, onChange.
+   * Bấm đúp vào nhãn hoặc rãnh → về giá trị của bộ dựng sẵn.
+   */
+  function slider(host, spec) {
+    var get = spec.get || function () { return getPath(cfg, spec.path); };
+    var set = spec.set || function (v) { setPath(cfg, spec.path, v); };
+    var def = spec.def || function () { return getPath(base, spec.path); };
+    var digits = spec.digits != null ? spec.digits : (spec.step < 1 ? String(spec.step).split(".")[1].length : 0);
+    var wrap = el("div", "sl");
+    var head = el("div", "sl-head");
+    var lab = el("label", null, spec.label);
+    var box = el("input"); box.type = "number"; box.step = spec.step; box.min = spec.min; box.max = spec.max;
+    var rng = el("input"); rng.type = "range"; rng.min = spec.min; rng.max = spec.max; rng.step = spec.step;
+    rng.setAttribute("aria-label", spec.label);
+    if (spec.track) rng.style.setProperty("--trk", spec.track);
+    head.appendChild(lab); head.appendChild(box);
+    wrap.appendChild(head); wrap.appendChild(rng);
+    host.appendChild(wrap);
+
+    function show(v) {
+      rng.value = v;
+      box.value = Number(v).toFixed(digits);
+      box.classList.toggle("off", Number(v) === spec.zero);
+      if (spec.track) return;
+      // vệt sáng từ điểm 0 (hoặc đầu trái) tới giá trị
+      var lo = spec.min, hi = spec.max, z = spec.min < 0 && spec.max > 0 ? 0 : lo;
+      var a = (Math.min(z, v) - lo) / (hi - lo) * 100, b = (Math.max(z, v) - lo) / (hi - lo) * 100;
+      rng.style.setProperty("--trk", "linear-gradient(90deg,#555 " + a + "%,#c9c9c9 " + a + "%,#c9c9c9 " + b + "%,#555 " + b + "%)");
+    }
+    function put(v, live) {
+      v = clamp(Math.round(Number(v) / spec.step) * spec.step, spec.min, spec.max);
+      v = Number(v.toFixed(digits));
+      set(v); show(v);
+      if (spec.onChange) spec.onChange(v);
+      if (!live) commit(); else schedule();
+    }
+    rng.addEventListener("input", function () { put(rng.value, true); });
+    rng.addEventListener("change", function () { put(rng.value, false); });
+    box.addEventListener("change", function () { if (box.value !== "" && isFinite(box.value)) put(box.value, false); else show(get()); });
+    box.addEventListener("keydown", function (e) { if (e.key === "Enter") box.blur(); });
+    var reset = function () { put(def(), false); };
+    lab.addEventListener("dblclick", reset);
+    rng.addEventListener("dblclick", reset);
+    lab.title = "Bấm đúp để về giá trị của bộ dựng sẵn";
+    var refresh = function () { show(get()); };
+    refreshers.push(refresh);
+    refresh();
+  }
+
+  function selectField(host, label, options, path, asNumber) {
+    var f = el("label", "field"), s = el("select");
+    f.appendChild(el("span", null, label)); f.appendChild(s);
+    options.forEach(function (o) { var op = el("option", null, o[1]); op.value = o[0]; s.appendChild(op); });
+    s.addEventListener("change", function () { setPath(cfg, path, asNumber ? Number(s.value) : s.value); commit(); });
+    var refresh = function () { s.value = String(getPath(cfg, path)); };
+    refreshers.push(refresh); refresh();
+    host.appendChild(f);
+  }
+
+  function checkField(host, label, path) {
+    var f = el("label", "check"), c = el("input"); c.type = "checkbox";
+    f.appendChild(c); f.appendChild(document.createTextNode(" " + label));
+    c.addEventListener("change", function () { setPath(cfg, path, c.checked); commit(); });
+    var refresh = function () { c.checked = !!getPath(cfg, path); };
+    refreshers.push(refresh); refresh();
+    host.appendChild(f);
+  }
+
+  var openState = {};
+  try { openState = JSON.parse(localStorage.getItem("sn1.open") || "{}") || {}; } catch (e) {}
+
+  /** Một công cụ gập/mở; `keys` là các nhánh cfg nó quản, để biết đã chỉnh chưa và ↺ về đâu. */
+  function tool(pane, id, title, keys, build, openByDefault) {
+    var sec = el("section", "tool");
+    var hd = el("header");
+    hd.innerHTML = '<span class="chev">▸</span><h3>' + title + '</h3><span class="dot" title="Khác bộ dựng sẵn"></span>';
+    var rs = el("button", "reset", "↺"); rs.title = "Đưa công cụ này về giá trị của bộ dựng sẵn";
+    hd.appendChild(rs);
+    var body = el("div", "body");
+    sec.appendChild(hd); sec.appendChild(body);
+    $("pane-" + pane).appendChild(sec);
+    if (openState[id] != null ? openState[id] : openByDefault) sec.classList.add("open");
+    hd.addEventListener("click", function (e) {
+      if (e.target === rs) return;
+      sec.classList.toggle("open");
+      openState[id] = sec.classList.contains("open");
+      try { localStorage.setItem("sn1.open", JSON.stringify(openState)); } catch (err) {}
+    });
+    rs.addEventListener("click", function () {
+      keys.forEach(function (k) { setPath(cfg, k, clone(getPath(base, k))); });
+      syncAll(); commit();
+    });
+    toolMarks.push(function () {
+      sec.classList.toggle("changed", keys.some(function (k) { return !same(getPath(cfg, k), getPath(base, k)); }));
+    });
+    build(body);
+    return body;
+  }
+
+  /* Vòng màu và Curve: chép từ web/instax.html (cùng engine look.js), đường dẫn đổi sang cfg.look. */
+  /*
+   * ── Vòng màu (Color Balance) ──
+   * Vòng sắc độ với nút kéo ở giữa: hướng = màu, khoảng cách từ tâm = độ đậm.
+   * Cung bên trái kéo độ đậm (Saturation, dưới 0 → trên 100), cung bên phải kéo
+   * độ sáng (Lightness, dưới −100 → giữa 0 → trên +100). Vạch nhỏ ngoài vòng chỉ
+   * màu đang chọn. Bấm đúp vào phần nào thì phần đó về giá trị của Style.
+   * Góc tính theo toán học: 0° bên phải, tăng ngược chiều kim đồng hồ.
+   */
+  var SAT_ARC = [130, 230], LIGHT_ARC = [-50, 50];
+
+  function colorWheel(host, o) {
+    var S = o.size, dpr = Math.max(1, window.devicePixelRatio || 1);
+    var box = el("div", "cbw");
+    if (o.label && !o.labelBelow) box.appendChild(el("div", "cbw-lbl", o.label));
+    var cv = el("canvas");
+    cv.width = cv.height = Math.round(S * dpr);
+    cv.style.width = cv.style.height = S + "px";
+    box.appendChild(cv);
+    if (o.label && o.labelBelow) box.appendChild(el("div", "cbw-lbl", o.label));
+    var val = el("div", "cbw-val");
+    box.appendChild(val);
+    host.appendChild(box);
+
+    var x = cv.getContext("2d");
+    var C = S / 2, RO = S * 0.33, RW = Math.max(5, S * 0.045), RI = RO - RW, RA = RO + S * 0.1, PUCK = RI - 7;
+    var get = function (p) { return getPath(cfg, p); };
+    function pt(r, deg) { var a = deg * Math.PI / 180; return [C + r * Math.cos(a), C - r * Math.sin(a)]; }
+    function seg(r, a0, a1) { x.beginPath(); x.arc(C, C, r, -a1 * Math.PI / 180, -a0 * Math.PI / 180); x.stroke(); }
+    function tick(r0, r1, deg, color, width) {
+      var p0 = pt(r0, deg), p1 = pt(r1, deg);
+      x.lineCap = "round";
+      x.strokeStyle = "rgba(0,0,0,.6)"; x.lineWidth = width + 2;
+      x.beginPath(); x.moveTo(p0[0], p0[1]); x.lineTo(p1[0], p1[1]); x.stroke();
+      x.strokeStyle = color; x.lineWidth = width;
+      x.beginPath(); x.moveTo(p0[0], p0[1]); x.lineTo(p1[0], p1[1]); x.stroke();
+      x.lineCap = "butt";
+    }
+
+    function draw() {
+      var h = get(o.hue), s = get(o.sat), L = o.light ? get(o.light) : 0;
+      x.setTransform(dpr, 0, 0, dpr, 0, 0);
+      x.clearRect(0, 0, S, S);
+
+      // vòng sắc độ
+      x.lineWidth = RW;
+      for (var a = 0; a < 360; a += 3) { x.strokeStyle = "hsl(" + (a + 1.5) + ",88%,55%)"; seg(RI + RW / 2, a, a + 3.6); }
+      x.fillStyle = "#2a2a2a"; x.beginPath(); x.arc(C, C, RI - 0.5, 0, 6.3); x.fill();
+
+      // cung trái: độ đậm, trắng (0) → màu đang chọn (100)
+      x.lineWidth = 3;
+      for (var i = 0; i < 40; i++) {
+        var f = (i + 0.5) / 40;
+        x.strokeStyle = "hsl(" + h + "," + Math.round(f * 85) + "%," + Math.round(96 - f * 42) + "%)";
+        seg(RA, SAT_ARC[1] - (i + 1) * 2.5, SAT_ARC[1] - i * 2.5 + 0.3);
+      }
+      tick(RA - 7, RA + 7, SAT_ARC[1] - s, "#f2f2f2", 2.5);
+
+      // cung phải: độ sáng, tối (−100) → trắng (+100)
+      if (o.light) {
+        for (i = 0; i < 40; i++) {
+          f = (i + 0.5) / 40;
+          x.strokeStyle = "hsl(0,0%," + Math.round(28 + f * 70) + "%)";
+          seg(RA, LIGHT_ARC[0] + i * 2.5, LIGHT_ARC[0] + (i + 1) * 2.5 + 0.3);
+        }
+        tick(RA - 7, RA + 7, L / 100 * LIGHT_ARC[1], "#f2f2f2", 2.5);
+      }
+
+      // vạch màu đang chọn, ngay ngoài vòng sắc độ
+      tick(RO + 2, RO + S * 0.05, h, "hsl(" + h + ",95%,55%)", 2.5);
+
+      // nút kéo ở giữa
+      var p = pt(s / 100 * PUCK, h);
+      x.strokeStyle = "rgba(0,0,0,.55)"; x.lineWidth = 3; x.beginPath(); x.arc(p[0], p[1], 6, 0, 6.3); x.stroke();
+      x.strokeStyle = "#ececec"; x.lineWidth = 1.5; x.beginPath(); x.arc(p[0], p[1], 6, 0, 6.3); x.stroke();
+      x.fillStyle = "#ececec"; x.beginPath(); x.arc(p[0], p[1], 1.6, 0, 6.3); x.fill();
+
+      val.textContent = "H " + Math.round(h) + "° · S " + Math.round(s) + (o.light ? " · L " + Math.round(L) : "");
+    }
+
+    function local(e) {
+      var r = cv.getBoundingClientRect();
+      var dx = (e.clientX - r.left) / r.width * S - C, dy = C - (e.clientY - r.top) / r.height * S;
+      return { d: Math.sqrt(dx * dx + dy * dy), a: (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360 };
+    }
+    function signed(a) { return a > 180 ? a - 360 : a; }
+    function hit(q) {
+      if (q.d <= RO + 3) return "puck";
+      if (Math.abs(q.d - RA) <= 13) {
+        if (q.a >= SAT_ARC[0] - 12 && q.a <= SAT_ARC[1] + 12) return "sat";
+        if (o.light && Math.abs(signed(q.a)) <= LIGHT_ARC[1] + 12) return "light";
+      }
+      return null;
+    }
+    function apply(mode, q) {
+      if (mode === "puck") {
+        setPath(cfg, o.hue, Math.round(q.a) % 360);
+        setPath(cfg, o.sat, Math.round(clamp(q.d / PUCK, 0, 1) * 100));
+      } else if (mode === "sat") {
+        setPath(cfg, o.sat, Math.round(clamp(SAT_ARC[1] - q.a, 0, 100)));
+      } else if (mode === "light") {
+        setPath(cfg, o.light, Math.round(clamp(signed(q.a) / LIGHT_ARC[1], -1, 1) * 100));
+      }
+      draw();
+    }
+    var mode = null;
+    cv.addEventListener("pointerdown", function (e) {
+      var q = local(e);
+      mode = hit(q);
+      if (!mode) return;
+      cv.setPointerCapture(e.pointerId);
+      apply(mode, q); schedule();
+    });
+    cv.addEventListener("pointermove", function (e) {
+      if (mode) { apply(mode, local(e)); schedule(); return; }
+      var m = hit(local(e));
+      cv.style.cursor = m === "puck" ? "crosshair" : m ? "ns-resize" : "default";
+    });
+    function end() { if (mode) { mode = null; commit(); } }
+    cv.addEventListener("pointerup", end);
+    cv.addEventListener("pointercancel", end);
+    cv.addEventListener("dblclick", function (e) {
+      var m = hit(local(e));
+      if (m === "puck") { setPath(cfg, o.hue, getPath(base, o.hue)); setPath(cfg, o.sat, getPath(base, o.sat)); }
+      else if (m === "sat") setPath(cfg, o.sat, getPath(base, o.sat));
+      else if (m === "light") setPath(cfg, o.light, getPath(base, o.light));
+      else return;
+      draw(); commit();
+    });
+    cv.title = "Kéo nút giữa: màu và độ đậm · cung trái: độ đậm · cung phải: độ sáng · bấm đúp: về preset";
+    refreshers.push(draw);
+    draw();
+  }
+
+  /* ── Curve: kéo điểm, bấm vào chỗ trống để thêm, bấm đúp / kéo ra ngoài để xoá ── */
+  function curveEditor(host) {
+    var chans = [["rgb", "RGB"], ["luma", "Luma"], ["r", "Red"], ["g", "Green"], ["b", "Blue"]];
+    var cur = "rgb";
+    var chips = el("div", "chips");
+    chans.forEach(function (c) {
+      var b = el("button", null, c[1]); b.dataset.ch = c[0];
+      b.addEventListener("click", function () { cur = c[0]; mark(); draw(); });
+      chips.appendChild(b);
+    });
+    function mark() { Array.prototype.forEach.call(chips.children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.ch === cur)); }); }
+    var box = el("div", "curve");
+    var cv = el("canvas"); var S = 300; cv.width = cv.height = S;
+    var read = el("div", "readout", "<span id='cvIn'>vào —</span><span id='cvOut'>ra —</span>");
+    box.appendChild(chips); box.appendChild(cv); box.appendChild(read);
+    host.appendChild(box);
+    var x = cv.getContext("2d");
+    var COL = { rgb: "#e6e6e6", luma: "#bdbdbd", r: "#ff6a6a", g: "#6ad46a", b: "#6a9cff" };
+    var active = -1, drag = false;
+
+    function pts() { return cfg.look.curve[cur]; }
+    function toPx(p) { return [p[0] / 255 * (S - 1), (1 - p[1] / 255) * (S - 1)]; }
+    function draw() {
+      x.clearRect(0, 0, S, S);
+      x.strokeStyle = "#2f2f2f"; x.lineWidth = 1;
+      for (var i = 1; i < 4; i++) { var g = Math.round(i * S / 4) + 0.5; x.beginPath(); x.moveTo(g, 0); x.lineTo(g, S); x.moveTo(0, g); x.lineTo(S, g); x.stroke(); }
+      x.strokeStyle = "#3a3a3a"; x.beginPath(); x.moveTo(0, S); x.lineTo(S, 0); x.stroke();
+      var t = LOOK.curveTable(pts(), 256);
+      x.strokeStyle = COL[cur]; x.lineWidth = 1.6; x.beginPath();
+      for (i = 0; i < 256; i++) { var px = i / 255 * (S - 1), py = (1 - t[i]) * (S - 1); if (i) x.lineTo(px, py); else x.moveTo(px, py); }
+      x.stroke();
+      pts().forEach(function (p, j) {
+        var q = toPx(p);
+        x.fillStyle = j === active ? COL[cur] : "#1b1b1b"; x.strokeStyle = COL[cur]; x.lineWidth = 1.5;
+        x.beginPath(); x.rect(q[0] - 4, q[1] - 4, 8, 8); x.fill(); x.stroke();
+      });
+      // Điểm ảnh dưới con trỏ (rê chuột lên ảnh): nó nằm ở đâu trên curve, sẽ bị đẩy tới đâu.
+      var pin = null;
+      if (probe) {
+        pin = cur === "rgb" || cur === "luma" ? probe.curve.y : probe.curve[cur];
+        var mx = pin / 255 * (S - 1), my = (1 - t[clamp(Math.round(pin), 0, 255)]) * (S - 1);
+        x.save();
+        x.setLineDash([4, 4]); x.strokeStyle = "rgba(224,162,62,.9)"; x.lineWidth = 1;
+        x.beginPath(); x.moveTo(Math.round(mx) + 0.5, 0); x.lineTo(Math.round(mx) + 0.5, S); x.stroke();
+        x.restore();
+        if (cur === "rgb") ["r", "g", "b"].forEach(function (k) { var v = probe.curve[k] / 255 * (S - 1); x.fillStyle = COL[k]; x.fillRect(v - 1, S - 8, 2, 8); });
+        x.fillStyle = "#e0a23e"; x.strokeStyle = "#1b1b1b"; x.lineWidth = 1.5;
+        x.beginPath(); x.arc(mx, my, 5, 0, Math.PI * 2); x.fill(); x.stroke();
+      }
+      var a = pts()[active];
+      if (!a && pin !== null) {
+        $("cvIn").textContent = "con trỏ: vào " + Math.round(pin);
+        $("cvOut").textContent = "ra " + Math.round(t[clamp(Math.round(pin), 0, 255)] * 255);
+        return;
+      }
+      $("cvIn").textContent = a ? "vào " + Math.round(a[0]) : "vào —";
+      $("cvOut").textContent = a ? "ra " + Math.round(a[1]) : "ra —";
+    }
+    function pos(e) {
+      var r = cv.getBoundingClientRect();
+      return [clamp((e.clientX - r.left) / r.width * 255, -40, 295), clamp((1 - (e.clientY - r.top) / r.height) * 255, -40, 295)];
+    }
+    function hit(p) {
+      var best = -1, bd = 9;
+      pts().forEach(function (q, j) { var d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; best = j; } });
+      return best;
+    }
+    cv.addEventListener("pointerdown", function (e) {
+      var p = pos(e), list = pts();
+      active = hit(p);
+      if (active < 0) {
+        var xx = clamp(Math.round(p[0]), 1, 254);
+        if (list.some(function (q) { return Math.abs(q[0] - xx) < 2; })) return;
+        list.push([xx, clamp(Math.round(p[1]), 0, 255)]);
+        list.sort(function (a, b) { return a[0] - b[0]; });
+        active = list.findIndex(function (q) { return q[0] === xx; });
+      }
+      drag = true; cv.setPointerCapture(e.pointerId); draw(); schedule();
+    });
+    cv.addEventListener("pointermove", function (e) {
+      if (!drag || active < 0) return;
+      var p = pos(e), list = pts(), n = list.length;
+      var lo = active > 0 ? list[active - 1][0] + 1 : 0, hi = active < n - 1 ? list[active + 1][0] - 1 : 255;
+      var out = (p[1] < -25 || p[1] > 280) && active > 0 && active < n - 1;
+      list[active] = [clamp(Math.round(p[0]), lo, hi), clamp(Math.round(p[1]), 0, 255)];
+      cv.style.cursor = out ? "not-allowed" : "crosshair";
+      draw(); schedule();
+    });
+    function end(e) {
+      if (!drag) return;
+      drag = false; cv.style.cursor = "crosshair";
+      var p = pos(e), list = pts();
+      if ((p[1] < -25 || p[1] > 280) && active > 0 && active < list.length - 1) { list.splice(active, 1); active = -1; }
+      draw(); commit();
+    }
+    cv.addEventListener("pointerup", end);
+    cv.addEventListener("pointercancel", end);
+    cv.addEventListener("dblclick", function (e) {
+      var j = hit(pos(e)), list = pts();
+      if (j > 0 && j < list.length - 1) { list.splice(j, 1); active = -1; draw(); commit(); }
+    });
+    cv.title = "Bấm để thêm điểm · kéo điểm · bấm đúp hoặc kéo ra ngoài để xoá";
+    refreshers.push(function () { active = -1; draw(); });
+    probeHooks.push(draw);
+    curveUi = { ch: function () { return cur; }, draw: draw, setActive: function (j) { active = j; } };
+    mark(); draw();
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     4. CÁC CÔNG CỤ
+     ═══════════════════════════════════════════════════════════════ */
+  var R = SNOW_RANGES;
+  slider($("amountHost"), { label: "Lượng tuyết (%)", path: "amount", min: R.amount[0], max: R.amount[1], step: 1, zero: 0 });
+
+  // ── Lớp ──
+  var LAYER_NOTE = {
+    lens: "Đĩa bokeh to, trong — hạt bay sát ống kính. Vài hạt là đủ.",
+    front: "Hạt mờ vừa giữa máy ảnh và người, đè lên người.",
+    focus: "Hạt sắc quanh mặt phẳng nét — đọc ra hình dạng hạt.",
+    behind: "Giữa người và phông. Bị vùng người che.",
+    far: "Hạt li ti “trong phông” — tạo chiều sâu. Bị vùng người che."
+  };
+  SNOW_LAYERS.forEach(function (k, i) {
+    tool("layers", "L_" + k, SNOW_LAYER_NAMES[k], ["layers." + k], function (b) {
+      var meta = el("div", "meta");
+      b.appendChild(meta);
+      checkField(b, "Bật lớp này", "layers." + k + ".enabled");
+      slider(b, { label: "Số hạt", path: "layers." + k + ".count", min: 0, max: k === "far" ? 4000 : 2000, step: 1, zero: 0 });
+      slider(b, { label: "Cỡ hạt (%)", path: "layers." + k + ".size", min: R.sizePct[0], max: R.sizePct[1], step: 5 });
+      slider(b, { label: "Độ đậm", path: "layers." + k + ".opacity", min: 0, max: 100, step: 1, zero: 0 });
+      if (k === "far") slider(b, { label: "Độ sâu ảo (m)", path: "layers.far.depth", min: R.farDepth[0], max: R.farDepth[1], step: 0.5 });
+      b.appendChild(el("p", "note", LAYER_NOTE[k]));
+      refreshers.push(function () {
+        var long = work ? Math.max(work.srcW, work.srcH) : 3000;
+        var L = describeLayers(cfg, long)[i];
+        meta.textContent = "Z " + L.z0.toFixed(2) + "–" + L.z1.toFixed(2) + " m · hạt ~" + L.size.toFixed(1) + " px · mờ ~" +
+          L.blur.toFixed(1) + " px (ảnh " + long + " px)";
+      });
+    }, k === "lens" || k === "focus");
+  });
+
+  // ── Ống kính ──
+  tool("lens", "camera", "Ống kính ảo", ["camera"], function (b) {
+    slider(b, { label: "Tiêu cự (mm, full-frame)", path: "camera.focal", min: R.focal[0], max: R.focal[1], step: 1 });
+    slider(b, { label: "Máy ảnh → người (m)", path: "camera.focus", min: R.focus[0], max: R.focus[1], step: 0.05 });
+    slider(b, { label: "Máy ảnh → phông (m)", path: "camera.backdrop", min: R.backdrop[0], max: R.backdrop[1], step: 0.05 });
+    slider(b, { label: "Khẩu độ ảo (f/)", path: "camera.aperture", min: R.aperture[0], max: R.aperture[1], step: 0.1 });
+    selectField(b, "Hình bokeh", [["0", "Tròn"], ["5", "5 lá khẩu"], ["6", "6 lá khẩu"], ["7", "7 lá khẩu"], ["8", "8 lá khẩu"], ["9", "9 lá khẩu"]], "camera.blades", true);
+    b.appendChild(el("p", "note", "Không phải thông số máy thật — chỉ để tính tuyết to và mờ bao nhiêu theo độ sâu. Tiêu cự và hai khoảng cách " +
+      "nên gần đúng booth để cỡ hạt hợp lý. Khẩu số nhỏ = hạt ngoài vùng nét mờ hơn, bokeh sát kính to hơn."));
+  }, true);
+
+  // ── Hạt & gió ──
+  tool("flakes", "size", "Cỡ & kiểu hạt", ["flakes"], function (b) {
+    slider(b, { label: "Hạt nhỏ nhất (mm)", path: "flakes.minMm", min: R.sizeMm[0], max: R.sizeMm[1], step: 0.5 });
+    slider(b, { label: "Hạt to nhất (mm)", path: "flakes.maxMm", min: R.sizeMm[0], max: R.sizeMm[1], step: 0.5 });
+    b.appendChild(el("div", "sub", "Tỉ lệ kiểu hạt"));
+    slider(b, { label: "Cục bông", path: "flakes.clump", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Mảnh giấy / bọt (như mẫu)", path: "flakes.chip", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Tinh thể (cách điệu)", path: "flakes.crystal", min: 0, max: 100, step: 1, zero: 0 });
+    b.appendChild(el("div", "sub", "Phân bố"));
+    slider(b, { label: "Độ tụ đám", path: "flakes.clumping", min: 0, max: 100, step: 1, zero: 0 });
+    b.appendChild(el("p", "note", "Hình dạng chỉ đọc được ở hạt đủ nét và đủ to (lớp Quanh mẫu). Hạt mờ hẳn thì thành đĩa theo hình khẩu."));
+  }, true);
+  tool("flakes", "wind", "Gió & chuyển động", ["wind"], function (b) {
+    slider(b, { label: "Hướng rơi (°)", path: "wind.angle", min: R.angle[0], max: R.angle[1], step: 1, zero: 0 });
+    slider(b, { label: "Vệt chuyển động", path: "wind.trail", min: 0, max: 100, step: 1, zero: 0 });
+  }, true);
+  tool("flakes", "vary", "Biến thiên giữa các ảnh", ["vary"], function (b) {
+    slider(b, { label: "Lượng tuyết ± (%)", path: "vary.amount", min: R.varyAmount[0], max: R.varyAmount[1], step: 1, zero: 0 });
+    slider(b, { label: "Hướng gió ± (°)", path: "vary.wind", min: R.varyWind[0], max: R.varyWind[1], step: 1, zero: 0 });
+    slider(b, { label: "Số bokeh sát kính ± (%)", path: "vary.bokeh", min: R.varyBokeh[0], max: R.varyBokeh[1], step: 5, zero: 0 });
+    b.appendChild(el("p", "note", "Vị trí hạt luôn khác nhau giữa các ảnh. Ba thanh này làm thêm mật độ, hướng rơi và số đĩa bokeh " +
+      "cũng lệch ngẫu nhiên — bốn tấm trong một phiên không còn trông như cùng một khuôn. Mỗi ảnh rút biến thể từ tên file " +
+      "nên chạy lại vẫn y hệt. Bấm “Đổi bộ hạt” dưới ảnh để xem các biến thể."));
+  }, true);
+  tool("flakes", "seed", "Bộ hạt", ["seed"], function (b) {
+    slider(b, { label: "Seed (0 = theo tên file)", path: "seed", min: 0, max: 9999, step: 1, zero: 0 });
+    b.appendChild(el("p", "note", "0: mỗi ảnh trong phiên một bộ hạt khác nhau, chạy lại vẫn y hệt. Khác 0: mọi ảnh dùng chung một bộ hạt."));
+  });
+
+  // ── Ánh sáng ──
+  tool("light", "light", "Ánh sáng trên hạt", ["light"], function (b) {
+    slider(b, { label: "Độ sáng", path: "light.brightness", min: R.brightness[0], max: R.brightness[1], step: 1 });
+    slider(b, { label: "Ăn màu nền", path: "light.ambient", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Ngược sáng", path: "light.backlight", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Quầng sáng", path: "light.glow", min: 0, max: 100, step: 1, zero: 0 });
+    b.appendChild(el("p", "note", "Ăn màu nền: hạt nhuốm màu vùng ảnh phía sau nó — phông nào cũng hoà vào được. " +
+      "Ngược sáng: hạt mờ vẫn sáng rõ, như có đèn ven sau lưng mẫu."));
+  }, true);
+
+  // ── Người ──
+  tool("subject", "subject", "Vùng người", ["subject"], function (b) {
+    selectField(b, "Chế độ", [["auto", "Tự động — tách người"], ["ellipse", "Elip đặt tay"], ["off", "Tắt — không che"]], "subject.mode");
+    b.appendChild(el("p", "note", "Tự động: snow.exe tách đúng dáng người trong từng ảnh. Trang này không chạy được model — " +
+      "để xem trước đúng như vậy, kéo thả ảnh vào <code>tach-nguoi.bat</code> rồi nạp file <code>.MATTE.png</code> ở đây. " +
+      "Chưa nạp thì xem trước bằng elip bên dưới (cũng là chỗ dựa khi máy booth thiếu model)."));
+    var row = el("div", "field"), pick = el("label", "btn filepick", "Nạp matte (.MATTE.png)");
+    var inp = el("input"); inp.type = "file"; inp.accept = "image/png"; pick.appendChild(inp);
+    var drop = el("button", "btn ghost", "Bỏ matte");
+    row.appendChild(pick); row.appendChild(drop);
+    var info = el("p", "meta");
+    b.appendChild(row); b.appendChild(info);
+    inp.addEventListener("change", function () {
+      var f = inp.files[0]; inp.value = "";
+      if (!f) return;
+      if (!work) { toast("Mở ảnh trước, rồi mới nạp matte của ảnh đó."); return; }
+      var url = URL.createObjectURL(f), img = new Image();
+      img.onload = function () {
+        URL.revokeObjectURL(url);
+        var ar = img.naturalWidth / img.naturalHeight, ai = work.srcW / work.srcH;
+        if (Math.abs(ar - ai) > 0.03) toast("Cảnh báo: tỉ lệ matte khác tỉ lệ ảnh — có thể là matte của ảnh khác.");
+        var c = document.createElement("canvas"); c.width = img.naturalWidth; c.height = img.naturalHeight;
+        var x = c.getContext("2d", { willReadFrequently: true }); x.drawImage(img, 0, 0);
+        var px = x.getImageData(0, 0, c.width, c.height).data, data = new Uint8Array(c.width * c.height);
+        for (var i = 0; i < data.length; i++) data[i] = px[i * 4];
+        setMatte({ data: data, width: c.width, height: c.height }, f.name);
+        if (cfg.subject.mode !== "auto") toast("Đã nạp matte — chọn chế độ Tự động để dùng.");
+      };
+      img.onerror = function () { URL.revokeObjectURL(url); toast("Không đọc được file matte."); };
+      img.src = url;
+    });
+    drop.addEventListener("click", function () { setMatte(null, ""); });
+    refreshers.push(function () {
+      info.textContent = matte ? "Matte: " + matteName + " (" + matte.width + "×" + matte.height + ")" : "Chưa nạp matte.";
+    });
+    b.appendChild(el("div", "sub", "Elip"));
+    slider(b, { label: "Tâm ngang (%)", path: "subject.x", min: 0, max: 100, step: 1 });
+    slider(b, { label: "Tâm dọc (%)", path: "subject.y", min: 0, max: 100, step: 1 });
+    slider(b, { label: "Rộng (%)", path: "subject.w", min: 0, max: 100, step: 1 });
+    slider(b, { label: "Cao (%)", path: "subject.h", min: 0, max: 100, step: 1 });
+    slider(b, { label: "Viền mềm", path: "subject.feather", min: R.feather[0], max: R.feather[1], step: 1, zero: 0 });
+    b.appendChild(el("p", "note", "Hạt Sau lưng / Xa bị che trong vùng người. Tick “Hiện vùng người” dưới ảnh để thấy: " +
+      "matte tô xanh, elip nét đứt, dải mặt tô cam."));
+  }, true);
+  tool("subject", "faceGuard", "Chặn hạt to khỏi mặt", ["faceGuard"], function (b) {
+    checkField(b, "Bật", "faceGuard.enabled");
+    slider(b, { label: "Hạt to hơn (% cạnh dài)", path: "faceGuard.maxSize", min: R.guard[0], max: R.guard[1], step: 0.5 });
+    b.appendChild(el("p", "note", "Hạt phía trước to hơn ngưỡng này không được lấn vào dải mặt (vùng tô cam). Có matte thì dải mặt " +
+      "đi theo đỉnh đầu của từng người, nên nhóm đông đứng cao thấp vẫn đúng."));
+  }, true);
+
+  function setMatte(m, name) {
+    matte = m; matteName = name; matteTint = null;
+    syncAll(); schedule();
+  }
+
+  // ── Màu: engine look.js của Instax, chạy SAU khi rắc tuyết ──
+  var LR = LOOK.LOOK_RANGES;
+  var HUE_TRACK = "linear-gradient(90deg,#f33,#ff3 17%,#3f3 33%,#3ff 50%,#33f 67%,#f3f 83%,#f33)";
+  tool("color", "c_on", "Chỉnh màu", ["look.enabled", "look.strength"], function (b) {
+    checkField(b, "Bật chỉnh màu (sau khi rắc tuyết)", "look.enabled");
+    slider(b, { label: "Độ đậm màu", path: "look.strength", min: 0, max: 100, step: 1, zero: 0 });
+    b.appendChild(el("p", "note", "Cùng bộ công cụ và cùng công thức với trang Instax. Màu chỉnh lên cả khung, kể cả hạt tuyết, " +
+      "và hạt phim rơi lên hạt tuyết — tuyết hoà vào ảnh. Chọn nhanh ở ô <b>Màu</b> phía trên. " +
+      "Trên booth, Clarity (~0.45 s) và Film Grain (~0.3 s ở ảnh 6MP) là hai công cụ tốn thời gian nhất."));
+  }, true);
+  tool("color", "c_wb", "White Balance", ["look.whiteBalance"], function (b) {
+    pickButton(b, "wb", "Ống hút: chấm chỗ đáng lẽ trắng / xám");
+    slider(b, { label: "Kelvin", path: "look.whiteBalance.kelvin", min: LR.kelvin[0], max: LR.kelvin[1], step: 50, zero: 5500,
+                track: "linear-gradient(90deg,#4f7fd8,#d8d8d8 40%,#e8a640)" });
+    slider(b, { label: "Tint", path: "look.whiteBalance.tint", min: -50, max: 50, step: 1, zero: 0,
+                track: "linear-gradient(90deg,#4fbf5a,#d8d8d8 50%,#d04fc0)" });
+    b.appendChild(el("p", "note", "5500 K = giữ nguyên. Cao hơn ấm lên, thấp hơn lạnh đi. Tint dương ngả hồng, âm ngả lục."));
+  });
+  tool("color", "c_exposure", "Exposure", ["look.exposure"], function (b) {
+    slider(b, { label: "Exposure", path: "look.exposure.exposure", min: LR.exposure[0], max: LR.exposure[1], step: 0.01, zero: 0 });
+    slider(b, { label: "Contrast", path: "look.exposure.contrast", min: -50, max: 50, step: 1, zero: 0 });
+    slider(b, { label: "Brightness", path: "look.exposure.brightness", min: -50, max: 50, step: 1, zero: 0 });
+    slider(b, { label: "Saturation", path: "look.exposure.saturation", min: -100, max: 100, step: 1, zero: 0 });
+  });
+  tool("color", "c_hdr", "High Dynamic Range", ["look.hdr"], function (b) {
+    ["highlight", "shadow", "white", "black"].forEach(function (k) {
+      slider(b, { label: k[0].toUpperCase() + k.slice(1), path: "look.hdr." + k, min: -100, max: 100, step: 1, zero: 0 });
+    });
+  });
+  tool("color", "c_curve", "Curve", ["look.curve"], function (b) {
+    pickButton(b, "curve", "Chỉnh trên ảnh: giữ chuột rồi kéo lên / xuống");
+    b.appendChild(el("p", "note", "Rê chuột lên ảnh: vạch cam trên curve là chỗ điểm ảnh đó nằm (kênh RGB có thêm ba vạch R/G/B ở đáy). " +
+      "Bật nút trên rồi giữ chuột ở vùng muốn chỉnh và kéo — curve thêm điểm đúng chỗ đó."));
+    curveEditor(b);
+  });
+  tool("color", "c_levels", "Levels", ["look.levels"], function (b) {
+    var ch = "rgb", chips = el("div", "chips"), host = el("div");
+    [["rgb", "RGB"], ["r", "Red"], ["g", "Green"], ["b", "Blue"]].forEach(function (c) {
+      var bt = el("button", null, c[1]); bt.dataset.ch = c[0];
+      bt.addEventListener("click", function () { ch = c[0]; mark(); syncAll(); });
+      chips.appendChild(bt);
+    });
+    function mark() { Array.prototype.forEach.call(chips.children, function (x) { x.setAttribute("aria-pressed", String(x.dataset.ch === ch)); }); }
+    b.appendChild(chips); b.appendChild(host); mark();
+    var L = function (k) {
+      return {
+        get: function () { return cfg.look.levels[ch][k]; },
+        set: function (v) {
+          var l = cfg.look.levels[ch]; l[k] = v;
+          if (k === "inBlack" && l.inWhite <= v) l.inWhite = Math.min(255, v + 1);
+          if (k === "inWhite" && l.inBlack >= v) l.inBlack = Math.max(0, v - 1);
+        },
+        def: function () { return base.look.levels[ch][k]; }
+      };
+    };
+    slider(host, Object.assign({ label: "Input black", min: 0, max: 254, step: 1, zero: 0 }, L("inBlack")));
+    slider(host, Object.assign({ label: "Input white", min: 1, max: 255, step: 1, zero: 255 }, L("inWhite")));
+    slider(host, Object.assign({ label: "Midtone (gamma)", min: 0.1, max: 9.99, step: 0.01, zero: 1 }, L("gamma")));
+    slider(host, Object.assign({ label: "Output black", min: 0, max: 255, step: 1, zero: 0 }, L("outBlack")));
+    slider(host, Object.assign({ label: "Output white", min: 0, max: 255, step: 1, zero: 255 }, L("outWhite")));
+  });
+  tool("color", "c_balance", "Color Balance", ["look.colorBalance"], function (b) {
+    var MODES = [["master", "Master"], ["3way", "3-Way"], ["shadow", "Shadow"], ["midtone", "Midtone"], ["highlight", "Highlight"]];
+    var cur = "3way";
+    try { cur = localStorage.getItem("sn1.cb") || cur; } catch (e) {}
+    var tabs = el("div", "cb-tabs"), panes = {};
+    MODES.forEach(function (m) {
+      var bt = el("button", null, m[1]); bt.dataset.k = m[0];
+      bt.addEventListener("click", function () { show(m[0]); });
+      tabs.appendChild(bt);
+      panes[m[0]] = el("div", "cb-pane");
+    });
+    b.appendChild(tabs);
+    MODES.forEach(function (m) { b.appendChild(panes[m[0]]); });
+    function zone(z) { return { hue: "look.colorBalance." + z + ".hue", sat: "look.colorBalance." + z + ".saturation", light: "look.colorBalance." + z + ".lightness" }; }
+    function show(k) {
+      cur = k;
+      refreshers.forEach(function (f) { f(); });
+      MODES.forEach(function (m) { panes[m[0]].hidden = m[0] !== k; });
+      Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", String(x.dataset.k === k)); });
+      try { localStorage.setItem("sn1.cb", k); } catch (e) {}
+    }
+    colorWheel(panes.master, { hue: "look.colorBalance.master.hue", sat: "look.colorBalance.master.saturation", size: 210 });
+    var top = el("div", "cb-row center"), row = el("div", "cb-row");
+    panes["3way"].appendChild(top); panes["3way"].appendChild(row);
+    colorWheel(top, Object.assign({ label: "Midtone", labelBelow: true, size: 150 }, zone("midtone")));
+    colorWheel(row, Object.assign({ label: "Shadow", size: 150 }, zone("shadow")));
+    colorWheel(row, Object.assign({ label: "Highlight", size: 150 }, zone("highlight")));
+    ["shadow", "midtone", "highlight"].forEach(function (z) { colorWheel(panes[z], Object.assign({ size: 210 }, zone(z))); });
+    show(cur);
+  });
+  tool("color", "c_editor", "Color Editor", ["look.colorEditor"], function (b) {
+    var COLORS = { red: "#d9333b", orange: "#e5862e", yellow: "#e5cf33", green: "#3faa45", cyan: "#33c0cf", blue: "#3463d6", magenta: "#bf3fc2" };
+    var NAMES = { red: "Red", orange: "Orange", yellow: "Yellow", green: "Green", cyan: "Cyan", blue: "Blue", magenta: "Magenta" };
+    var sel = "orange", sw = el("div", "swatches"), title = el("div", "sub"), host = el("div");
+    LOOK.COLOR_EDITOR_BANDS.forEach(function (k) {
+      var bt = el("button"); bt.style.background = COLORS[k]; bt.dataset.k = k; bt.title = NAMES[k];
+      bt.addEventListener("click", function () { sel = k; mark(); syncAll(); });
+      sw.appendChild(bt);
+    });
+    function mark() {
+      var under = probe && probe.band;
+      Array.prototype.forEach.call(sw.children, function (x) {
+        var k = x.dataset.k, c = cfg.look.colorEditor[k];
+        x.setAttribute("aria-pressed", String(k === sel));
+        x.classList.toggle("changed", !!(c.hue || c.saturation || c.lightness));
+        x.classList.toggle("probe-on", k === under);   // dải màu của điểm dưới con trỏ
+      });
+      title.textContent = NAMES[sel] + (sel === "orange" ? " · tông da" : sel === "blue" || sel === "cyan" ? " · trời / phông xanh" : "") +
+        (under ? " — con trỏ đang ở dải " + NAMES[under] : "");
+    }
+    pickButton(b, "editor", "Ống hút: chấm vào màu cần chỉnh");
+    b.appendChild(sw); b.appendChild(title); b.appendChild(host);
+    ceSelect = function (k) { sel = k; mark(); syncAll(); };
+    probeHooks.push(mark);
+    var C = function (k, lo, hi) {
+      return {
+        get: function () { return cfg.look.colorEditor[sel][k]; },
+        set: function (v) { cfg.look.colorEditor[sel][k] = v; },
+        def: function () { return base.look.colorEditor[sel][k]; },
+        onChange: mark, min: lo, max: hi, step: 1, zero: 0
+      };
+    };
+    slider(host, Object.assign({ label: "Hue" }, C("hue", -30, 30)));
+    slider(host, Object.assign({ label: "Saturation" }, C("saturation", -100, 100)));
+    slider(host, Object.assign({ label: "Lightness" }, C("lightness", -100, 100)));
+    refreshers.push(mark); mark();
+  });
+  tool("color", "c_clarity", "Clarity", ["look.clarity"], function (b) {
+    selectField(b, "Method", [["natural", "Natural"], ["punch", "Punch"], ["neutral", "Neutral"], ["classic", "Classic"]], "look.clarity.method");
+    slider(b, { label: "Clarity", path: "look.clarity.clarity", min: -100, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Structure", path: "look.clarity.structure", min: -100, max: 100, step: 1, zero: 0 });
+  });
+  tool("color", "c_vignette", "Vignetting", ["look.vignetting"], function (b) {
+    slider(b, { label: "Amount (EV)", path: "look.vignetting.amount", min: LR.vignette[0], max: LR.vignette[1], step: 0.01, zero: 0 });
+    selectField(b, "Method", [["elliptic", "Elliptic"], ["circular", "Circular"]], "look.vignetting.method");
+  });
+  tool("color", "c_grain", "Film Grain", ["look.grain"], function (b) {
+    selectField(b, "Type", [["fine", "Fine Grain"], ["silverRich", "Silver Rich"], ["soft", "Soft Grain"],
+                            ["cubic", "Cubic Grain"], ["tabular", "Tabular Grain"], ["harsh", "Harsh Grain"]], "look.grain.type");
+    slider(b, { label: "Impact", path: "look.grain.impact", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Granularity", path: "look.grain.granularity", min: 0, max: 100, step: 1 });
+  });
+  tool("color", "c_lut", "LUT", ["look.lut"], function (b) {
+    var info = el("p", "note"), row = el("div", "field");
+    var pick = el("label", "btn filepick", "Chọn file .cube");
+    var inp = el("input"); inp.type = "file"; inp.accept = ".cube"; pick.appendChild(inp);
+    var drop = el("button", "btn ghost", "Bỏ LUT");
+    row.appendChild(pick); row.appendChild(drop);
+    b.appendChild(row); b.appendChild(info);
+    slider(b, { label: "Opacity", path: "look.lut.opacity", min: 0, max: 100, step: 1, zero: 0 });
+    b.appendChild(el("p", "note", "Look làm ở phần mềm khác (Lightroom, Photoshop…) → xuất .cube. Chép file vào thư mục " +
+                     "<code>luts</code> cạnh snow.exe; tên file phải trùng tên hiện ở đây."));
+    function show() {
+      if (!cfg.look.lut.file) info.textContent = "Chưa có LUT.";
+      else info.innerHTML = "<b>" + cfg.look.lut.file + "</b>" + (userLut ? " · " + userLut.size + "³ đã nạp" : " · chưa nạp file trên máy này — xem trước đang bỏ qua LUT");
+    }
+    inp.addEventListener("change", function () {
+      var f = inp.files[0]; inp.value = "";
+      if (!f) return;
+      f.text().then(function (txt) {
+        try { userLut = LOOK.parseCube(txt); } catch (err) { toast("Không đọc được .cube: " + err.message); return; }
+        cfg.look.lut.file = f.name; if (!cfg.look.lut.opacity) cfg.look.lut.opacity = 100;
+        syncAll(); commit(); toast("Đã nạp " + f.name);
+      });
+    });
+    drop.addEventListener("click", function () { userLut = null; cfg.look.lut.file = ""; syncAll(); commit(); });
+    refreshers.push(show); show();
+  });
+
+  /* ── tab ── */
+  var TABS = ["layers", "lens", "flakes", "light", "subject", "color", "file"];
+  var tabBtns = document.querySelectorAll(".tabs button");
+  function selectTab(name) {
+    Array.prototype.forEach.call(tabBtns, function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === name)); });
+    TABS.forEach(function (n) { $("pane-" + n).hidden = n !== name; });
+    try { localStorage.setItem("sn1.tab", name); } catch (e) {}
+  }
+  Array.prototype.forEach.call(tabBtns, function (b) { b.addEventListener("click", function () { selectTab(b.dataset.tab); }); });
+
+  /* ── bộ dựng sẵn ── */
+  var styleSel = $("styleSel");
+  function useStyle(name) {
+    styleName = name;
+    var scene = name === "loaded" && loadedStyle ? loadedStyle : presetCfg(SNOW_PRESETS[name] ? name : "mercies");
+    base = compose(scene, base.look);
+    styleSel.value = name;
+  }
+  styleSel.addEventListener("change", function () {
+    useStyle(styleSel.value);
+    // Đổi cảnh: giữ nguyên màu đang chỉnh.
+    cfg = compose(base, cfg.look, { enabled: cfg.enabled });
+    Object.assign(cfg, clone(fileOpts));
+    syncAll(); commit();
+    toast("Đã áp cảnh “" + styleSel.options[styleSel.selectedIndex].text + "”.");
+  });
+
+  /* ── preset màu ── */
+  var lookSel = $("lookSel");
+  Object.keys(SNOW_LOOKS).forEach(function (k) {
+    var op = el("option", null, SNOW_LOOKS[k].label); op.value = k; lookSel.appendChild(op);
+  });
+  (function () { var op = el("option", null, "Từ file đã nạp"); op.value = "loaded"; op.hidden = true; lookSel.appendChild(op); })();
+  function useLook(name) {
+    lookName = name;
+    base.look = name === "loaded" && loadedLook ? clone(loadedLook) : lookPreset(SNOW_LOOKS[name] ? name : "neutral");
+    lookSel.value = name;
+  }
+  lookSel.addEventListener("change", function () {
+    useLook(lookSel.value);
+    // Đổi màu: giữ nguyên cảnh đang chỉnh.
+    cfg.look = clone(base.look);
+    syncAll(); commit();
+    toast(cfg.look.enabled ? "Đã áp màu “" + lookSel.options[lookSel.selectedIndex].text + "”." : "Đã tắt chỉnh màu — giữ màu gốc.");
+  });
+
+  /* ═══════════════════════════════════════════════════════════════
+     5. LƯU / NẠP snow.config.json
+     ═══════════════════════════════════════════════════════════════ */
+  function writeJson() { $("jsonOut").value = snowConfigToJson(cfg); }
+  var enabledChk = $("enabledChk");
+  enabledChk.addEventListener("change", function () { cfg.enabled = enabledChk.checked; commit(); });
+  refreshers.push(function () { enabledChk.checked = cfg.enabled; });
+
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2400);
+  }
+
+  function loadConfigText(text) {
+    var raw;
+    try { raw = JSON.parse(text); } catch (e) { toast("JSON sai cú pháp: " + e.message); return false; }
+    if (!raw || typeof raw !== "object") { toast("Không phải file cấu hình."); return false; }
+    loadedStyle = normalizeSnow(raw);
+    loadedLook = normLook(raw.look);
+    fileOpts = snowFileOptions(raw);
+    styleSel.querySelector('option[value="loaded"]').hidden = false;
+    lookSel.querySelector('option[value="loaded"]').hidden = false;
+    useLook("loaded");
+    useStyle("loaded");
+    cfg = compose(base, base.look, { enabled: raw.enabled !== false });
+    Object.assign(cfg, clone(fileOpts));
+    if (cfg.look.lut.file && !userLut) toast("File dùng LUT " + cfg.look.lut.file + " — nạp file .cube ở tab Màu để xem trước.");
+    saved = clone(cfg);
+    syncAll(); commit();
+    toast("Đã nạp cấu hình.");
+    return true;
+  }
+  $("cfgFile").addEventListener("change", function (e) {
+    var f = e.target.files[0]; e.target.value = "";
+    if (f) f.text().then(loadConfigText);
+  });
+  $("pasteBtn").addEventListener("click", function () {
+    var ta = $("jsonOut"), btn = $("pasteBtn");
+    if (ta.readOnly) {
+      ta.readOnly = false; ta.value = ""; ta.placeholder = "Dán nội dung snow.config.json vào đây rồi bấm “Áp dụng”.";
+      ta.focus(); btn.textContent = "Áp dụng";
+      return;
+    }
+    btn.textContent = "Dán JSON"; ta.readOnly = true;
+    var raw = ta.value.trim();
+    if (!raw || !loadConfigText(raw)) writeJson();
+  });
+  $("copyBtn").addEventListener("click", function () {
+    var text = snowConfigToJson(cfg);
+    var done = function () { toast("Đã sao chép — dán đè vào snow.config.json"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, fallback);
+    else fallback();
+    function fallback() {
+      var ta = $("jsonOut"); ta.readOnly = false; ta.focus(); ta.select();
+      var ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+      ta.readOnly = true;
+      if (ok) done(); else toast("Trình duyệt chặn clipboard — bấm vào ô, Ctrl+A, Ctrl+C");
+    }
+  });
+
+  /* Lưu file. Mở từ file trên máy: thẻ <a download>. Mở qua claude.ai: đi qua
+     claude.use("downloads") để người xem xác nhận. */
+  var saveBtn = $("saveBtn"), hostSave = null;
+  if (window.claude && typeof window.claude.use === "function") {
+    saveBtn.disabled = true;
+    window.claude.use("downloads").then(function (d) { hostSave = d; saveBtn.disabled = !d; }, function () { saveBtn.disabled = true; });
+  }
+  saveBtn.addEventListener("click", function () {
+    var text = snowConfigToJson(cfg);
+    var ok = function () { saved = clone(cfg); toast("Đã lưu snow.config.json — đặt cạnh snow.exe"); };
+    if (hostSave) {
+      hostSave.save({ filename: "snow.config.json", data: text }).then(ok, function (err) {
+        if (err && err.code === "declined") return;
+        toast("Không lưu được ở đây — dùng nút Sao chép ở tab File.");
+      });
+      return;
+    }
+    try {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+      a.download = "snow.config.json";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      ok();
+    } catch (e) { toast("Không tải được ở đây — dùng nút Sao chép ở tab File."); }
+  });
+  $("undoBtn").addEventListener("click", function () {
+    cfg = clone(saved); syncAll(); commit(); toast("Đã về bản lưu / nạp gần nhất.");
+  });
+
+  function remember() {
+    try {
+      localStorage.setItem("sn1.cfg", JSON.stringify({
+        cfg: cfg, style: styleName, look: lookName, loaded: loadedStyle, loadedLook: loadedLook, saved: saved
+      }));
+    } catch (e) { /* bộ nhớ trình duyệt bị chặn: trang vẫn chạy, chỉ không nhớ */ }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     6. KHỞI ĐỘNG
+     ═══════════════════════════════════════════════════════════════ */
+  (function init() {
+    try {
+      var s = JSON.parse(localStorage.getItem("sn1.cfg") || "null");
+      if (s && s.cfg) {
+        loadedStyle = s.loaded ? normalizeSnow(s.loaded) : null;
+        loadedLook = s.loadedLook ? normLook(s.loadedLook) : null;
+        if (loadedStyle) styleSel.querySelector('option[value="loaded"]').hidden = false;
+        if (loadedLook) lookSel.querySelector('option[value="loaded"]').hidden = false;
+        useLook(s.look === "loaded" && !loadedLook ? "neutral" : (SNOW_LOOKS[s.look] || s.look === "loaded" ? s.look : "neutral"));
+        useStyle(s.style === "loaded" && !loadedStyle ? "mercies" : (s.style || "mercies"));
+        fileOpts = snowFileOptions(s.cfg);
+        var restore = function (c) {
+          var o = compose(normalizeSnow(c, base), normLook(c.look), { enabled: c.enabled !== false });
+          return Object.assign(o, snowFileOptions(c));
+        };
+        cfg = restore(s.cfg);
+        saved = s.saved ? restore(s.saved) : clone(cfg);
+      }
+    } catch (e) {}
+    var t = "layers";
+    try { t = localStorage.getItem("sn1.tab") || t; } catch (e) {}
+    selectTab(TABS.indexOf(t) >= 0 ? t : "layers");
+    syncAll();
+    writeJson();
+    applySplit();
+    window.addEventListener("resize", function () { drawScene(); });
+    loadSample();
+  })();
+})();
+</script>
+</body>
+</html>
