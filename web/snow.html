@@ -34,8 +34,11 @@
 .probe b { color: var(--accent); font-weight: 600; }
 .stage.picking, .stage.picking canvas { cursor: crosshair; }
 .stage.picking .divider { pointer-events: none; opacity: .35; }
-.pickbtn { display: flex; align-items: center; gap: 6px; width: 100%; margin: 4px 0 6px; text-align: left; }
-.pickbtn[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #1a1a1a; }
+.iconbtn { display: inline-grid; place-items: center; width: 26px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 3px;
+           background: transparent; color: var(--dim); }
+.iconbtn:hover { background: #444; color: var(--text); }
+.iconbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.iconbtn[aria-pressed="true"] { background: var(--accent); color: #1a1a1a; }
 .swatches button.probe-on { outline: 2px dashed var(--accent); outline-offset: 2px; }
 .look .row .title { min-width: 74px; }
 .meta { color: var(--mute); font-family: var(--mono); font-size: 10.5px; margin: 2px 0 6px; }
@@ -47,8 +50,9 @@
     <label class="btn primary filepick">Mở ảnh<input type="file" id="file" accept="image/*"></label>
     <button class="btn ghost" id="sampleBtn">Ảnh mẫu</button>
     <div class="seg" role="group" aria-label="Độ phân giải xem trước">
-      <button id="qFast" aria-pressed="false">Nhanh</button>
-      <button id="qFine" aria-pressed="true">Nét</button>
+      <button id="qFast" aria-pressed="false" title="Xem ở 720px — chỉ để chỉnh cho nhanh">Nhanh</button>
+      <button id="qFine" aria-pressed="false" title="Xem ở 1200px">Nét</button>
+      <button id="qFull" aria-pressed="true" title="Đúng độ phân giải ảnh, không thu nhỏ — như snow.exe ghi ra">Gốc</button>
     </div>
     <div class="spacer"></div>
     <span class="status" id="status">chưa có ảnh</span>
@@ -212,13 +216,14 @@ return {
   var preLook = null, probe = null, probeXY = null, pickMode = null;
   var probeHooks = [];         // công cụ vẽ lại khi con trỏ đổi điểm (curve, color editor)
   var curveUi = null, ceSelect = null, pickBtns = [];
+  var curvePin = null;         // vùng đã chấm cho Curve: giữ điểm cam trên curve tới lần chấm sau
 
   /* ═══════════════════════════════════════════════════════════════
      2. XEM TRƯỚC
      Cảnh không phụ thuộc độ phân giải (xem snow.js), nên bản xem 1200px
      cho đúng bố cục tuyết của snow.exe ở ảnh gốc — chỉ thô hơn.
      ═══════════════════════════════════════════════════════════════ */
-  var srcImage = null, work = null, quality = 1200, splitPct = 0.5;
+  var srcImage = null, work = null, quality = 0, splitPct = 0.5;   // quality 0 = Gốc
   var cvA = $("cvAfter"), cvB = $("cvBefore");
   var ctxA = cvA.getContext("2d"), ctxB = cvB.getContext("2d");
   var previewSeed = 20241130;   // seed cố định cho bản xem: kéo thanh trượt mà hạt nhảy thì không so được
@@ -229,9 +234,13 @@ return {
   function seedNow() { return cfg.seed || previewSeed; }
   function matteOn() { return cfg.subject.mode === "auto" && !!matte; }
 
-  function prepare(longEdge) {
+  /* Bản xem: fullWork là ảnh ở chế độ đang chọn — chế độ "Gốc" (quality 0) là đúng
+     độ phân giải ảnh, không thu nhỏ. Ở chế độ Gốc có thêm proxyWork 1200px: trong lúc
+     kéo thanh trượt vẽ bản nhẹ cho mượt, buông tay là vẽ lại bản gốc (xem schedule). */
+  var fullWork = null, proxyWork = null;
+  function buildWork(longEdge) {
     var iw = srcImage.naturalWidth || srcImage.width, ih = srcImage.naturalHeight || srcImage.height;
-    var s = Math.min(1, longEdge / Math.max(iw, ih));
+    var s = longEdge ? Math.min(1, longEdge / Math.max(iw, ih)) : 1;
     var w = Math.max(2, Math.round(iw * s)), h = Math.max(2, Math.round(ih * s));
     var tmp = document.createElement("canvas");
     tmp.width = w; tmp.height = h;
@@ -239,10 +248,33 @@ return {
     tc.imageSmoothingQuality = "high";
     tc.drawImage(srcImage, 0, 0, w, h);
     var img = tc.getImageData(0, 0, w, h);
-    work = { w: w, h: h, src: img.data, srcW: iw, srcH: ih };
+    return { w: w, h: h, src: img.data, img: img, srcW: iw, srcH: ih };
+  }
+  function prepare(longEdge) {
+    fullWork = buildWork(longEdge);
+    var big = Math.max(fullWork.w, fullWork.h) > 1400;
+    proxyWork = !longEdge && big ? buildWork(1200) : fullWork;
+    work = null;
     grainCache = null;
-    cvA.width = w; cvA.height = h; cvB.width = w; cvB.height = h;
-    ctxB.putImageData(img, 0, 0);
+    useWork(fullWork);
+    fitCanvas();
+  }
+  /** Đổi bộ đệm đang hiển thị (bản nhẹ ↔ bản gốc); khung hiển thị giữ nguyên cỡ. */
+  function useWork(wk) {
+    if (work === wk) return;
+    work = wk;
+    cvA.width = wk.w; cvA.height = wk.h; cvB.width = wk.w; cvB.height = wk.h;
+    ctxB.putImageData(wk.img, 0, 0);
+  }
+  /** Cỡ hiển thị theo bản gốc, vừa khung xem, không phóng quá độ phân giải của nó. */
+  function fitCanvas() {
+    if (!fullWork) return;
+    var st = $("stage"), narrow = window.innerWidth <= 820;
+    var mw = st.clientWidth - 36, mh = narrow ? Infinity : st.clientHeight - 36;
+    var s = Math.min(1, mw / fullWork.w, mh / fullWork.h);
+    if (!(s > 0)) return;
+    cvA.style.width = Math.floor(fullWork.w * s) + "px";
+    cvA.style.height = Math.floor(fullWork.h * s) + "px";
   }
 
   function grainFor(w, h) {
@@ -251,9 +283,10 @@ return {
     return grainCache.plane;
   }
 
-  function paint() {
+  function paint(fast) {
     drawScene();
-    if (!work) return;
+    if (!fullWork) return;
+    useWork(fast ? proxyWork : fullWork);
     var t0 = performance.now();
     var out = ctxA.createImageData(work.w, work.h), d = out.data;
     if (darkBg) {
@@ -291,10 +324,15 @@ return {
       (cfg.seed ? " · seed cố định " + cfg.seed : "") + (cfg.enabled ? "" : " · BỘ LỌC ĐANG TẮT");
   }
 
-  var rafId = 0;
+  var rafId = 0, fullTimer = 0;
   function schedule() {
-    if (rafId) return;
-    rafId = requestAnimationFrame(function () { rafId = 0; paint(); });
+    var twoStage = fullWork && proxyWork !== fullWork;
+    if (twoStage) {
+      clearTimeout(fullTimer);
+      fullTimer = setTimeout(function () { fullTimer = 0; paint(false); }, 300);
+    }
+    // Hẹn giờ vẽ bản gốc đã chạy trước khung hình này thì vẽ luôn bản gốc — bản nhẹ không được đè lên sau.
+    if (!rafId) rafId = requestAnimationFrame(function () { rafId = 0; paint(twoStage && fullTimer !== 0); });
   }
 
   /* Vùng người: matte tô xanh + dải mặt tô cam, hoặc elip nét đứt + dải mặt tô cam.
@@ -492,7 +530,15 @@ return {
     return [h < 0 ? h + 360 : h, mx ? d / mx : 0, mx];
   }
   function probeAt(x, y) {
-    var i = (y * work.w + x) * 4, src = [preLook[i] / 255, preLook[i + 1] / 255, preLook[i + 2] / 255];
+    // Trung bình một ô 5×5 quanh điểm chấm: một điểm ảnh lẻ (hạt nhiễu, một sợi tóc) không đại diện cho vùng.
+    var sr = 0, sg = 0, sb = 0, n = 0;
+    for (var yy = Math.max(0, y - 2); yy <= Math.min(work.h - 1, y + 2); yy++) {
+      for (var xx = Math.max(0, x - 2); xx <= Math.min(work.w - 1, x + 2); xx++) {
+        var i = (yy * work.w + xx) * 4;
+        sr += preLook[i]; sg += preLook[i + 1]; sb += preLook[i + 2]; n++;
+      }
+    }
+    var src = [sr / n / 255, sg / n / 255, sb / n / 255];
     var c = LOOK.sampleLut(stageLut("curve"), src[0], src[1], src[2]);
     var e = LOOK.sampleLut(stageLut("editor"), src[0], src[1], src[2]);
     var hv = hsv(e), band = null;
@@ -526,9 +572,15 @@ return {
 
   /* ── ống hút ── */
   var PICK_HINT = {
-    wb: "Ống hút WB: chấm vào chỗ đáng lẽ trắng/xám",
-    editor: "Ống hút màu: chấm vào màu cần chỉnh",
-    curve: "Curve: giữ chuột trên ảnh rồi kéo lên/xuống"
+    wb: "White Balance: chấm vào chỗ đáng lẽ trắng / xám",
+    editor: "Color Editor: chấm vào màu cần chỉnh",
+    curve: "Curve: chấm vùng trên ảnh để đặt điểm lên curve (giữ chuột kéo lên / xuống để chỉnh luôn)"
+  };
+  var ICONS = {
+    dropper: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<path d="M14.5 4.5l5 5"/><path d="M17 2.5a2.1 2.1 0 0 1 3 3l-2.5 2.5-3-3z"/><path d="M15.5 8.5L7 17l-3 1 1-3 8.5-8.5"/></svg>',
+    target: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">' +
+      '<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.2" fill="currentColor"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/></svg>'
   };
   function pickHint() { return PICK_HINT[pickMode] || ""; }
   function setPick(mode) {
@@ -538,12 +590,15 @@ return {
     if (mode) toast(pickHint() + " · Esc để thoát");
     setProbe(probeXY);
   }
-  function pickButton(host, mode, label) {
-    var b = el("button", "btn ghost pickbtn", "⌖ " + label); b.dataset.mode = mode;
-    b.setAttribute("aria-pressed", "false");
-    b.addEventListener("click", function () { setPick(pickMode === mode ? null : mode); });
+  /** Nút ống hút (biểu tượng) trên tiêu đề của công cụ chứa `body`, cạnh nút ↺. */
+  function pickButton(body, mode, title, icon) {
+    var b = el("button", "iconbtn", ICONS[icon || "dropper"]);
+    b.type = "button"; b.dataset.mode = mode; b.title = title;
+    b.setAttribute("aria-label", title); b.setAttribute("aria-pressed", "false");
+    b.addEventListener("click", function (e) { e.stopPropagation(); setPick(pickMode === mode ? null : mode); });
+    var hd = body.parentNode.querySelector("header");
+    hd.insertBefore(b, hd.querySelector(".reset"));
     pickBtns.push(b);
-    host.appendChild(b);
   }
   function lookOn() {
     if (cfg.look.enabled) return;
@@ -588,6 +643,7 @@ return {
 
   /** Curve kiểu "chỉnh tại chỗ": giữ chuột trên ảnh, kéo lên sáng / xuống tối đúng vùng sáng đó. */
   function curveDrag(pr, y0) {
+    curvePin = pr.curve;
     var ch = curveUi.ch(), list = cfg.look.curve[ch];
     var vin = ch === "rgb" || ch === "luma" ? pr.curve.y : pr.curve[ch];
     vin = clamp(Math.round(vin), 1, 254);
@@ -642,6 +698,7 @@ return {
   function useImage(img) {
     // Matte thuộc về một tấm ảnh cụ thể — đổi ảnh thì bỏ matte cũ.
     if (matte) { setMatte(null, ""); toast("Đã bỏ matte của ảnh trước."); }
+    curvePin = null;
     srcImage = img;
     $("empty").hidden = true; $("frame").hidden = false;
     prepare(quality); applySplit(); syncAll(); paint();
@@ -691,14 +748,16 @@ return {
   $("sampleBtn").addEventListener("click", loadSample);
   $("sampleBtn2").addEventListener("click", loadSample);
 
-  function setQuality(px, fast) {
+  function setQuality(px) {
     quality = px;
-    $("qFast").setAttribute("aria-pressed", String(fast));
-    $("qFine").setAttribute("aria-pressed", String(!fast));
+    $("qFast").setAttribute("aria-pressed", String(px === 720));
+    $("qFine").setAttribute("aria-pressed", String(px === 1200));
+    $("qFull").setAttribute("aria-pressed", String(px === 0));
     if (srcImage) { prepare(quality); paint(); }
   }
-  $("qFast").addEventListener("click", function () { setQuality(720, true); });
-  $("qFine").addEventListener("click", function () { setQuality(1200, false); });
+  $("qFast").addEventListener("click", function () { setQuality(720); });
+  $("qFine").addEventListener("click", function () { setQuality(1200); });
+  $("qFull").addEventListener("click", function () { setQuality(0); });
 
   /* ═══════════════════════════════════════════════════════════════
      3. THÀNH PHẦN GIAO DIỆN
@@ -718,7 +777,40 @@ return {
     toolMarks.forEach(function (f) { f(); });
     writeJson();
     remember();
+    snapshot();
   }
+
+  /* ── Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y): mỗi lần commit là một bước — buông thanh trượt,
+     buông điểm curve, chọn preset… Kéo dở chưa tính, nên một lần kéo là một bước. ── */
+  var past = [], future = [], current = null;
+  function snapshot() {
+    var s = JSON.stringify(cfg);
+    if (s === current) return;
+    if (current !== null) { past.push(current); if (past.length > 100) past.shift(); }
+    future = []; current = s;
+  }
+  function restoreSnap(s) {
+    current = s; cfg = JSON.parse(s);
+    syncAll(); schedule(); writeJson(); remember();
+  }
+  function undo() {
+    if (!past.length) { toast("Không còn gì để hoàn tác."); return; }
+    future.push(current); restoreSnap(past.pop());
+  }
+  function redo() {
+    if (!future.length) return;
+    past.push(current); restoreSnap(future.pop());
+  }
+  document.addEventListener("keydown", function (e) {
+    // Alt lẻ: chặn để trình duyệt không nhảy lên menu khi đang giữ Alt kéo curve.
+    if (e.key === "Alt") { e.preventDefault(); return; }
+    if (!(e.ctrlKey || e.metaKey)) return;
+    var t = e.target, typing = t.tagName === "TEXTAREA" || (t.tagName === "INPUT" && /^(text|number|search)$/.test(t.type));
+    if (typing) return;   // ô nhập chữ / số dùng hoàn tác riêng của trình duyệt
+    var k = e.key.toLowerCase();
+    if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+    else if ((k === "z" && e.shiftKey) || k === "y") { e.preventDefault(); redo(); }
+  });
   function syncAll() { refreshers.forEach(function (f) { f(); }); toolMarks.forEach(function (f) { f(); }); }
 
   function getPath(o, path) { return path.split(".").reduce(function (a, k) { return a[k]; }, o); }
@@ -997,22 +1089,22 @@ return {
         x.fillStyle = j === active ? COL[cur] : "#1b1b1b"; x.strokeStyle = COL[cur]; x.lineWidth = 1.5;
         x.beginPath(); x.rect(q[0] - 4, q[1] - 4, 8, 8); x.fill(); x.stroke();
       });
-      // Điểm ảnh dưới con trỏ (rê chuột lên ảnh): nó nằm ở đâu trên curve, sẽ bị đẩy tới đâu.
+      // Vùng đã chấm bằng ống hút (giữ nguyên tới lần chấm sau): nó nằm ở đâu trên curve.
       var pin = null;
-      if (probe) {
-        pin = cur === "rgb" || cur === "luma" ? probe.curve.y : probe.curve[cur];
+      if (curvePin) {
+        pin = cur === "rgb" || cur === "luma" ? curvePin.y : curvePin[cur];
         var mx = pin / 255 * (S - 1), my = (1 - t[clamp(Math.round(pin), 0, 255)]) * (S - 1);
         x.save();
         x.setLineDash([4, 4]); x.strokeStyle = "rgba(224,162,62,.9)"; x.lineWidth = 1;
         x.beginPath(); x.moveTo(Math.round(mx) + 0.5, 0); x.lineTo(Math.round(mx) + 0.5, S); x.stroke();
         x.restore();
-        if (cur === "rgb") ["r", "g", "b"].forEach(function (k) { var v = probe.curve[k] / 255 * (S - 1); x.fillStyle = COL[k]; x.fillRect(v - 1, S - 8, 2, 8); });
+        if (cur === "rgb") ["r", "g", "b"].forEach(function (k) { var v = curvePin[k] / 255 * (S - 1); x.fillStyle = COL[k]; x.fillRect(v - 1, S - 8, 2, 8); });
         x.fillStyle = "#e0a23e"; x.strokeStyle = "#1b1b1b"; x.lineWidth = 1.5;
         x.beginPath(); x.arc(mx, my, 5, 0, Math.PI * 2); x.fill(); x.stroke();
       }
       var a = pts()[active];
       if (!a && pin !== null) {
-        $("cvIn").textContent = "con trỏ: vào " + Math.round(pin);
+        $("cvIn").textContent = "vùng chấm: vào " + Math.round(pin);
         $("cvOut").textContent = "ra " + Math.round(t[clamp(Math.round(pin), 0, 255)] * 255);
         return;
       }
@@ -1028,6 +1120,8 @@ return {
       pts().forEach(function (q, j) { var d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; best = j; } });
       return best;
     }
+    // Giữ Alt (hoặc Shift) khi kéo: khoá theo trục kéo trước — thẳng đứng hoặc nằm ngang, không đi chéo.
+    var dragFrom = null, dragPt = null, axis = null;
     cv.addEventListener("pointerdown", function (e) {
       var p = pos(e), list = pts();
       active = hit(p);
@@ -1038,11 +1132,20 @@ return {
         list.sort(function (a, b) { return a[0] - b[0]; });
         active = list.findIndex(function (q) { return q[0] === xx; });
       }
+      dragFrom = p; dragPt = list[active].slice(); axis = null;
       drag = true; cv.setPointerCapture(e.pointerId); draw(); schedule();
     });
     cv.addEventListener("pointermove", function (e) {
       if (!drag || active < 0) return;
       var p = pos(e), list = pts(), n = list.length;
+      if (e.altKey || e.shiftKey) {
+        if (!axis) {
+          var ax = Math.abs(p[0] - dragFrom[0]), ay = Math.abs(p[1] - dragFrom[1]);
+          if (ax < 3 && ay < 3) return;
+          axis = ax > ay ? "x" : "y";
+        }
+        p = axis === "y" ? [dragPt[0], p[1]] : [p[0], dragPt[1]];
+      } else axis = null;
       var lo = active > 0 ? list[active - 1][0] + 1 : 0, hi = active < n - 1 ? list[active + 1][0] - 1 : 255;
       var out = (p[1] < -25 || p[1] > 280) && active > 0 && active < n - 1;
       list[active] = [clamp(Math.round(p[0]), lo, hi), clamp(Math.round(p[1]), 0, 255)];
@@ -1062,9 +1165,8 @@ return {
       var j = hit(pos(e)), list = pts();
       if (j > 0 && j < list.length - 1) { list.splice(j, 1); active = -1; draw(); commit(); }
     });
-    cv.title = "Bấm để thêm điểm · kéo điểm · bấm đúp hoặc kéo ra ngoài để xoá";
+    cv.title = "Bấm để thêm điểm · kéo điểm (giữ Alt / Shift: khoá theo một trục) · bấm đúp hoặc kéo ra ngoài để xoá";
     refreshers.push(function () { active = -1; draw(); });
-    probeHooks.push(draw);
     curveUi = { ch: function () { return cur; }, draw: draw, setActive: function (j) { active = j; } };
     mark(); draw();
   }
@@ -1133,9 +1235,11 @@ return {
     slider(b, { label: "Lượng tuyết ± (%)", path: "vary.amount", min: R.varyAmount[0], max: R.varyAmount[1], step: 1, zero: 0 });
     slider(b, { label: "Hướng gió ± (°)", path: "vary.wind", min: R.varyWind[0], max: R.varyWind[1], step: 1, zero: 0 });
     slider(b, { label: "Số bokeh sát kính ± (%)", path: "vary.bokeh", min: R.varyBokeh[0], max: R.varyBokeh[1], step: 5, zero: 0 });
-    b.appendChild(el("p", "note", "Vị trí hạt luôn khác nhau giữa các ảnh. Ba thanh này làm thêm mật độ, hướng rơi và số đĩa bokeh " +
-      "cũng lệch ngẫu nhiên — bốn tấm trong một phiên không còn trông như cùng một khuôn. Mỗi ảnh rút biến thể từ tên file " +
-      "nên chạy lại vẫn y hệt. Bấm “Đổi bộ hạt” dưới ảnh để xem các biến thể."));
+    slider(b, { label: "Cỡ hạt ± (%)", path: "vary.size", min: R.varySize[0], max: R.varySize[1], step: 1, zero: 0 });
+    slider(b, { label: "Độ tụ đám ±", path: "vary.clumping", min: R.varyClump[0], max: R.varyClump[1], step: 1, zero: 0 });
+    b.appendChild(el("p", "note", "Vị trí hạt luôn khác nhau giữa các ảnh. Các thanh này làm thêm mật độ, hướng rơi, số đĩa bokeh, cỡ hạt và độ tụ đám " +
+      "cũng lệch ngẫu nhiên — bốn tấm trong một phiên không còn trông như cùng một khuôn. Mỗi ảnh rút biến thể từ chính file ảnh " +
+      "(cả tên lẫn nội dung file) nên không khách nào trùng, chạy lại vẫn y hệt. Bấm “Đổi bộ hạt” dưới ảnh để xem các biến thể."));
   }, true);
   tool("flakes", "seed", "Bộ hạt", ["seed"], function (b) {
     slider(b, { label: "Seed (0 = theo tên file)", path: "seed", min: 0, max: 9999, step: 1, zero: 0 });
@@ -1155,6 +1259,7 @@ return {
   // ── Người ──
   tool("subject", "subject", "Vùng người", ["subject"], function (b) {
     selectField(b, "Chế độ", [["auto", "Tự động — tách người"], ["ellipse", "Elip đặt tay"], ["off", "Tắt — không che"]], "subject.mode");
+    selectField(b, "Model tách người", [["modnet", "MODNet — nhanh (~0.5 s/tấm)"], ["birefnet", "BiRefNet — kỹ hơn, chậm (~5 s/tấm)"]], "subject.model");
     b.appendChild(el("p", "note", "Tự động: snow.exe tách đúng dáng người trong từng ảnh. Trang này không chạy được model — " +
       "để xem trước đúng như vậy, kéo thả ảnh vào <code>tach-nguoi.bat</code> rồi nạp file <code>.MATTE.png</code> ở đây. " +
       "Chưa nạp thì xem trước bằng elip bên dưới (cũng là chỗ dựa khi máy booth thiếu model)."));
@@ -1214,17 +1319,13 @@ return {
   tool("color", "c_on", "Chỉnh màu", ["look.enabled", "look.strength"], function (b) {
     checkField(b, "Bật chỉnh màu (sau khi rắc tuyết)", "look.enabled");
     slider(b, { label: "Độ đậm màu", path: "look.strength", min: 0, max: 100, step: 1, zero: 0 });
-    b.appendChild(el("p", "note", "Cùng bộ công cụ và cùng công thức với trang Instax. Màu chỉnh lên cả khung, kể cả hạt tuyết, " +
-      "và hạt phim rơi lên hạt tuyết — tuyết hoà vào ảnh. Chọn nhanh ở ô <b>Màu</b> phía trên. " +
-      "Trên booth, Clarity (~0.45 s) và Film Grain (~0.3 s ở ảnh 6MP) là hai công cụ tốn thời gian nhất."));
   }, true);
   tool("color", "c_wb", "White Balance", ["look.whiteBalance"], function (b) {
-    pickButton(b, "wb", "Ống hút: chấm chỗ đáng lẽ trắng / xám");
+    pickButton(b, "wb", "Ống hút White Balance — chấm vào chỗ đáng lẽ trắng / xám");
     slider(b, { label: "Kelvin", path: "look.whiteBalance.kelvin", min: LR.kelvin[0], max: LR.kelvin[1], step: 50, zero: 5500,
                 track: "linear-gradient(90deg,#4f7fd8,#d8d8d8 40%,#e8a640)" });
     slider(b, { label: "Tint", path: "look.whiteBalance.tint", min: -50, max: 50, step: 1, zero: 0,
                 track: "linear-gradient(90deg,#4fbf5a,#d8d8d8 50%,#d04fc0)" });
-    b.appendChild(el("p", "note", "5500 K = giữ nguyên. Cao hơn ấm lên, thấp hơn lạnh đi. Tint dương ngả hồng, âm ngả lục."));
   });
   tool("color", "c_exposure", "Exposure", ["look.exposure"], function (b) {
     slider(b, { label: "Exposure", path: "look.exposure.exposure", min: LR.exposure[0], max: LR.exposure[1], step: 0.01, zero: 0 });
@@ -1238,9 +1339,7 @@ return {
     });
   });
   tool("color", "c_curve", "Curve", ["look.curve"], function (b) {
-    pickButton(b, "curve", "Chỉnh trên ảnh: giữ chuột rồi kéo lên / xuống");
-    b.appendChild(el("p", "note", "Rê chuột lên ảnh: vạch cam trên curve là chỗ điểm ảnh đó nằm (kênh RGB có thêm ba vạch R/G/B ở đáy). " +
-      "Bật nút trên rồi giữ chuột ở vùng muốn chỉnh và kéo — curve thêm điểm đúng chỗ đó."));
+    pickButton(b, "curve", "Chấm vùng trên ảnh để đặt điểm lên curve", "target");
     curveEditor(b);
   });
   tool("color", "c_levels", "Levels", ["look.levels"], function (b) {
@@ -1319,7 +1418,7 @@ return {
       title.textContent = NAMES[sel] + (sel === "orange" ? " · tông da" : sel === "blue" || sel === "cyan" ? " · trời / phông xanh" : "") +
         (under ? " — con trỏ đang ở dải " + NAMES[under] : "");
     }
-    pickButton(b, "editor", "Ống hút: chấm vào màu cần chỉnh");
+    pickButton(b, "editor", "Ống hút màu — chấm vào màu cần chỉnh");
     b.appendChild(sw); b.appendChild(title); b.appendChild(host);
     ceSelect = function (k) { sel = k; mark(); syncAll(); };
     probeHooks.push(mark);
@@ -1359,8 +1458,6 @@ return {
     row.appendChild(pick); row.appendChild(drop);
     b.appendChild(row); b.appendChild(info);
     slider(b, { label: "Opacity", path: "look.lut.opacity", min: 0, max: 100, step: 1, zero: 0 });
-    b.appendChild(el("p", "note", "Look làm ở phần mềm khác (Lightroom, Photoshop…) → xuất .cube. Chép file vào thư mục " +
-                     "<code>luts</code> cạnh snow.exe; tên file phải trùng tên hiện ở đây."));
     function show() {
       if (!cfg.look.lut.file) info.textContent = "Chưa có LUT.";
       else info.innerHTML = "<b>" + cfg.look.lut.file + "</b>" + (userLut ? " · " + userLut.size + "³ đã nạp" : " · chưa nạp file trên máy này — xem trước đang bỏ qua LUT");
@@ -1549,8 +1646,9 @@ return {
     selectTab(TABS.indexOf(t) >= 0 ? t : "layers");
     syncAll();
     writeJson();
+    current = JSON.stringify(cfg);   // mốc đầu tiên cho Ctrl+Z
     applySplit();
-    window.addEventListener("resize", function () { drawScene(); });
+    window.addEventListener("resize", function () { drawScene(); fitCanvas(); });
     loadSample();
   })();
 })();

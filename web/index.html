@@ -274,7 +274,8 @@
     <tr><td>node src/cli.js --filter instax --restore thu-muc</td><td>trả ảnh gốc từ backup về chỗ cũ</td></tr>
     <tr><td>node src/cli.js …</td><td>bỏ <code>--filter</code> thì chạy Soft Light, đúng như trước</td></tr>
     <tr><td>node src/cli.js --filter snow --matte anh.jpg</td><td>Tuyết: ghi matte tách người ra anh.MATTE.png để nạp vào trang chỉnh (hoặc kéo thả ảnh vào tach-nguoi.bat)</td></tr>
-    <tr><td>npm run model</td><td>Tuyết: tải model tách người về models/ — chạy một lần trước dong-goi.bat</td></tr>
+    <tr><td>npm run model</td><td>Tuyết: tải model tách người MODNet về models/ — chạy một lần trước dong-goi.bat</td></tr>
+    <tr><td>npm run model -- birefnet</td><td>Tuyết: tải thêm BiRefNet (kỹ hơn, ~5 s/tấm) — dùng khi đặt subject.model = "birefnet"</td></tr>
   </table>
 
   <h2>Thêm một bộ lọc mới</h2>

@@ -20,21 +20,33 @@ lưng, xa trong phông) qua một ống kính ảo: hạt gần thành đĩa bok
 phẳng nét sắc, hạt phía sau bị vùng người che. Không đổi màu ảnh. Toán nằm ở
 `src/filters/snow/snow.js`, dùng chung cho `snow.exe` và trang chỉnh.
 
-Vùng người của Tuyết được **tách tự động** trong từng ảnh bằng MODNet (Apache-2.0,
-chạy CPU qua `onnxruntime-node`, ~300 ms ở cạnh ngắn 512px). Model không nằm
-trong git — trên máy đóng gói chạy **`npm run model`** một lần (tải 26 MB, kiểm
-SHA-256) trước `dong-goi.bat`. Thiếu model hay model lỗi thì `snow.exe` ghi cảnh
-báo vào log và dùng elip đặt tay trong `snow.config.json`, không làm hỏng phiên
-chụp. Trang chỉnh không chạy được model: kéo thả ảnh vào **`tach-nguoi.bat`** để
-có file `.MATTE.png`, rồi nạp ở tab Người để xem trước đúng dáng người.
+Vùng người của Tuyết được **tách tự động** trong từng ảnh (`subject.model`), chạy CPU
+qua `onnxruntime-node`, rồi làm đặc lõi dáng người (lấp lỗ, bỏ mảng bán trong suốt —
+chỗ hạt phía sau hay lọt qua người):
 
-Mỗi ảnh có bộ hạt riêng (seed theo tên file), và mục `vary` làm lượng tuyết, hướng
-gió, số bokeh lệch ngẫu nhiên giữa các tấm — chạy lại một tấm vẫn ra y hệt. Mục
-`look` chỉnh màu **sau** khi rắc tuyết, bằng đúng engine của Instax (`look.js`),
+| `subject.model` | Model | Thời gian / tấm (6MP, Ryzen 5 5600H) | Tải |
+|---|---|---|---|
+| `modnet` (mặc định) | MODNet, Apache-2.0 | ~0.9 s cả bộ lọc | `npm run model` (26 MB) |
+| `birefnet` | BiRefNet lite 512, MIT — dáng đặc hơn, bắt cả đồ cầm tay | ~4.7 s cả bộ lọc | `npm run model -- birefnet` (192 MB) |
+
+Model không nằm trong git — tải trên máy đóng gói trước `dong-goi.bat` (có kiểm
+SHA-256). Thiếu model hay model lỗi thì `snow.exe` ghi cảnh báo vào log, rơi về
+MODNet rồi về elip đặt tay trong `snow.config.json`, không làm hỏng phiên chụp.
+Trang chỉnh không chạy được model: kéo thả ảnh vào **`tach-nguoi.bat`** để có file
+`.MATTE.png`, rồi nạp ở tab Người để xem trước đúng dáng người.
+
+Mỗi tấm khách chụp có một "texture" tuyết riêng: seed lấy từ **tên và nội dung**
+file ảnh (máy ảnh đếm lại `IMG_0001` ở sự kiện sau vẫn không trùng), hình từng hạt
+cũng sinh theo seed đó, và mục `vary` làm lượng tuyết, hướng gió, số bokeh, cỡ hạt,
+độ tụ đám lệch ngẫu nhiên giữa các tấm — chạy lại một tấm vẫn ra y hệt. Ảnh luôn
+giữ đủ độ phân giải gốc (bộ lọc này bỏ qua `--max-edge`) và ghi JPEG chất lượng 100.
+
+Mục `look` chỉnh màu **sau** khi rắc tuyết, bằng đúng engine của Instax (`look.js`),
 có preset "Đông mercies", "Sương giá", "Instax chuẩn cộng đồng"; mặc định tắt.
 Clarity và Film Grain là hai công cụ tốn thời gian nhất (~0.45 s / ~0.3 s ở ảnh
-6MP). Trang chỉnh có ống hút cho White Balance và Color Editor, đầu dò dưới con
-trỏ (giá trị, vùng sáng/tối, dải màu), và Curve chỉnh tại chỗ trên ảnh.
+6MP). Trang chỉnh xem ở độ phân giải gốc (chế độ "Gốc"), có ống hút White Balance /
+Color Editor, chấm vùng trên ảnh để đặt điểm lên Curve, giữ Alt (hoặc Shift) khi kéo
+điểm curve để khoá theo một trục, và Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y).
 
 Mở **`web/index.html`** để đi tới trang chỉnh của từng bộ lọc — đó là chỗ tập
 trung mọi bộ lọc, kèm hướng dẫn cắm vào dslrBooth.

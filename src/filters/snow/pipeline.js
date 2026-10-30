@@ -1,11 +1,12 @@
-import { existsSync, writeFileSync } from 'node:fs';
-import { basename } from 'node:path';
+import { closeSync, existsSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 import sharp from 'sharp';
 import { HARMONY } from '../../pipeline.js';
 import { renderLook } from '../instax/look.js';
 import { loadUserLut } from '../instax/pipeline.js';
-import { lookPreset } from './config.js';
-import { MODEL_PATH, mattePng, openSession, personMatte } from './matte.js';
+import { loadConfig, lookPreset } from './config.js';
+import { MATTE_MODELS, modelPath, mattePng, openSession, personMatte } from './matte.js';
 import { buildScene, drawSnow, normalizeSnow, seedFromName } from './snow.js';
 
 /**
@@ -15,22 +16,25 @@ import { buildScene, drawSnow, normalizeSnow, seedFromName } from './snow.js';
  * tách người (matte.js), chọn seed, gọi drawSnow, mã hoá JPEG.
  *
  * Seed: `cfg.seed` khác 0 thì mọi ảnh dùng chung một bộ hạt (tiện để so khi
- * chỉnh); bằng 0 thì lấy theo TÊN FILE — mỗi tấm trong phiên một bộ hạt khác,
- * mà chạy lại trên cùng tấm vẫn ra y hệt. Hai ô cùng một ảnh trong template
- * dĩ nhiên có cùng tuyết, vì dslrBooth ghép cùng một file.
+ * chỉnh); bằng 0 thì lấy theo tên VÀ NỘI DUNG file (seedFromFile) — mỗi tấm
+ * khách chụp một bộ tuyết riêng, mà chạy lại trên cùng tấm vẫn ra y hệt. Hai ô
+ * cùng một ảnh trong template dĩ nhiên có cùng tuyết, vì dslrBooth ghép cùng một file.
+ *
+ * Không bao giờ thu nhỏ ảnh: cờ --max-edge (FilmongBooth) bị bỏ qua ở bộ lọc
+ * này — ảnh tuyết luôn giữ đủ độ phân giải gốc.
  *
  * Tách người hỏng vì bất cứ lý do gì (thiếu model, thiếu onnxruntime-node,
  * model lỗi) thì rơi về elip của cfg.subject và ghi cảnh báo vào log — không
  * bao giờ làm hỏng phiên chụp.
  */
-export async function renderSnow(inputPath, cfg, { trace = false, maxEdge = 0, seed = 0 } = {}) {
+export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {}) {
   // Mở model TRƯỚC khi giải mã, để hai việc chạy song song.
-  const auto = cfg.subject.mode === 'auto';
-  if (auto) openSession().catch(() => {});
+  const auto = cfg.subject.mode === 'auto', model = cfg.subject.model;
+  if (auto) openSession(model).catch(() => {});
 
-  let src = sharp(inputPath, { failOn: 'none' }).rotate();
-  if (maxEdge > 0) src = src.resize({ width: maxEdge, height: maxEdge, fit: 'inside', withoutEnlargement: true });
-  const { data, info } = await src.toColourspace('srgb').raw().toBuffer({ resolveWithObject: true });
+  const s = seed || cfg.seed || seedFromFile(inputPath);
+  const { data, info } = await sharp(inputPath, { failOn: 'none' }).rotate().toColourspace('srgb').raw()
+    .toBuffer({ resolveWithObject: true });
   if (info.channels !== 3) {
     throw new Error(`Ảnh có ${info.channels} kênh màu, chỉ hỗ trợ RGB 3 kênh.`);
   }
@@ -40,13 +44,19 @@ export async function renderSnow(inputPath, cfg, { trace = false, maxEdge = 0, s
   let matte = null, warn;
   if (auto) {
     try {
-      matte = await personMatte(cur, info.width, info.height);
+      matte = await personMatte(cur, info.width, info.height, model);
     } catch (err) {
-      warn = `không tách được người (${err.message}) — dùng elip vùng người`;
+      // Model "đẹp" hỏng / thiếu thì thử MODNet trước khi rơi về elip.
+      if (model !== 'modnet') {
+        try {
+          matte = await personMatte(cur, info.width, info.height, 'modnet');
+          warn = `không chạy được ${model} (${err.message}) — dùng MODNet`;
+        } catch { /* rơi xuống elip bên dưới */ }
+      }
+      if (!matte) warn = `không tách được người (${err.message}) — dùng elip vùng người`;
     }
   }
 
-  const s = seed || cfg.seed || seedFromName(basename(inputPath));
   const t0 = Date.now();
   const stats = drawSnow(cur, info.width, info.height, 3, cfg, { seed: s, matte });
   const stages = trace
@@ -67,13 +77,36 @@ export async function renderSnow(inputPath, cfg, { trace = false, maxEdge = 0, s
 }
 
 /**
+ * Seed riêng cho một tấm ảnh: tên file + cỡ file + 64KB đầu và 64KB cuối của
+ * chính file JPEG gốc. Hai lần chụp khác nhau không bao giờ có cùng dữ liệu
+ * (giờ chụp trong EXIF, nhiễu cảm biến), nên kể cả khi máy ảnh đếm lại
+ * IMG_0001 ở sự kiện sau, hay hai booth đặt trùng tên, tuyết vẫn không đụng
+ * hàng. Cùng một file thì cùng seed — chạy lại vẫn ra y hệt.
+ */
+export function seedFromFile(path) {
+  let h = seedFromName(basename(path));
+  const mix = (buf, n) => { for (let i = 0; i < n; i++) { h ^= buf[i]; h = Math.imul(h, 0x01000193); } };
+  let fd;
+  try {
+    fd = openSync(path, 'r');
+    const size = fstatSync(fd).size, buf = Buffer.alloc(Math.min(65536, size));
+    mix(buf, readSync(fd, buf, 0, buf.length, 0));
+    if (size > buf.length) mix(buf, readSync(fd, buf, 0, buf.length, size - buf.length));
+    h ^= size; h = Math.imul(h, 0x01000193);
+  } catch { /* không đọc được thì giữ seed theo tên */ } finally {
+    if (fd !== undefined) closeSync(fd);
+  }
+  return h >>> 0 || 1;
+}
+
+/**
  * `--matte anh.jpg`: ghi matte tách người ra anh.MATTE.png cạnh ảnh. Trang chỉnh
  * nạp file này (tab Người) để xem trước đúng như snow.exe sẽ che.
  */
-export async function writeMatte(inputPath) {
+export async function writeMatte(inputPath, cfg = loadConfig()) {
   const { data, info } = await sharp(inputPath, { failOn: 'none' }).rotate().toColourspace('srgb').raw()
     .toBuffer({ resolveWithObject: true });
-  const matte = await personMatte(Buffer.from(data), info.width, info.height);
+  const matte = await personMatte(Buffer.from(data), info.width, info.height, cfg.subject.model);
   const out = inputPath.replace(/\.(jpe?g|png)$/i, '') + '.MATTE.png';
   writeFileSync(out, await mattePng(matte));
   console.log(`Đã ghi matte ${matte.width}×${matte.height} (${matte.ms} ms):\n  ${out}`);
@@ -82,15 +115,16 @@ export async function writeMatte(inputPath) {
 
 /** Dòng kiểm tra riêng của bộ lọc cho `--doctor`: model có mặt và chạy được. */
 export async function doctor() {
-  if (!existsSync(MODEL_PATH)) {
-    return [[false, 'models/modnet.onnx', 'THIẾU — tách người sẽ rơi về elip. Chạy: npm run model']];
+  const model = loadConfig().subject.model, file = MATTE_MODELS[model].file;
+  if (!existsSync(modelPath(model))) {
+    return [[false, `models/${file}`, `THIẾU — tách người sẽ rơi về ${model === 'modnet' ? 'elip' : 'MODNet'}. Chạy: npm run model -- ${model}`]];
   }
   try {
     const t0 = Date.now();
-    const m = await personMatte(Buffer.alloc(640 * 480 * 3, 128), 640, 480);
-    return [[true, 'Tách người (MODNet)', `chạy được, ${Date.now() - t0} ms kể cả nạp model (matte ${m.width}×${m.height})`]];
+    const m = await personMatte(Buffer.alloc(1500 * 1000 * 3, 128), 1500, 1000, model);
+    return [[true, `Tách người (${model})`, `chạy được, ${Date.now() - t0} ms kể cả nạp model (matte ${m.width}×${m.height})`]];
   } catch (err) {
-    return [[false, 'Tách người (MODNet)', `LỖI: ${err.message} — tách người sẽ rơi về elip`]];
+    return [[false, `Tách người (${model})`, `LỖI: ${err.message} — tách người sẽ rơi về elip`]];
   }
 }
 
@@ -271,6 +305,37 @@ export async function selftest(cfg) {
   row('Cùng seed → cùng ảnh', a.equals(b), a.equals(b) ? 'trùng từng byte' : 'LỆCH — kết quả không tất định');
   row('Khác seed → khác hạt', !a.equals(c), !a.equals(c) ? 'bộ hạt khác nhau' : 'GIỐNG HỆT — seed không có tác dụng');
 
+  // 2b: mỗi khách một "texture" tuyết riêng — 16 ảnh, không cặp nào trùng
+  const SW = 600, SH = 400, gs = grayImage(SW, SH), outs = [];
+  for (let k = 0; k < 16; k++) {
+    const b2 = Buffer.from(gs);
+    drawSnow(b2, SW, SH, 3, base, { seed: 1000 + k * 7919 });
+    outs.push(b2);
+  }
+  let minDiff = Infinity, twins = 0;
+  for (let i = 0; i < outs.length; i++) {
+    for (let j = i + 1; j < outs.length; j++) {
+      let sum = 0;
+      for (let p = 0; p < outs[i].length; p++) sum += Math.abs(outs[i][p] - outs[j][p]);
+      const dd = sum / outs[i].length;
+      if (dd === 0) twins++;
+      minDiff = Math.min(minDiff, dd);
+    }
+  }
+  row('Mỗi ảnh một texture riêng', twins === 0 && minDiff > 0.5,
+    `16 ảnh · ${twins} cặp trùng · cặp giống nhau nhất vẫn lệch ${minDiff.toFixed(2)} mức / điểm ảnh`);
+
+  // 2c: seed theo NỘI DUNG file — cùng tên (máy ảnh đếm lại IMG_0001) mà khác ảnh thì khác tuyết
+  const tmp = mkdtempSync(join(tmpdir(), 'snow-'));
+  mkdirSync(join(tmp, 'a')); mkdirSync(join(tmp, 'b'));
+  writeFileSync(join(tmp, 'a', 'IMG_0001.JPG'), Buffer.from('ảnh của khách thứ nhất'));
+  writeFileSync(join(tmp, 'b', 'IMG_0001.JPG'), Buffer.from('ảnh của khách thứ hai'));
+  const sa = seedFromFile(join(tmp, 'a', 'IMG_0001.JPG')), sb = seedFromFile(join(tmp, 'b', 'IMG_0001.JPG'));
+  const sa2 = seedFromFile(join(tmp, 'a', 'IMG_0001.JPG'));
+  rmSync(tmp, { recursive: true, force: true });
+  row('Trùng tên file vẫn khác tuyết', sa !== sb && sa === sa2,
+    `IMG_0001 của hai khách: seed ${sa} / ${sb} · chạy lại cùng file: ${sa === sa2 ? 'y hệt' : 'LỆCH'}`);
+
   // 3
   const g2 = grayImage(W * 2, H * 2), d = Buffer.from(g2);
   drawSnow(d, W * 2, H * 2, 3, base, { seed: 1234 });
@@ -352,15 +417,16 @@ export async function selftest(cfg) {
     `bão hoà TB ${(s0 * 100).toFixed(1)}% → ${(s1 * 100).toFixed(1)}% (phải giảm ≥10%) · ${lms} ms ở ${W}×${H}`);
 
   // 7: model tách người có mặt và chạy được trên cỡ ảnh booth
-  if (!existsSync(MODEL_PATH)) {
-    row('Model tách người', false, 'THIẾU models/modnet.onnx — chạy: npm run model (tách người sẽ rơi về elip)');
+  const model = cfg.subject ? cfg.subject.model : 'modnet';
+  if (!existsSync(modelPath(model))) {
+    row('Model tách người', false, `THIẾU models/${MATTE_MODELS[model].file} — chạy: npm run model -- ${model}`);
   } else {
     try {
       const t1 = Date.now();
-      const m = await personMatte(grayImage(BW, BH), BW, BH);
-      const mms = Date.now() - t1;
-      row('Model tách người', m.width === 768 && m.height === 512 && mms < 2000,
-        `matte ${m.width}×${m.height} · ${mms} ms kể cả nạp model (ngưỡng 2000 ms, đo lại trên máy booth)`);
+      const m = await personMatte(grayImage(BW, BH), BW, BH, model);
+      const mms = Date.now() - t1, limit = model === 'modnet' ? 2000 : 8000;
+      row(`Model tách người (${model})`, m.width === 768 && m.height === 512 && mms < limit,
+        `matte ${m.width}×${m.height} · ${mms} ms kể cả nạp model (ngưỡng ${limit} ms, đo lại trên máy booth)`);
     } catch (err) {
       row('Model tách người', false, `LỖI: ${err.message}`);
     }

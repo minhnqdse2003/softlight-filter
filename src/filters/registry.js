@@ -70,7 +70,7 @@ export const FILTERS = {
     verdicts: async (m) => (await import('./snow/pipeline.js')).verdicts(m),
     // Lệnh và dòng --doctor riêng: matte tách người cho trang chỉnh, kiểm tra model.
     commands: {
-      '--matte': async (rest) => (await import('./snow/pipeline.js')).writeMatte(rest[0]),
+      '--matte': async (rest, cfg) => (await import('./snow/pipeline.js')).writeMatte(rest[0], cfg),
     },
     doctor: async () => (await import('./snow/pipeline.js')).doctor(),
   },

@@ -55,12 +55,16 @@ export const SNOW_RANGES = {
   varyAmount: [0, 60, 20],     // ± % lượng tuyết giữa các ảnh
   varyWind: [0, 45, 8],        // ± độ hướng rơi
   varyBokeh: [0, 100, 50],     // ± % số đĩa bokeh sát ống kính
+  varySize: [0, 50, 15],       // ± % cỡ hạt
+  varyClump: [0, 50, 15],      // ± điểm độ tụ đám
 };
 
 /** Năm lớp độ sâu, từ gần máy ảnh ra xa. Thứ tự này là thứ tự trong file cấu hình. */
 export const SNOW_LAYERS = ["lens", "front", "focus", "behind", "far"];
 /** Chế độ vùng người — xem chú thích ở phần "vùng người" bên dưới. */
 export const SNOW_SUBJECT_MODES = ["auto", "ellipse", "off"];
+/** Model tách người cho chế độ "auto" — xem src/filters/snow/matte.js. */
+export const SNOW_SUBJECT_MODELS = ["modnet", "birefnet"];
 
 export const SNOW_LAYER_NAMES = {
   lens: "Sát ống kính",
@@ -78,7 +82,7 @@ export function defaultSnow() {
     camera: { focal: 35, focus: 1.8, backdrop: 2.6, aperture: 2.8, blades: 0 },
     flakes: { minMm: 2.5, maxMm: 14, clump: 60, chip: 40, crystal: 0, clumping: 40 },
     wind: { angle: 10, trail: 15 },
-    vary: { amount: 20, wind: 8, bokeh: 50 },
+    vary: { amount: 20, wind: 8, bokeh: 50, size: 15, clumping: 15 },
     light: { brightness: 95, ambient: 30, backlight: 40, glow: 30 },
     layers: {
       lens: { enabled: true, count: 5, size: 100, opacity: 60 },
@@ -87,7 +91,7 @@ export function defaultSnow() {
       behind: { enabled: true, count: 260, size: 100, opacity: 90 },
       far: { enabled: true, count: 420, size: 100, opacity: 70, depth: 6 },
     },
-    subject: { mode: "auto", x: 50, y: 60, w: 70, h: 100, feather: 12 },
+    subject: { mode: "auto", model: "modnet", x: 50, y: 60, w: 70, h: 100, feather: 12 },
     faceGuard: { enabled: true, maxSize: 4 },
   };
 }
@@ -227,11 +231,13 @@ export function normalizeSnow(raw, base) {
   if (o.flakes.clump + o.flakes.chip + o.flakes.crystal <= 0) o.flakes.clump = 100;
 
   o.wind = { angle: num(wi.angle, R.angle, d.wind.angle), trail: num(wi.trail, R.trail, d.wind.trail) };
-  const va = obj(r.vary), dv = d.vary || { amount: 0, wind: 0, bokeh: 0 };
+  const va = obj(r.vary), dv = Object.assign({ amount: 0, wind: 0, bokeh: 0, size: 0, clumping: 0 }, d.vary);
   o.vary = {
     amount: num(va.amount, R.varyAmount, dv.amount),
     wind: num(va.wind, R.varyWind, dv.wind),
     bokeh: num(va.bokeh, R.varyBokeh, dv.bokeh),
+    size: num(va.size, R.varySize, dv.size),
+    clumping: num(va.clumping, R.varyClump, dv.clumping),
   };
   o.light = {
     brightness: num(li.brightness, R.brightness, d.light.brightness),
@@ -257,6 +263,7 @@ export function normalizeSnow(raw, base) {
   if (su.mode === undefined && typeof su.enabled === "boolean") mode = su.enabled ? "ellipse" : "off";
   o.subject = {
     mode,
+    model: SNOW_SUBJECT_MODELS.indexOf(su.model) >= 0 ? su.model : d.subject.model || "modnet",
     x: num(su.x, R.pct, d.subject.x),
     y: num(su.y, R.pct, d.subject.y),
     w: num(su.w, R.pct, d.subject.w),
@@ -273,7 +280,8 @@ export function snowFileOptions(raw) {
   const o = obj(r.output), b = obj(r.backup), sk = obj(r.skip), l = obj(r.limits);
   return {
     output: {
-      quality: Math.round(num(o.quality, [60, 100, 95])),
+      // Mặc định 100: ảnh tuyết đi in và đi chia sẻ, giữ chất lượng tốt nhất.
+      quality: Math.round(num(o.quality, [60, 100, 100])),
       chromaSubsampling: o.chromaSubsampling === "4:2:0" ? "4:2:0" : "4:4:4",
     },
     backup: {
@@ -295,9 +303,10 @@ export function snowFileOptions(raw) {
 /* Ghi chú đi kèm file cấu hình. Không dấu, để Notepad trên máy booth nào cũng đọc được. */
 const SNOW_DOC =
   "Bo loc Tuyet - cau hinh v1. Chinh bang web/snow-tuner.html roi bam Luu, dat file nay canh snow.exe. " +
-  "amount = luong tuyet (%, nhan so hat moi lop). vary = bien thien giua cac anh (+/- luong tuyet %, huong gio do, so bokeh %). seed 0 = moi anh mot bo hat rieng (theo ten file). camera: ong kinh AO de tinh do mo cua tuyet (met, mm). " +
+  "amount = luong tuyet (%, nhan so hat moi lop). vary = bien thien giua cac anh (+/- luong tuyet %, huong gio do, so bokeh %, co hat %, do tu dam). seed 0 = moi anh mot bo hat rieng (theo ten file). camera: ong kinh AO de tinh do mo cua tuyet (met, mm). " +
   "layers: lens = sat ong kinh, front = truoc mat mau, focus = quanh mau, behind = sau lung mau (bi nguoi che), " +
-  "far = xa trong phong. subject.mode: auto = tach nguoi tu dong (can models/modnet.onnx), " +
+  "far = xa trong phong. subject.mode: auto = tach nguoi tu dong; subject.model: modnet (nhanh, ~0.5 s) hoac birefnet (dep hon, ~5 s/tam, " +
+  "tai bang: npm run model -- birefnet), " +
   "neu khong chay duoc thi dung elip x/y/w/h (%); ellipse = luon dung elip; off = khong che. " +
   "look: chinh mau SAU khi rac tuyet, cung bo cong cu voi Instax (enabled = bat/tat, strength = do dam); " +
   "LUT .cube dat trong thu muc luts canh snow.exe.";
@@ -540,13 +549,18 @@ function hitsFace(test, x, y, E) {
  */
 export function variedSnow(cfg, seed) {
   const v = cfg.vary;
-  if (!v || (!v.amount && !v.wind && !v.bokeh)) return cfg;
+  if (!v || (!v.amount && !v.wind && !v.bokeh && !v.size && !v.clumping)) return cfg;
   const rng = rngOf((seed ^ 0x51ed270b) >>> 0);
-  const a = rng() * 2 - 1, b = rng() * 2 - 1, c = rng() * 2 - 1;
-  const lens = cfg.layers.lens;
+  const a = rng() * 2 - 1, b = rng() * 2 - 1, c = rng() * 2 - 1, d = rng() * 2 - 1, e = rng() * 2 - 1;
+  const lens = cfg.layers.lens, fs = 1 + (d * (v.size || 0)) / 100;
   return Object.assign({}, cfg, {
     amount: Math.max(0, cfg.amount * (1 + (a * v.amount) / 100)),
     wind: Object.assign({}, cfg.wind, { angle: Math.max(-60, Math.min(60, cfg.wind.angle + b * v.wind)) }),
+    flakes: Object.assign({}, cfg.flakes, {
+      minMm: cfg.flakes.minMm * fs,
+      maxMm: cfg.flakes.maxMm * fs,
+      clumping: Math.max(0, Math.min(100, cfg.flakes.clumping + e * (v.clumping || 0))),
+    }),
     layers: Object.assign({}, cfg.layers, {
       lens: Object.assign({}, lens, { count: Math.max(0, Math.round(lens.count * (1 + (c * v.bokeh) / 100))) }),
     }),
@@ -644,21 +658,27 @@ export function buildScene(w, h, cfg, seed, matte) {
  */
 const SP_N = 128, SP_C = 64, SP_R = 32;
 const SP_SIGMA = [0, 2, 4.5, 8, 13];
-const SPRITES = [null, null, null];
+const SPRITES = new Map();
 
 /**
- * Sprite của một kiểu hạt, sinh lần đầu cần đến. snow.exe là một tiến trình mới
- * mỗi tấm ảnh, nên kiểu nào không có hạt nào đủ nét để dùng sprite (tinh thể ở
- * bộ mặc định) thì không tốn thời gian sinh.
+ * Sprite của một kiểu hạt cho MỘT ảnh: hình từng hạt sinh theo seed của ảnh đó,
+ * nên không có hai khách nào chung một bộ hình hạt — không chỉ vị trí mà cả
+ * "texture" tuyết đều riêng. snow.exe là tiến trình mới mỗi tấm nên vẫn chỉ sinh
+ * một lần như trước; kiểu nào không có hạt nào đủ nét để dùng sprite (tinh thể
+ * ở bộ mặc định) thì không tốn thời gian sinh. Trang chỉnh giữ vài bộ gần nhất.
  */
-function spritesOf(kind) {
-  if (!SPRITES[kind]) {
-    const rng = rngOf(0x5eed5 + kind * 7919);
+function spritesOf(kind, seed) {
+  const key = kind + ":" + seed;
+  let set = SPRITES.get(key);
+  if (!set) {
+    if (SPRITES.size >= 9) SPRITES.clear();
+    const rng = rngOf((0x5eed5 + kind * 7919 + Math.imul(seed, 2654435761)) >>> 0);
     const shape = [clumpShape, chipShape, crystalShape][kind];
-    SPRITES[kind] = [];
-    for (let i = 0; i < SPRITE_COUNT[kind]; i++) SPRITES[kind].push(variants(rasterize(shape(rng))));
+    set = [];
+    for (let i = 0; i < SPRITE_COUNT[kind]; i++) set.push(variants(rasterize(shape(rng))));
+    SPRITES.set(key, set);
   }
-  return SPRITES[kind];
+  return set;
 }
 
 function rasterize(fn) {
@@ -915,7 +935,7 @@ export function drawSnow(data, w, h, ch, cfg0, opts = {}) {
     }
 
     if (useSprite) {
-      sprite(data, w, h, ch, p, spritesOf(p.kind)[p.sprite], cov, col, mask);
+      sprite(data, w, h, ch, p, spritesOf(p.kind, seed)[p.sprite], cov, col, mask);
     } else {
       // Tuyết là vật mờ, đang rơi, không phải nguồn sáng điểm: bokeh của nó
       // mềm viền hơn hẳn bokeh đèn. Mép sáng chỉ còn chút ít ở hạt rất mờ.
