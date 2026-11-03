@@ -27,7 +27,7 @@ TẮT TUYẾT
 - dslrBooth: Post-Processing → Off. Hoặc sửa snow.config.json: "enabled": false.
 
 CHỈNH TUYẾT, CHỈNH MÀU
-- Mở https://softlight-filter.vercel.app/snow.html (không có mạng: web\snow-tuner.html),
+- Mở https://softlight-filter.vercel.app/snow-tuner.html (không có mạng: web\snow-tuner.html),
   nạp một ảnh chụp thật, chỉnh, bấm "Lưu snow.config.json", chép đè file đó vào
   C:\Filmong\hau-ky-tuyet. Ảnh chụp kế tiếp ăn cấu hình mới, không cần khởi động lại.
 - Xem trước đúng dáng người trên trang chỉnh: kéo thả ảnh vào tach-nguoi.bat, rồi nạp
