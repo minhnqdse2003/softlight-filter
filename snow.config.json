@@ -59,7 +59,7 @@
     "vignetting": { "amount": 0, "method": "elliptic" },
     "grain": { "type": "fine", "impact": 0, "granularity": 50, "seed": 0 }
   },
-  "retouch": { "enabled": true, "blemish": true, "blemishMethod": "capture-one", "blemishAmount": 100, "smooth": 40 },
+  "retouch": { "enabled": true, "blemish": true, "blemishMethod": "capture-one", "blemishAmount": 100, "smooth": 25 },
   "output": { "quality": 100, "chromaSubsampling": "4:4:4" },
   "backup": { "enabled": true, "folder": "_original" },
   "skip": {

@@ -1316,7 +1316,7 @@ return {
     selectField(b, "Cách nhặt mụn", [["capture-one", "Model Capture One — đẹp nhất (cần thư mục models/mun)"],
       ["builtin", "Bộ tự viết — nhanh, không cần model"]], "retouch.blemishMethod");
     slider(b, { label: "Mức xoá mụn (model Capture One)", path: "retouch.blemishAmount", min: 0, max: 100, step: 1, zero: 100 });
-    slider(b, { label: "Độ mịn da (0 = không làm mịn)", path: "retouch.smooth", min: 0, max: 100, step: 1, zero: 60 });
+    slider(b, { label: "Độ mịn da (0 = không làm mịn)", path: "retouch.smooth", min: 0, max: 100, step: 1, zero: 25 });
     var row = el("div", "btns");
     [["Không làm mịn", 0], ["Nhẹ", 30], ["Vừa", 60], ["Mạnh", 90]].forEach(function (m) {
       var bt = el("button", "btn ghost", m[0]);
@@ -1327,7 +1327,7 @@ return {
     b.appendChild(el("p", "note", "Trang này KHÔNG xem trước được retouch (cần model tìm mặt). Để xem: Lưu cấu hình, đặt cạnh " +
       "<code>snow.exe</code>, rồi kéo thả ảnh vào <code>xem-thu.bat</code> — ra file <code>.SO-SANH.jpg</code> trái gốc / phải đã xử lý. " +
       "Model Capture One dùng GPU nếu có (lần đầu đo vài chục giây — chạy <code>kiem-tra.bat</code> trước buổi chụp). " +
-      "Thiếu model thì tự dùng bộ tự viết. Dùng model thì nên hạ độ mịn (30–40): model đã giữ da sạch, mịn thêm dễ bệt."));
+      "Thiếu model thì tự dùng bộ tự viết. Mặc định 25: model đã giữ da sạch, mịn thêm dễ mất vân da."));
   }, true);
 
   function setMatte(m, name) {

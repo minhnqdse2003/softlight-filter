@@ -66,7 +66,7 @@ export const SNOW_RANGES = {
  */
 export const RETOUCH_METHODS = ["capture-one", "builtin"];
 export function defaultRetouch() {
-  return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 60 };
+  return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 25 };
 }
 export function normalizeRetouch(raw) {
   const r = obj(raw), d = defaultRetouch();
