@@ -65,5 +65,5 @@
   "skip": {
     "pathContains": []
   },
-  "limits": { "minEdge": 400, "maxMs": 2500 }
+  "limits": { "minEdge": 400, "maxMs": 10000 }
 }
