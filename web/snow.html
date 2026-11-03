@@ -144,6 +144,7 @@
       <footer class="savebar">
         <button class="btn primary" id="saveBtn">Lưu snow.config.json</button>
         <label class="btn ghost filepick" title="Mở một file snow.config.json đã lưu để chỉnh tiếp">Nạp config<input type="file" id="cfgFile" accept=".json,application/json"></label>
+        <button class="btn ghost" id="lutBtn" title="Xuất màu đang chỉnh thành LUT 3D .cube (65³) cho Capture One / Photoshop / Lightroom">Xuất LUT</button>
         <button class="btn ghost" id="undoBtn" title="Bỏ mọi thay đổi từ lần lưu / nạp gần nhất">Hoàn tác</button>
       </footer>
     </aside>
@@ -163,7 +164,8 @@ return {
   normalizeLook: normalizeLook, buildLut: buildLut, renderLook: renderLook, parseCube: parseCube,
   grainPlane: grainPlane, curveTable: curveTable,
   // cho ống hút / đầu dò: đúng các phép tính mà chuỗi màu dùng
-  sampleLut: sampleLut, wbGains: wbGains, toLinear: toLinear, editorBandAt: editorBandAt
+  sampleLut: sampleLut, wbGains: wbGains, toLinear: toLinear, editorBandAt: editorBandAt,
+  lookToCube: lookToCube
 };
 })();
 </script>
@@ -1634,6 +1636,33 @@ return {
   $("undoBtn").addEventListener("click", function () {
     cfg = clone(saved); syncAll(); commit(); toast("Đã về bản lưu / nạp gần nhất.");
   });
+
+  /* ── Xuất LUT .cube: màu đang chỉnh, lưới 65³, 6 chữ số — không bóp ── */
+  $("lutBtn").addEventListener("click", function () {
+    var look = cfg.look;
+    var base = "tuyet-" + "look-" + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    var out = LOOK.lookToCube(look, { userLut: userLut }, base);
+    var file = base + ".cube";
+    var note = out.skipped.length ? " — KHÔNG gồm " + out.skipped.join(", ") + " (không tính theo từng điểm ảnh)" : "";
+    if (look.lut && look.lut.file && !userLut) note += " — thiếu LUT " + look.lut.file + " (chưa nạp ở tab Màu)";
+    var done = function () { toast("Đã xuất " + file + note); };
+    if (typeof hostSave !== "undefined" && hostSave) {
+      hostSave.save({ filename: file, data: out.text }).then(done, function (err) {
+        if (err && err.code === "declined") return;
+        toast("Không tải được ở đây.");
+      });
+      return;
+    }
+    try {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([out.text], { type: "text/plain" }));
+      a.download = file;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      done();
+    } catch (e) { toast("Không tải được ở đây."); }
+  });
+
 
   function remember() {
     try {

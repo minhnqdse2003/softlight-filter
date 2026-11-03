@@ -937,6 +937,35 @@ export function buildLut(look, opts = {}, size = 33) {
 }
 
 /**
+ * Bộ màu đang chỉnh → file .cube (LUT 3D sRGB → sRGB, R chạy nhanh nhất), để
+ * mang sang Capture One / Photoshop / Lightroom / DaVinci. Lưới 65³ — mức cao
+ * nhất các phần mềm đó đều nhận — và 6 chữ số thập phân, nên không bóp màu.
+ * Gồm mọi công cụ tính theo từng điểm ảnh (như buildLut, đã trộn `strength`).
+ * HDR, Clarity, Vignetting, Film Grain nhìn sang điểm bên cạnh hay theo vị trí
+ * nên LUT không chứa được — `skipped` liệt kê những công cụ đó khi đang bật.
+ * `opts.userLut`: LUT người dùng đã nạp (thiếu thì LUT xuất ra không có nó).
+ */
+export function lookToCube(look, opts = {}, title = "Filmong look", size = 65) {
+  const lut = buildLut(look, opts, size);
+  const h = look.hdr, skipped = [];
+  if (h.highlight || h.shadow || h.white || h.black) skipped.push("HDR");
+  if (look.clarity.clarity || look.clarity.structure) skipped.push("Clarity");
+  if (look.vignetting.amount) skipped.push("Vignetting");
+  if (look.grain.impact > 0) skipped.push("Film Grain");
+  const lines = [
+    `TITLE "${String(title).replace(/"/g, "'")}"`,
+    "# Xuat tu look.js (cong thuc chinh mau Capture One) - sRGB vao, sRGB ra.",
+    skipped.length ? `# KHONG co trong LUT (khong tinh theo tung diem anh): ${skipped.join(", ")}` : "# Day du moi cong cu dang bat.",
+    `LUT_3D_SIZE ${size}`,
+    "DOMAIN_MIN 0.0 0.0 0.0",
+    "DOMAIN_MAX 1.0 1.0 1.0",
+  ];
+  const d = lut.data, f = (v) => clamp01(v).toFixed(6);
+  for (let i = 0; i < d.length; i += 3) lines.push(`${f(d[i])} ${f(d[i + 1])} ${f(d[i + 2])}`);
+  return { text: lines.join("\n") + "\n", skipped };
+}
+
+/**
  * LUT của nửa sau (dùng khi có HDR), đánh chỉ số theo sRGB: hệ số HDR là một
  * số vô hướng nên nhân trên sRGB tuyến tính hay ProPhoto như nhau, còn màu thật
  * của ảnh luôn nằm trong lưới — hàm cần nội suy gần như đồng nhất, không lệch

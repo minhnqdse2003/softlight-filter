@@ -273,6 +273,7 @@ textarea.plain { width: 100%; background: var(--field); border: 1px solid #3a3a3
       <footer class="savebar">
         <button class="btn primary" id="saveBtn">Lưu softlight.config.json</button>
         <label class="btn ghost filepick" title="Mở một file softlight.config.json đã lưu để chỉnh tiếp">Nạp config<input type="file" id="cfgFile" accept=".json,application/json"></label>
+        <button class="btn ghost" id="lutBtn" title="Xuất màu đang chỉnh thành LUT 3D .cube (65³) cho Capture One / Photoshop / Lightroom">Xuất LUT</button>
         <button class="btn ghost" id="undoBtn" title="Bỏ mọi thay đổi từ lần lưu / nạp gần nhất">Hoàn tác</button>
       </footer>
     </aside>
@@ -1224,6 +1225,35 @@ function buildLut(look, opts = {}, size = 33) {
 }
 
 /**
+ * Bộ màu đang chỉnh → file .cube (LUT 3D sRGB → sRGB, R chạy nhanh nhất), để
+ * mang sang Capture One / Photoshop / Lightroom / DaVinci. Lưới 65³ — mức cao
+ * nhất các phần mềm đó đều nhận — và 6 chữ số thập phân, nên không bóp màu.
+ * Gồm mọi công cụ tính theo từng điểm ảnh (như buildLut, đã trộn `strength`).
+ * HDR, Clarity, Vignetting, Film Grain nhìn sang điểm bên cạnh hay theo vị trí
+ * nên LUT không chứa được — `skipped` liệt kê những công cụ đó khi đang bật.
+ * `opts.userLut`: LUT người dùng đã nạp (thiếu thì LUT xuất ra không có nó).
+ */
+function lookToCube(look, opts = {}, title = "Filmong look", size = 65) {
+  const lut = buildLut(look, opts, size);
+  const h = look.hdr, skipped = [];
+  if (h.highlight || h.shadow || h.white || h.black) skipped.push("HDR");
+  if (look.clarity.clarity || look.clarity.structure) skipped.push("Clarity");
+  if (look.vignetting.amount) skipped.push("Vignetting");
+  if (look.grain.impact > 0) skipped.push("Film Grain");
+  const lines = [
+    `TITLE "${String(title).replace(/"/g, "'")}"`,
+    "# Xuat tu look.js (cong thuc chinh mau Capture One) - sRGB vao, sRGB ra.",
+    skipped.length ? `# KHONG co trong LUT (khong tinh theo tung diem anh): ${skipped.join(", ")}` : "# Day du moi cong cu dang bat.",
+    `LUT_3D_SIZE ${size}`,
+    "DOMAIN_MIN 0.0 0.0 0.0",
+    "DOMAIN_MAX 1.0 1.0 1.0",
+  ];
+  const d = lut.data, f = (v) => clamp01(v).toFixed(6);
+  for (let i = 0; i < d.length; i += 3) lines.push(`${f(d[i])} ${f(d[i + 1])} ${f(d[i + 2])}`);
+  return { text: lines.join("\n") + "\n", skipped };
+}
+
+/**
  * LUT của nửa sau (dùng khi có HDR), đánh chỉ số theo sRGB: hệ số HDR là một
  * số vô hướng nên nhân trên sRGB tuyến tính hay ProPhoto như nhau, còn màu thật
  * của ảnh luôn nằm trong lưới — hàm cần nội suy gần như đồng nhất, không lệch
@@ -1661,7 +1691,7 @@ function renderLook(data, w, h, stride, look, opts = {}) {
 return {
   LOOK_RANGES: LOOK_RANGES, COLOR_EDITOR_BANDS: COLOR_EDITOR_BANDS, neutralLook: neutralLook,
   normalizeLook: normalizeLook, buildLut: buildLut, renderLook: renderLook, parseCube: parseCube,
-  grainPlane: grainPlane
+  grainPlane: grainPlane, lookToCube: lookToCube
 };
 })();
 </script>
@@ -3046,6 +3076,32 @@ return {
     } catch (e) {
       toast("Không tải được ở đây — dùng nút Sao chép.");
     }
+  });
+
+  /* ── Xuất LUT .cube: màu đang chỉnh, lưới 65³, 6 chữ số — không bóp ── */
+  $("lutBtn").addEventListener("click", function () {
+    var look = cfg.look;
+    var base = "softlight-" + "look-" + new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+    var out = LOOK.lookToCube(look, { userLut: lookUserLut }, base);
+    var file = base + ".cube";
+    var note = out.skipped.length ? " — KHÔNG gồm " + out.skipped.join(", ") + " (không tính theo từng điểm ảnh)" : "";
+    if (look.lut && look.lut.file && !lookUserLut) note += " — thiếu LUT " + look.lut.file + " (chưa nạp ở tab Màu)";
+    var done = function () { toast("Đã xuất " + file + note); };
+    if (typeof hostSave !== "undefined" && hostSave) {
+      hostSave.save({ filename: file, data: out.text }).then(done, function (err) {
+        if (err && err.code === "declined") return;
+        toast("Không tải được ở đây.");
+      });
+      return;
+    }
+    try {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([out.text], { type: "text/plain" }));
+      a.download = file;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+      done();
+    } catch (e) { toast("Không tải được ở đây."); }
   });
 
   /** Nạp ngược: dán JSON đang chạy vào để tiếp tục chỉnh từ đó. */
