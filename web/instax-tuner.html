@@ -261,7 +261,6 @@ textarea.plain { width: 100%; background: var(--field); border: 1px solid #3a3a3
         <div class="pane filepane" id="pane-file" hidden>
           <label class="check"><input type="checkbox" id="enabledChk"> Bật bộ lọc (tắt = bản digital không qua hiệu ứng)</label>
           <div class="btns">
-            <label class="btn filepick">Mở instax.config.json<input type="file" id="cfgFile" accept=".json,application/json"></label>
             <button class="btn ghost" id="pasteBtn">Dán JSON</button>
             <button class="btn ghost" id="copyBtn">Sao chép</button>
           </div>
@@ -273,6 +272,7 @@ textarea.plain { width: 100%; background: var(--field); border: 1px solid #3a3a3
 
       <footer class="savebar">
         <button class="btn primary" id="saveBtn">Lưu instax.config.json</button>
+        <label class="btn ghost filepick" title="Mở một file instax.config.json đã lưu để chỉnh tiếp">Nạp config<input type="file" id="cfgFile" accept=".json,application/json"></label>
         <button class="btn ghost" id="undoBtn" title="Bỏ mọi thay đổi từ lần lưu / nạp gần nhất">Hoàn tác</button>
       </footer>
     </aside>
@@ -2329,7 +2329,7 @@ function renderLook(data, w, h, stride, look, opts = {}) {
       };
     };
     slider(host, Object.assign({ label: "Hue" }, C("hue", -30, 30)));
-    slider(host, Object.assign({ label: "Saturation" }, C("saturation", LOOK.LOOK_RANGES.editorSat[0], LOOK.LOOK_RANGES.editorSat[1])));
+    slider(host, Object.assign({ label: "Saturation" }, C("saturation", LOOK_RANGES.editorSat[0], LOOK_RANGES.editorSat[1])));
     slider(host, Object.assign({ label: "Lightness" }, C("lightness", -100, 100)));
     refreshers.push(mark); mark();
   });

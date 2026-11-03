@@ -272,6 +272,7 @@ textarea.plain { width: 100%; background: var(--field); border: 1px solid #3a3a3
 
       <footer class="savebar">
         <button class="btn primary" id="saveBtn">Lưu softlight.config.json</button>
+        <label class="btn ghost filepick" title="Mở một file softlight.config.json đã lưu để chỉnh tiếp">Nạp config<input type="file" id="cfgFile" accept=".json,application/json"></label>
         <button class="btn ghost" id="undoBtn" title="Bỏ mọi thay đổi từ lần lưu / nạp gần nhất">Hoàn tác</button>
       </footer>
     </aside>
@@ -3063,14 +3064,24 @@ return {
     $("pasteBtn").textContent = "Nạp JSON đang có";
     ta.readOnly = true;
     if (!raw) { writeJson(); return; }
+    loadConfigText(raw);
+  });
+
+  function loadConfigText(raw) {
     var parsed;
     try { parsed = JSON.parse(raw); }
     catch (e) { writeJson(); toast("JSON sai cú pháp: " + e.message); return; }
+    if (!parsed || typeof parsed !== "object") { writeJson(); toast("Không phải file cấu hình."); return; }
     var merged = coerce(parsed);
     baseline = clone(merged);
     saved = clone(merged);
     apply(merged);
-    toast("Đã nạp. Công cụ có chấm cam là đang khác file vừa nạp.");
+    if (merged.look.lut.file && !lookUserLut) toast("File dùng LUT " + merged.look.lut.file + " — nạp file .cube ở tab Màu để xem trước.");
+    else toast("Đã nạp. Công cụ có chấm cam là đang khác file vừa nạp.");
+  }
+  $("cfgFile").addEventListener("change", function (e) {
+    var f = e.target.files[0]; e.target.value = "";
+    if (f) f.text().then(loadConfigText);
   });
 
   /** Trộn với mặc định và kẹp về miền hợp lệ — cùng luật với loadConfig(). */
