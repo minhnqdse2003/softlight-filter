@@ -14,3 +14,4 @@ node/
 *.MATTE.png
 # model tách người (26 MB) — tải bằng: npm run model
 models/*.onnx
+models/mun/

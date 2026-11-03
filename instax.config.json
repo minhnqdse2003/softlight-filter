@@ -18,7 +18,7 @@
     "saturation": -8
   },
   "hdr": {
-    "highlight": 30,
+    "highlight": -30,
     "shadow": 15,
     "white": -12,
     "black": 0

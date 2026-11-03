@@ -116,6 +116,7 @@
         <button role="tab" data-tab="flakes" aria-selected="false" title="Hạt & gió">Hạt</button>
         <button role="tab" data-tab="light" aria-selected="false" title="Ánh sáng trên hạt">Sáng</button>
         <button role="tab" data-tab="subject" aria-selected="false" title="Vùng người">Người</button>
+        <button role="tab" data-tab="retouch" aria-selected="false" title="Nhặt mụn + làm mịn da, chạy trước khi rắc tuyết">Da</button>
         <button role="tab" data-tab="color" aria-selected="false" title="Chỉnh màu sau khi rắc tuyết">Màu</button>
         <button role="tab" data-tab="file" aria-selected="false">File</button>
       </nav>
@@ -126,6 +127,7 @@
         <div class="pane" id="pane-flakes" hidden></div>
         <div class="pane" id="pane-light" hidden></div>
         <div class="pane" id="pane-subject" hidden></div>
+        <div class="pane" id="pane-retouch" hidden></div>
         <div class="pane" id="pane-color" hidden></div>
         <div class="pane filepane" id="pane-file" hidden>
           <label class="check"><input type="checkbox" id="enabledChk"> Bật bộ lọc (tắt = ảnh đi qua không có tuyết)</label>
@@ -161,7 +163,7 @@ return {
   normalizeLook: normalizeLook, buildLut: buildLut, renderLook: renderLook, parseCube: parseCube,
   grainPlane: grainPlane, curveTable: curveTable,
   // cho ống hút / đầu dò: đúng các phép tính mà chuỗi màu dùng
-  sampleLut: sampleLut, wbGains: wbGains, toLinear: toLinear, bandWeights: bandWeights, EDITOR_CENTERS: EDITOR_CENTERS
+  sampleLut: sampleLut, wbGains: wbGains, toLinear: toLinear, editorBandAt: editorBandAt
 };
 })();
 </script>
@@ -199,7 +201,10 @@ return {
     return Object.assign({ enabled: name !== "neutral" }, v);
   }
   function compose(scene, look, extra) {
-    return Object.assign(extra || {}, clone(scene), { look: clone(look) });
+    var o = Object.assign(extra || {}, clone(scene), { look: clone(look) });
+    // Retouch không thuộc bộ dựng sẵn nào: ↺ đưa về mặc định (tắt).
+    if (!o.retouch) o.retouch = defaultRetouch();
+    return o;
   }
   var loadedStyle = null, loadedLook = null;
   var styleName = "mercies", lookName = "neutral";
@@ -518,7 +523,7 @@ return {
     if (!stageCache[stage] || stageCache[stage].key !== key) stageCache[stage] = { key: key, lut: LOOK.buildLut(L, { userLut: userLut }) };
     return stageCache[stage].lut;
   }
-  var BAND_NAME = { red: "Red", orange: "Orange · tông da", yellow: "Yellow", green: "Green", cyan: "Cyan", blue: "Blue · trời/phông xanh", magenta: "Magenta" };
+  var BAND_NAME = { red: "Red", orange: "Orange · tông da", yellow: "Yellow", green: "Green", cyan: "Cyan", blue: "Blue · trời/phông xanh", purple: "Purple", magenta: "Magenta" };
   var ZONE_NAME = { shadow: "Shadow", midtone: "Midtone", highlight: "Highlight" };
   function hsv(c) {
     var mx = Math.max(c[0], c[1], c[2]), mn = Math.min(c[0], c[1], c[2]), d = mx - mn, h = 0;
@@ -541,12 +546,8 @@ return {
     var src = [sr / n / 255, sg / n / 255, sb / n / 255];
     var c = LOOK.sampleLut(stageLut("curve"), src[0], src[1], src[2]);
     var e = LOOK.sampleLut(stageLut("editor"), src[0], src[1], src[2]);
-    var hv = hsv(e), band = null;
-    if (hv[1] > 0.08 && hv[2] > 0.06) {
-      var w = LOOK.bandWeights(hv[0], LOOK.EDITOR_CENTERS), best = 0;
-      for (var k = 1; k < w.length; k++) if (w[k] > w[best]) best = k;
-      band = LOOK.COLOR_EDITOR_BANDS[best];
-    }
+    // Lát Color Editor theo hue L*C*h — đúng phép chọn lát mà chuỗi màu dùng.
+    var hv = hsv(e), band = hv[2] > 0.06 ? LOOK.editorBandAt(e[0], e[1], e[2]) : null;
     var ye = 0.299 * e[0] + 0.587 * e[1] + 0.114 * e[2];
     return {
       src: src,
@@ -1308,6 +1309,27 @@ return {
       "đi theo đỉnh đầu của từng người, nên nhóm đông đứng cao thấp vẫn đúng."));
   }, true);
 
+  // ── Da: nhặt mụn + làm mịn, chạy TRƯỚC tuyết (src/retouch) ──
+  tool("retouch", "retouch", "Retouch da", ["retouch"], function (b) {
+    checkField(b, "Bật retouch (trước khi rắc tuyết)", "retouch.enabled");
+    checkField(b, "Nhặt mụn", "retouch.blemish");
+    selectField(b, "Cách nhặt mụn", [["capture-one", "Model Capture One — đẹp nhất (cần thư mục models/mun)"],
+      ["builtin", "Bộ tự viết — nhanh, không cần model"]], "retouch.blemishMethod");
+    slider(b, { label: "Mức xoá mụn (model Capture One)", path: "retouch.blemishAmount", min: 0, max: 100, step: 1, zero: 100 });
+    slider(b, { label: "Độ mịn da (0 = không làm mịn)", path: "retouch.smooth", min: 0, max: 100, step: 1, zero: 60 });
+    var row = el("div", "btns");
+    [["Không làm mịn", 0], ["Nhẹ", 30], ["Vừa", 60], ["Mạnh", 90]].forEach(function (m) {
+      var bt = el("button", "btn ghost", m[0]);
+      bt.addEventListener("click", function () { cfg.retouch.smooth = m[1]; syncAll(); commit(); });
+      row.appendChild(bt);
+    });
+    b.appendChild(row);
+    b.appendChild(el("p", "note", "Trang này KHÔNG xem trước được retouch (cần model tìm mặt). Để xem: Lưu cấu hình, đặt cạnh " +
+      "<code>snow.exe</code>, rồi kéo thả ảnh vào <code>xem-thu.bat</code> — ra file <code>.SO-SANH.jpg</code> trái gốc / phải đã xử lý. " +
+      "Model Capture One dùng GPU nếu có (lần đầu đo vài chục giây — chạy <code>kiem-tra.bat</code> trước buổi chụp). " +
+      "Thiếu model thì tự dùng bộ tự viết. Dùng model thì nên hạ độ mịn (30–40): model đã giữ da sạch, mịn thêm dễ bệt."));
+  }, true);
+
   function setMatte(m, name) {
     matte = m; matteName = name; matteTint = null;
     syncAll(); schedule();
@@ -1364,7 +1386,7 @@ return {
     };
     slider(host, Object.assign({ label: "Input black", min: 0, max: 254, step: 1, zero: 0 }, L("inBlack")));
     slider(host, Object.assign({ label: "Input white", min: 1, max: 255, step: 1, zero: 255 }, L("inWhite")));
-    slider(host, Object.assign({ label: "Midtone (gamma)", min: 0.1, max: 9.99, step: 0.01, zero: 1 }, L("gamma")));
+    slider(host, Object.assign({ label: "Midtone", min: -100, max: 100, step: 1, zero: 0 }, L("midtone")));
     slider(host, Object.assign({ label: "Output black", min: 0, max: 255, step: 1, zero: 0 }, L("outBlack")));
     slider(host, Object.assign({ label: "Output white", min: 0, max: 255, step: 1, zero: 255 }, L("outWhite")));
   });
@@ -1399,8 +1421,8 @@ return {
     show(cur);
   });
   tool("color", "c_editor", "Color Editor", ["look.colorEditor"], function (b) {
-    var COLORS = { red: "#d9333b", orange: "#e5862e", yellow: "#e5cf33", green: "#3faa45", cyan: "#33c0cf", blue: "#3463d6", magenta: "#bf3fc2" };
-    var NAMES = { red: "Red", orange: "Orange", yellow: "Yellow", green: "Green", cyan: "Cyan", blue: "Blue", magenta: "Magenta" };
+    var COLORS = { red: "#d9333b", orange: "#e5862e", yellow: "#e5cf33", green: "#3faa45", cyan: "#33c0cf", blue: "#3463d6", purple: "#7a45d0", magenta: "#bf3fc2" };
+    var NAMES = { red: "Red", orange: "Orange", yellow: "Yellow", green: "Green", cyan: "Cyan", blue: "Blue", purple: "Purple", magenta: "Magenta" };
     var sel = "orange", sw = el("div", "swatches"), title = el("div", "sub"), host = el("div");
     LOOK.COLOR_EDITOR_BANDS.forEach(function (k) {
       var bt = el("button"); bt.style.background = COLORS[k]; bt.dataset.k = k; bt.title = NAMES[k];
@@ -1431,7 +1453,7 @@ return {
       };
     };
     slider(host, Object.assign({ label: "Hue" }, C("hue", -30, 30)));
-    slider(host, Object.assign({ label: "Saturation" }, C("saturation", -100, 100)));
+    slider(host, Object.assign({ label: "Saturation" }, C("saturation", LOOK.LOOK_RANGES.editorSat[0], LOOK.LOOK_RANGES.editorSat[1])));
     slider(host, Object.assign({ label: "Lightness" }, C("lightness", -100, 100)));
     refreshers.push(mark); mark();
   });
@@ -1476,7 +1498,7 @@ return {
   });
 
   /* ── tab ── */
-  var TABS = ["layers", "lens", "flakes", "light", "subject", "color", "file"];
+  var TABS = ["layers", "lens", "flakes", "light", "subject", "retouch", "color", "file"];
   var tabBtns = document.querySelectorAll(".tabs button");
   function selectTab(name) {
     Array.prototype.forEach.call(tabBtns, function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === name)); });
@@ -1495,9 +1517,11 @@ return {
   }
   styleSel.addEventListener("change", function () {
     useStyle(styleSel.value);
-    // Đổi cảnh: giữ nguyên màu đang chỉnh.
+    // Đổi cảnh: giữ nguyên màu và retouch đang chỉnh.
+    var keepRetouch = cfg.retouch;
     cfg = compose(base, cfg.look, { enabled: cfg.enabled });
     Object.assign(cfg, clone(fileOpts));
+    cfg.retouch = keepRetouch;
     syncAll(); commit();
     toast("Đã áp cảnh “" + styleSel.options[styleSel.selectedIndex].text + "”.");
   });

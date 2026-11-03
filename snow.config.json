@@ -1,5 +1,5 @@
 {
-  "_doc": "Bo loc Tuyet - cau hinh v1. Chinh bang web/snow-tuner.html roi bam Luu, dat file nay canh snow.exe. amount = luong tuyet (%, nhan so hat moi lop). vary = bien thien giua cac anh (+/- luong tuyet %, huong gio do, so bokeh %, co hat %, do tu dam). seed 0 = moi anh mot bo hat rieng (theo ten file). camera: ong kinh AO de tinh do mo cua tuyet (met, mm). layers: lens = sat ong kinh, front = truoc mat mau, focus = quanh mau, behind = sau lung mau (bi nguoi che), far = xa trong phong. subject.mode: auto = tach nguoi tu dong; subject.model: modnet (nhanh, ~0.5 s) hoac birefnet (dep hon, ~5 s/tam, tai bang: npm run model -- birefnet), neu khong chay duoc thi dung elip x/y/w/h (%); ellipse = luon dung elip; off = khong che. look: chinh mau SAU khi rac tuyet, cung bo cong cu voi Instax (enabled = bat/tat, strength = do dam); LUT .cube dat trong thu muc luts canh snow.exe.",
+  "_doc": "Bo loc Tuyet - cau hinh v1. Chinh bang web/snow-tuner.html roi bam Luu, dat file nay canh snow.exe. amount = luong tuyet (%, nhan so hat moi lop). vary = bien thien giua cac anh (+/- luong tuyet %, huong gio do, so bokeh %, co hat %, do tu dam). seed 0 = moi anh mot bo hat rieng (theo ten file). camera: ong kinh AO de tinh do mo cua tuyet (met, mm). layers: lens = sat ong kinh, front = truoc mat mau, focus = quanh mau, behind = sau lung mau (bi nguoi che), far = xa trong phong. subject.mode: auto = tach nguoi tu dong; subject.model: modnet (nhanh, ~0.5 s) hoac birefnet (dep hon, ~5 s/tam, tai bang: npm run model -- birefnet), neu khong chay duoc thi dung elip x/y/w/h (%); ellipse = luon dung elip; off = khong che. look: chinh mau SAU khi rac tuyet, cung bo cong cu voi Instax (enabled = bat/tat, strength = do dam); LUT .cube dat trong thu muc luts canh snow.exe. retouch: nhat mun + lam min da, chay TRUOC tuyet (enabled = bat/tat; blemish = nhat mun; blemishMethod: capture-one = model Remove Blemishes cua Capture One trong models/mun, thieu thi tu dung builtin = bo tu viet; blemishAmount 0-100; smooth = do min 0-100, 0 = khong lam min, nhe 30 / vua 60 / manh 90).",
   "version": 1,
   "enabled": true,
   "amount": 100,
@@ -26,10 +26,10 @@
     "exposure": { "exposure": 0, "contrast": 0, "brightness": 0, "saturation": 0 },
     "hdr": { "highlight": 0, "shadow": 0, "white": 0, "black": 0 },
     "levels": {
-      "rgb": { "inBlack": 0, "inWhite": 255, "gamma": 1, "outBlack": 0, "outWhite": 255 },
-      "r": { "inBlack": 0, "inWhite": 255, "gamma": 1, "outBlack": 0, "outWhite": 255 },
-      "g": { "inBlack": 0, "inWhite": 255, "gamma": 1, "outBlack": 0, "outWhite": 255 },
-      "b": { "inBlack": 0, "inWhite": 255, "gamma": 1, "outBlack": 0, "outWhite": 255 }
+      "rgb": { "inBlack": 0, "inWhite": 255, "midtone": 0, "outBlack": 0, "outWhite": 255 },
+      "r": { "inBlack": 0, "inWhite": 255, "midtone": 0, "outBlack": 0, "outWhite": 255 },
+      "g": { "inBlack": 0, "inWhite": 255, "midtone": 0, "outBlack": 0, "outWhite": 255 },
+      "b": { "inBlack": 0, "inWhite": 255, "midtone": 0, "outBlack": 0, "outWhite": 255 }
     },
     "curve": {
       "rgb": [[0, 0], [255, 255]],
@@ -51,6 +51,7 @@
       "green": { "hue": 0, "saturation": 0, "lightness": 0 },
       "cyan": { "hue": 0, "saturation": 0, "lightness": 0 },
       "blue": { "hue": 0, "saturation": 0, "lightness": 0 },
+      "purple": { "hue": 0, "saturation": 0, "lightness": 0 },
       "magenta": { "hue": 0, "saturation": 0, "lightness": 0 }
     },
     "blackWhite": { "enabled": false, "red": 0, "yellow": 0, "green": 0, "cyan": 0, "blue": 0, "magenta": 0, "highlightHue": 0, "highlightSaturation": 0, "shadowHue": 0, "shadowSaturation": 0 },
@@ -58,6 +59,7 @@
     "vignetting": { "amount": 0, "method": "elliptic" },
     "grain": { "type": "fine", "impact": 0, "granularity": 50, "seed": 0 }
   },
+  "retouch": { "enabled": true, "blemish": true, "blemishMethod": "capture-one", "blemishAmount": 100, "smooth": 40 },
   "output": { "quality": 100, "chromaSubsampling": "4:4:4" },
   "backup": { "enabled": true, "folder": "_original" },
   "skip": {

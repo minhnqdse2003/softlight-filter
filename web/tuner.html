@@ -62,6 +62,7 @@
         <button role="tab" data-tab="skin" aria-selected="true">Da</button>
         <button role="tab" data-tab="color" aria-selected="false">Tông màu</button>
         <button role="tab" data-tab="details" aria-selected="false">Chi tiết</button>
+        <button role="tab" data-tab="look" aria-selected="false" title="Chỉnh màu kiểu Capture One, chạy sau cùng">Màu</button>
         <button role="tab" data-tab="file" aria-selected="false">File</button>
       </nav>
 
@@ -69,6 +70,7 @@
         <div class="pane" id="pane-skin"></div>
         <div class="pane" id="pane-color" hidden></div>
         <div class="pane" id="pane-details" hidden></div>
+        <div class="pane" id="pane-look" hidden></div>
         <div class="pane filepane" id="pane-file" hidden>
           <div id="fileOpts"></div>
           <div class="btns">
@@ -90,6 +92,19 @@
 </div>
 
 <div class="toast" id="toast"></div>
+
+<script>
+/* Engine màu (src/filters/instax/look.js — công thức Capture One), bọc trong phạm vi
+   riêng. softlight.exe chạy đúng file này SAU cùng, nên ảnh xem trước khớp bản in. */
+var LOOK = (function () {
+/*@@LOOK_JS@@*/
+return {
+  LOOK_RANGES: LOOK_RANGES, COLOR_EDITOR_BANDS: COLOR_EDITOR_BANDS, neutralLook: neutralLook,
+  normalizeLook: normalizeLook, buildLut: buildLut, renderLook: renderLook, parseCube: parseCube,
+  grainPlane: grainPlane
+};
+})();
+</script>
 
 <script>
 (function () {
@@ -142,6 +157,13 @@
       limits:    { minEdge: 400, maxMs: 2500 }
     }
   };
+
+  /** Mục `look` chuẩn hoá — khoá thiếu là trung tính, đúng như src/config.js. */
+  function normLook(raw) {
+    var r = raw && typeof raw === "object" ? raw : {};
+    return Object.assign({ enabled: r.enabled === true }, LOOK.normalizeLook(r, LOOK.neutralLook()));
+  }
+  Object.keys(PRESETS).forEach(function (k) { PRESETS[k].look = normLook({}); });
 
   var cfg = clone(PRESETS.current);
   var baseline = clone(PRESETS.current); // để đánh dấu ô nào đã đổi
@@ -642,6 +664,21 @@
     work.baseMetrics = measure(planes, w, h);
   }
 
+  /* Chỉnh màu SAU CÙNG, đúng thứ tự của softlight.exe. LUT 3D dựng lại chỉ khi màu đổi. */
+  var lookCache = null, lookUserLut = null, LOOK_SEED = 20240611;
+  function paintLook(img) {
+    var key = JSON.stringify(cfg.look) + "|" + (lookUserLut ? lookUserLut.size : 0);
+    var lo = { userLut: lookUserLut, seed: LOOK_SEED };
+    if (!lookCache || lookCache.key !== key) lookCache = { key: key, lut: LOOK.buildLut(cfg.look, lo), grain: null };
+    lo.lut = lookCache.lut;
+    if (cfg.look.grain.impact > 0) {
+      var gk = work.w + "x" + work.h + "|" + JSON.stringify(cfg.look.grain);
+      if (!lookCache.grain || lookCache.grain.key !== gk) lookCache.grain = { key: gk, plane: LOOK.grainPlane(work.w, work.h, cfg.look.grain, LOOK_SEED) };
+      lo.grain = lookCache.grain.plane;
+    }
+    LOOK.renderLook(new Uint8Array(img.data.buffer), work.w, work.h, 4, cfg.look, lo);
+  }
+
   function paint() {
     if (!work) return;
     var t0 = performance.now();
@@ -654,6 +691,7 @@
       img.data[k + 2] = out[2][i] * 255 + 0.5;
       img.data[k + 3] = 255;
     }
+    if (cfg.look.enabled) paintLook(img);
     ctxA.putImageData(img, 0, 0);
     drawHisto(img.data);
     var ms = performance.now() - t0;
@@ -1001,6 +1039,126 @@
     build(body);
   }
 
+  /* ── Màu: cùng bộ công cụ, cùng tên khoá với tab Màu của trang Tuyết / Instax ── */
+  function lookSelect(host, label, options, path) {
+    var f = el("label", "field"), s = el("select");
+    f.appendChild(el("span", null, label)); f.appendChild(s);
+    options.forEach(function (o) { var op = el("option", null, o[1]); op.value = o[0]; s.appendChild(op); });
+    s.addEventListener("change", function () { setPath(cfg, path, s.value); marks(); commit(); });
+    refreshers.push(function () { s.value = String(getPath(cfg, path)); });
+    host.appendChild(f);
+  }
+  function buildLookPanel() {
+    var LR = LOOK.LOOK_RANGES;
+    var cap = function (k) { return k[0].toUpperCase() + k.slice(1); };
+    tool("look", "l_on", "Chỉnh màu", ["look.enabled", "look.strength"], function (b) {
+      checkField(b, "Bật chỉnh màu (chạy sau cùng, sau Soft Light)", "look.enabled");
+      slider(b, { label: "Độ đậm màu", path: "look.strength", min: 0, max: 100, step: 1 });
+      b.appendChild(el("p", "note", "Công thức chỉnh màu của Capture One (src/filters/instax/look.js) — cùng engine với bộ lọc Tuyết " +
+        "và Instax. Màu đã chỉnh ở trang Tuyết / Instax: bấm nút dưới để chép sang đây (kể cả Curve, B&amp;W)."));
+      var row = el("div", "btns"), pick = el("label", "btn filepick", "Lấy màu từ file cấu hình khác");
+      var inp = el("input"); inp.type = "file"; inp.accept = ".json,application/json"; pick.appendChild(inp);
+      row.appendChild(pick); b.appendChild(row);
+      inp.addEventListener("change", function () {
+        var f = inp.files[0]; inp.value = "";
+        if (!f) return;
+        f.text().then(function (txt) {
+          var raw;
+          try { raw = JSON.parse(txt); } catch (e) { toast("JSON sai cú pháp: " + e.message); return; }
+          // snow.config.json / softlight.config.json có mục look; instax.config.json (v2) ghi thẳng ở gốc.
+          var src = raw && raw.look && typeof raw.look === "object" ? raw.look : raw;
+          cfg.look = normLook(Object.assign({}, src, { enabled: true }));
+          lookCache = null; syncAll(); commit();
+          toast("Đã chép màu từ " + f.name + ".");
+        });
+      });
+    });
+    tool("look", "l_wb", "White Balance", ["look.whiteBalance"], function (b) {
+      slider(b, { label: "Kelvin", path: "look.whiteBalance.kelvin", min: LR.kelvin[0], max: LR.kelvin[1], step: 50 });
+      slider(b, { label: "Tint", path: "look.whiteBalance.tint", min: -50, max: 50, step: 1 });
+    });
+    tool("look", "l_exposure", "Exposure", ["look.exposure"], function (b) {
+      slider(b, { label: "Exposure", path: "look.exposure.exposure", min: LR.exposure[0], max: LR.exposure[1], step: 0.01 });
+      slider(b, { label: "Contrast", path: "look.exposure.contrast", min: -50, max: 50, step: 1 });
+      slider(b, { label: "Brightness", path: "look.exposure.brightness", min: -50, max: 50, step: 1 });
+      slider(b, { label: "Saturation", path: "look.exposure.saturation", min: -100, max: 100, step: 1 });
+    });
+    tool("look", "l_hdr", "High Dynamic Range", ["look.hdr"], function (b) {
+      ["highlight", "shadow", "white", "black"].forEach(function (k) {
+        slider(b, { label: cap(k), path: "look.hdr." + k, min: -100, max: 100, step: 1 });
+      });
+      b.appendChild(el("p", "note", "Như Capture One bản mới: Highlight ÂM = kéo vùng sáng xuống, Shadow DƯƠNG = mở vùng tối."));
+    });
+    tool("look", "l_levels", "Levels", ["look.levels"], function (b) {
+      [["rgb", "RGB"], ["r", "Red"], ["g", "Green"], ["b", "Blue"]].forEach(function (c) {
+        b.appendChild(el("div", "sub", c[1]));
+        var p = "look.levels." + c[0] + ".";
+        slider(b, { label: "Input black", path: p + "inBlack", min: 0, max: 254, step: 1 });
+        slider(b, { label: "Input white", path: p + "inWhite", min: 1, max: 255, step: 1 });
+        slider(b, { label: "Midtone", path: p + "midtone", min: -100, max: 100, step: 1 });
+        slider(b, { label: "Output black", path: p + "outBlack", min: 0, max: 255, step: 1 });
+        slider(b, { label: "Output white", path: p + "outWhite", min: 0, max: 255, step: 1 });
+      });
+    });
+    tool("look", "l_balance", "Color Balance", ["look.colorBalance"], function (b) {
+      b.appendChild(el("div", "sub", "Master"));
+      slider(b, { label: "Hue", path: "look.colorBalance.master.hue", min: 0, max: 360, step: 1 });
+      slider(b, { label: "Saturation", path: "look.colorBalance.master.saturation", min: 0, max: 100, step: 1 });
+      ["shadow", "midtone", "highlight"].forEach(function (z) {
+        b.appendChild(el("div", "sub", cap(z)));
+        slider(b, { label: "Hue", path: "look.colorBalance." + z + ".hue", min: 0, max: 360, step: 1 });
+        slider(b, { label: "Saturation", path: "look.colorBalance." + z + ".saturation", min: 0, max: 100, step: 1 });
+        slider(b, { label: "Lightness", path: "look.colorBalance." + z + ".lightness", min: -100, max: 100, step: 1 });
+      });
+    });
+    tool("look", "l_editor", "Color Editor", ["look.colorEditor"], function (b) {
+      LOOK.COLOR_EDITOR_BANDS.forEach(function (k) {
+        b.appendChild(el("div", "sub", cap(k) + (k === "orange" ? " · tông da" : "")));
+        var p = "look.colorEditor." + k + ".";
+        slider(b, { label: "Hue", path: p + "hue", min: -30, max: 30, step: 1 });
+        slider(b, { label: "Saturation", path: p + "saturation", min: LR.editorSat[0], max: LR.editorSat[1], step: 1 });
+        slider(b, { label: "Lightness", path: p + "lightness", min: -100, max: 100, step: 1 });
+      });
+    });
+    tool("look", "l_clarity", "Clarity", ["look.clarity"], function (b) {
+      lookSelect(b, "Method", [["natural", "Natural"], ["punch", "Punch"], ["neutral", "Neutral"], ["classic", "Classic"]], "look.clarity.method");
+      slider(b, { label: "Clarity", path: "look.clarity.clarity", min: -100, max: 100, step: 1 });
+      slider(b, { label: "Structure", path: "look.clarity.structure", min: -100, max: 100, step: 1 });
+    });
+    tool("look", "l_vignette", "Vignetting", ["look.vignetting"], function (b) {
+      slider(b, { label: "Amount (EV)", path: "look.vignetting.amount", min: LR.vignette[0], max: LR.vignette[1], step: 0.01 });
+      lookSelect(b, "Method", [["elliptic", "Elliptic"], ["circular", "Circular"]], "look.vignetting.method");
+    });
+    tool("look", "l_grain", "Film Grain", ["look.grain"], function (b) {
+      lookSelect(b, "Type", [["fine", "Fine Grain"], ["silverRich", "Silver Rich"], ["soft", "Soft Grain"],
+                             ["cubic", "Cubic Grain"], ["tabular", "Tabular Grain"], ["harsh", "Harsh Grain"]], "look.grain.type");
+      slider(b, { label: "Impact", path: "look.grain.impact", min: 0, max: 100, step: 1 });
+      slider(b, { label: "Granularity", path: "look.grain.granularity", min: 0, max: 100, step: 1 });
+    });
+    tool("look", "l_lut", "LUT", ["look.lut"], function (b) {
+      slider(b, { label: "Độ đậm LUT", path: "look.lut.opacity", min: 0, max: 100, step: 1 });
+      var info = el("p", "note"), row = el("div", "btns");
+      var pick = el("label", "btn filepick", "Chọn file .cube");
+      var inp = el("input"); inp.type = "file"; inp.accept = ".cube"; pick.appendChild(inp);
+      var drop = el("button", "btn ghost", "Bỏ LUT");
+      row.appendChild(pick); row.appendChild(drop); b.appendChild(row); b.appendChild(info);
+      inp.addEventListener("change", function () {
+        var f = inp.files[0]; inp.value = "";
+        if (!f) return;
+        f.text().then(function (txt) {
+          try { lookUserLut = LOOK.parseCube(txt); } catch (err) { toast("Không đọc được .cube: " + err.message); return; }
+          cfg.look.lut.file = f.name; lookCache = null; syncAll(); commit();
+        });
+      });
+      drop.addEventListener("click", function () { lookUserLut = null; cfg.look.lut.file = ""; lookCache = null; syncAll(); commit(); });
+      refreshers.push(function () {
+        info.innerHTML = cfg.look.lut.file
+          ? "File: <code>" + cfg.look.lut.file + "</code> — đặt trong thư mục <code>luts</code> cạnh softlight.exe." + (lookUserLut ? "" : " (chưa nạp để xem trước)")
+          : "Không dùng LUT. Không cần LUT nữa: chỉnh thẳng bằng các công cụ trên.";
+      });
+    });
+  }
+
   function groupSliders(host, g) {
     SLIDERS.filter(function (s) { return s.g === g; }).forEach(function (s) { slider(host, s); });
   }
@@ -1158,11 +1316,20 @@
     tone: "contrast am = giam tuong phan tong the. lift = nang vung den (0..0.2), tao cam giac bac mau ethereal. Ban tham chieu khong dung tang nay.",
     warm: "temp duong = am hon (tang do, giam lam). highlightWarmth phu them mau am len vung sang bang blend soft-light. Ban tham chieu khong dung tang nay.",
     grain: "Nhieu hat kieu phim nhua, cong SAU CUNG. Nhieu trang duoc lam mo de ket cum (sizePx quy chieu o anh canh dai 4000px), roi rai theo duong cong sac do - dam nhat o trung gian, cuon ve 0 o vung den kit (shadowRolloff) va vung chay sang (highlightRolloff). chroma pha do lech giua ba kenh mau: 0 = ba kenh giong het nhau, 1 = du do lech ba lop thuoc nhuom cua phim. Dat mono=true de duoc hat xam. seed=0 la ngau nhien moi anh. amount=0 de tat.",
+    look: "Chinh mau theo cong thuc Capture One, chay SAU CUNG (sau bloom, tone, grain). Cung bo cong cu voi bo loc Tuyet / Instax (src/filters/instax/look.js). enabled = bat/tat, strength = do dam 0-100. HDR highlight AM = keo vung sang xuong. LUT .cube dat trong thu muc luts canh softlight.exe.",
     output: "Chat luong JPEG ghi de. 4:4:4 giu mau vien toc/moi sac net hon 4:2:0.",
     backup: "Anh goc duoc chep vao thu muc con nay truoc khi ghi de. Su ton tai cua ban backup CHINH LA dau hieu 'da xu ly' - nho vay trigger co ban hai lan cung khong xu ly chong.",
     skip: "Bo qua nhung file co duong dan chua mot trong cac chuoi nay. Dung khi dslrBooth goi ca tren file template da ghep - lam mem ca to in se nhoe luon khung va logo. Vi du: [\"\\prints\\\\\", \"_final\"]",
     limits: "Bo qua anh nho hon minEdge px (thumbnail cua dslrBooth). maxMs chi de canh bao trong log khi xu ly qua cham so voi nhip chup."
   };
+
+  /** Mục look: mỗi công cụ một dòng, gọn mà vẫn đọc được bằng Notepad. */
+  function lookJson(l) {
+    var keys = Object.keys(l);
+    return "{\n" + ['    "_doc": ' + js(DOC.look)].concat(keys.map(function (k) {
+      return "    " + js(k) + ": " + JSON.stringify(l[k]);
+    })).join(",\n") + "\n  }";
+  }
 
   function toJson(c) {
     var L = [];
@@ -1217,6 +1384,8 @@
     L.push('    "highlightRolloff": ' + nf(c.grain.highlightRolloff) + ",");
     L.push('    "seed": ' + Math.round(c.grain.seed));
     L.push("  },");
+    L.push("");
+    L.push('  "look": ' + lookJson(c.look) + ",");
     L.push("");
     L.push('  "output": {');
     L.push('    "_doc": ' + js(DOC.output) + ",");
@@ -1394,6 +1563,7 @@
       : [];
     o.limits.minEdge = Math.round(n(li.minEdge, 0, 20000, d.limits.minEdge));
     o.limits.maxMs = Math.round(n(li.maxMs, 100, 60000, d.limits.maxMs));
+    o.look = normLook(raw.look);
     return o;
   }
 
@@ -1404,7 +1574,7 @@
   var tabBtns = document.querySelectorAll(".tabs button");
   function selectTab(name) {
     Array.prototype.forEach.call(tabBtns, function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === name)); });
-    ["skin", "color", "details", "file"].forEach(function (n) { $("pane-" + n).hidden = n !== name; });
+    ["skin", "color", "details", "look", "file"].forEach(function (n) { $("pane-" + n).hidden = n !== name; });
     try { localStorage.setItem("sl2.tab", name); } catch (e) { /* chỉ là ghi nhớ tab */ }
   }
   Array.prototype.forEach.call(tabBtns, function (b) { b.addEventListener("click", function () { selectTab(b.dataset.tab); }); });
@@ -1425,6 +1595,7 @@
     var t = "skin";
     try { t = localStorage.getItem("sl2.tab") || t; } catch (e) { /* mặc định tab Da */ }
     buildPanel();
+    buildLookPanel();
     selectTab(t);
     syncAll();
     showStyle();

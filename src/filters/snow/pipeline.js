@@ -13,7 +13,9 @@ import { buildScene, drawSnow, normalizeSnow, seedFromName } from './snow.js';
  * BỘ LỌC TUYẾT — phần chạy trên máy booth.
  *
  * Toàn bộ toán nằm ở snow.js (dùng chung với trang chỉnh). File này đọc ảnh,
- * tách người (matte.js), chọn seed, gọi drawSnow, mã hoá JPEG.
+ * retouch da (src/retouch), tách người (matte.js), chọn seed, gọi drawSnow,
+ * chỉnh màu (look.js), mã hoá JPEG. Thứ tự: retouch → tuyết → màu — retouch
+ * nhìn da gốc chứ không nhìn hạt tuyết, màu phủ đều cả khung.
  *
  * Seed: `cfg.seed` khác 0 thì mọi ảnh dùng chung một bộ hạt (tiện để so khi
  * chỉnh); bằng 0 thì lấy theo tên VÀ NỘI DUNG file (seedFromFile) — mỗi tấm
@@ -25,7 +27,7 @@ import { buildScene, drawSnow, normalizeSnow, seedFromName } from './snow.js';
  *
  * Tách người hỏng vì bất cứ lý do gì (thiếu model, thiếu onnxruntime-node,
  * model lỗi) thì rơi về elip của cfg.subject và ghi cảnh báo vào log — không
- * bao giờ làm hỏng phiên chụp.
+ * bao giờ làm hỏng phiên chụp. Retouch hỏng cũng vậy: bỏ qua bước đó, ghi cảnh báo.
  */
 export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {}) {
   // Mở model TRƯỚC khi giải mã, để hai việc chạy song song.
@@ -42,6 +44,22 @@ export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {
   // Buffer từ libvips có thể đang được chia sẻ, nên sao ra trước khi sửa tại chỗ.
   const cur = Buffer.from(data);
   let matte = null, warn;
+  const stages = [];
+  const addWarn = (w) => { if (w) warn = warn ? `${warn}; ${w}` : w; };
+
+  // Retouch nạp lười: tắt thì không nạp model tìm mặt / xoá mụn.
+  if (cfg.retouch && cfg.retouch.enabled) {
+    const t = Date.now();
+    try {
+      const { retouch } = await import('../../retouch/retouch.js');
+      const r = await retouch(cur, info.width, info.height, cfg.retouch);
+      addWarn(r.warn);
+      if (trace) stages.push({ name: 'retouch', ms: Date.now() - t, ...r });
+    } catch (err) {
+      addWarn(`retouch hỏng (${err.message}) — bỏ qua bước này`);
+    }
+  }
+
   if (auto) {
     try {
       matte = await personMatte(cur, info.width, info.height, model);
@@ -50,18 +68,16 @@ export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {
       if (model !== 'modnet') {
         try {
           matte = await personMatte(cur, info.width, info.height, 'modnet');
-          warn = `không chạy được ${model} (${err.message}) — dùng MODNet`;
+          addWarn(`không chạy được ${model} (${err.message}) — dùng MODNet`);
         } catch { /* rơi xuống elip bên dưới */ }
       }
-      if (!matte) warn = `không tách được người (${err.message}) — dùng elip vùng người`;
+      if (!matte) addWarn(`không tách được người (${err.message}) — dùng elip vùng người`);
     }
   }
 
   const t0 = Date.now();
   const stats = drawSnow(cur, info.width, info.height, 3, cfg, { seed: s, matte });
-  const stages = trace
-    ? [{ name: 'tuyết', ms: Date.now() - t0, matteMs: matte ? matte.ms : null, seed: s, ...stats }]
-    : [];
+  if (trace) stages.push({ name: 'tuyết', ms: Date.now() - t0, matteMs: matte ? matte.ms : null, seed: s, ...stats });
 
   // Màu chỉnh SAU tuyết: cả khung ăn cùng một look, hạt phim rơi cả lên hạt tuyết.
   // Hạt phim lấy cùng seed với tuyết nên chạy lại trên một tấm vẫn ra y hệt.
@@ -69,7 +85,7 @@ export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {
     const t1 = Date.now();
     const { lut, warn: lutWarn } = loadUserLut(cfg.look);
     renderLook(cur, info.width, info.height, 3, cfg.look, { userLut: lut, seed: s });
-    if (lutWarn) warn = warn ? `${warn}; ${lutWarn}` : lutWarn;
+    addWarn(lutWarn);
     if (trace) stages.push({ name: 'màu', ms: Date.now() - t1 });
   }
 
@@ -113,19 +129,32 @@ export async function writeMatte(inputPath, cfg = loadConfig()) {
   console.log('Mở trang chỉnh Tuyết → tab Người → "Nạp matte" để xem trước đúng dáng người.');
 }
 
-/** Dòng kiểm tra riêng của bộ lọc cho `--doctor`: model có mặt và chạy được. */
+/**
+ * Dòng kiểm tra riêng của bộ lọc cho `--doctor`: model tách người, và khi
+ * retouch đang bật thì model tìm mặt + xoá mụn — lần đầu chạy ở đây đo luôn
+ * CPU / GPU, để tấm chụp đầu tiên khỏi phải chờ.
+ */
 export async function doctor() {
-  const model = loadConfig().subject.model, file = MATTE_MODELS[model].file;
+  const cfg = loadConfig(), model = cfg.subject.model, file = MATTE_MODELS[model].file;
+  const rows = [];
   if (!existsSync(modelPath(model))) {
-    return [[false, `models/${file}`, `THIẾU — tách người sẽ rơi về ${model === 'modnet' ? 'elip' : 'MODNet'}. Chạy: npm run model -- ${model}`]];
+    rows.push([false, `models/${file}`, `THIẾU — tách người sẽ rơi về ${model === 'modnet' ? 'elip' : 'MODNet'}. Chạy: npm run model -- ${model}`]);
+  } else {
+    try {
+      const t0 = Date.now();
+      const m = await personMatte(Buffer.alloc(1500 * 1000 * 3, 128), 1500, 1000, model);
+      rows.push([true, `Tách người (${model})`, `chạy được, ${Date.now() - t0} ms kể cả nạp model (matte ${m.width}×${m.height})`]);
+    } catch (err) {
+      rows.push([false, `Tách người (${model})`, `LỖI: ${err.message} — tách người sẽ rơi về elip`]);
+    }
   }
-  try {
-    const t0 = Date.now();
-    const m = await personMatte(Buffer.alloc(1500 * 1000 * 3, 128), 1500, 1000, model);
-    return [[true, `Tách người (${model})`, `chạy được, ${Date.now() - t0} ms kể cả nạp model (matte ${m.width}×${m.height})`]];
-  } catch (err) {
-    return [[false, `Tách người (${model})`, `LỖI: ${err.message} — tách người sẽ rơi về elip`]];
+  if (cfg.retouch.enabled) {
+    const { retouchDoctor } = await import('../../retouch/retouch.js');
+    rows.push(...(await retouchDoctor()));
+  } else {
+    rows.push([true, 'Retouch da', 'đang tắt trong snow.config.json']);
   }
+  return rows;
 }
 
 function encode(cur, info, cfg) {

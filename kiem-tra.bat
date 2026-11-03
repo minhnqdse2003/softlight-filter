@@ -11,7 +11,7 @@ if errorlevel 1 (
   echo.
   echo   [LOI] Khong chay duoc Node.js.
   echo.
-  echo   File softlight.exe / instax.exe chi la cau noi 6KB, no CAN Node.js de chay.
+  echo   File softlight.exe / instax.exe / snow.exe chi la cau noi 6KB, no CAN Node.js de chay.
   echo   Chon mot trong hai cach:
   echo     - Cai Node.js 18+ tu https://nodejs.org
   echo     - Hoac chep node.exe vao thu muc con "node\" canh file exe
@@ -20,9 +20,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-REM Kiem tung bo loc mot: moi bo co file exe va file cau hinh rieng.
-"%NODE%" "%~dp0src\cli.js" --filter softlight --doctor
-"%NODE%" "%~dp0src\cli.js" --filter instax    --doctor
-"%NODE%" "%~dp0src\cli.js" --filter snow      --doctor
+REM Kiem tung bo loc mot: moi bo co file exe va file cau hinh rieng. Chi kiem
+REM bo loc co exe trong thu muc nay - goi /chi-tuyet khong co softlight, instax.
+for %%F in (softlight instax snow) do if exist "%~dp0%%F.exe" "%NODE%" "%~dp0src\cli.js" --filter %%F --doctor
 echo.
 pause

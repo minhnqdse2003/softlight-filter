@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { neutralLook, normalizeLook } from "./filters/instax/look.js";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CONFIG_PATH = join(ROOT, "softlight.config.json");
@@ -148,6 +149,12 @@ export function loadConfig(path = CONFIG_PATH) {
     limits: {
       minEdge: Math.round(num(l.minEdge, 0, 20000, d.limits.minEdge)),
       maxMs: Math.round(num(l.maxMs, 100, 60000, d.limits.maxMs)),
+    },
+    // Chỉnh màu chạy sau cùng — cùng bộ công cụ với Tuyết / Instax. Khoá thiếu
+    // là trung tính, mặc định tắt: file cũ không có mục này chạy y như trước.
+    look: {
+      enabled: raw.look?.enabled === true,
+      ...normalizeLook(raw.look && typeof raw.look === "object" ? raw.look : {}, neutralLook()),
     },
   };
 }

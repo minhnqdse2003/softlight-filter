@@ -59,6 +59,26 @@ export const SNOW_RANGES = {
   varyClump: [0, 50, 15],      // ± điểm độ tụ đám
 };
 
+/**
+ * Retouch da chạy TRƯỚC tuyết (src/retouch). Không thuộc bộ dựng sẵn nào: đổi
+ * cảnh hay màu trên trang chỉnh không đụng tới nó, như các mục file bên dưới.
+ * Mặc định TẮT, để máy đang chạy bản cũ không tự dưng có retouch.
+ */
+export const RETOUCH_METHODS = ["capture-one", "builtin"];
+export function defaultRetouch() {
+  return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 60 };
+}
+export function normalizeRetouch(raw) {
+  const r = obj(raw), d = defaultRetouch();
+  return {
+    enabled: bool(r.enabled, d.enabled),
+    blemish: bool(r.blemish, d.blemish),
+    blemishMethod: RETOUCH_METHODS.indexOf(r.blemishMethod) >= 0 ? r.blemishMethod : d.blemishMethod,
+    blemishAmount: Math.round(num(r.blemishAmount, [0, 100], d.blemishAmount)),
+    smooth: Math.round(num(r.smooth, [0, 100], d.smooth)),
+  };
+}
+
 /** Năm lớp độ sâu, từ gần máy ảnh ra xa. Thứ tự này là thứ tự trong file cấu hình. */
 export const SNOW_LAYERS = ["lens", "front", "focus", "behind", "far"];
 /** Chế độ vùng người — xem chú thích ở phần "vùng người" bên dưới. */
@@ -141,7 +161,7 @@ export const SNOW_LOOKS = {
     raw: {
       whiteBalance: { kelvin: 5700, tint: 3 },
       exposure: { exposure: 0.2, contrast: -12, brightness: 6, saturation: -15 },
-      hdr: { highlight: 35, shadow: 10, white: -15, black: 6 },
+      hdr: { highlight: -35, shadow: 10, white: -15, black: 6 },
       curve: { rgb: [[0, 12], [64, 62], [192, 198], [255, 246]] },
       colorEditor: {
         red: { hue: 0, saturation: -10, lightness: 5 },
@@ -166,7 +186,7 @@ export const SNOW_LOOKS = {
     raw: {
       whiteBalance: { kelvin: 4900, tint: 4 },
       exposure: { exposure: 0.15, contrast: -10, brightness: 4, saturation: -18 },
-      hdr: { highlight: 30, shadow: 12, white: -10, black: 4 },
+      hdr: { highlight: -30, shadow: 12, white: -10, black: 4 },
       curve: { rgb: [[0, 14], [64, 64], [192, 196], [255, 248]] },
       colorEditor: {
         orange: { hue: -3, saturation: -10, lightness: 8 },
@@ -274,11 +294,12 @@ export function normalizeSnow(raw, base) {
   return o;
 }
 
-/** Chất lượng JPEG, backup, bỏ qua, giới hạn — cùng hình dạng với các bộ lọc khác. */
+/** Retouch, chất lượng JPEG, backup, bỏ qua, giới hạn — phần không thuộc bộ dựng sẵn nào. */
 export function snowFileOptions(raw) {
   const r = obj(raw);
   const o = obj(r.output), b = obj(r.backup), sk = obj(r.skip), l = obj(r.limits);
   return {
+    retouch: normalizeRetouch(r.retouch),
     output: {
       // Mặc định 100: ảnh tuyết đi in và đi chia sẻ, giữ chất lượng tốt nhất.
       quality: Math.round(num(o.quality, [60, 100, 100])),
@@ -309,7 +330,10 @@ const SNOW_DOC =
   "tai bang: npm run model -- birefnet), " +
   "neu khong chay duoc thi dung elip x/y/w/h (%); ellipse = luon dung elip; off = khong che. " +
   "look: chinh mau SAU khi rac tuyet, cung bo cong cu voi Instax (enabled = bat/tat, strength = do dam); " +
-  "LUT .cube dat trong thu muc luts canh snow.exe.";
+  "LUT .cube dat trong thu muc luts canh snow.exe. " +
+  "retouch: nhat mun + lam min da, chay TRUOC tuyet (enabled = bat/tat; blemish = nhat mun; blemishMethod: capture-one = model " +
+  "Remove Blemishes cua Capture One trong models/mun, thieu thi tu dung builtin = bo tu viet; blemishAmount 0-100; " +
+  "smooth = do min 0-100, 0 = khong lam min, nhe 30 / vua 60 / manh 90).";
 
 /**
  * File cấu hình dạng dễ đọc: nhóm nào toàn số thì nằm trên một dòng. Mục `look`

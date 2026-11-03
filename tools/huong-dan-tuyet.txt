@@ -1,0 +1,37 @@
+﻿HẬU KỲ TUYẾT CHO dslrBooth — cài trên máy booth (Windows)
+=========================================================
+
+Gói tự chứa: có sẵn Node, thư viện và model tách người. Máy booth không cần
+Internet, không cần cài gì thêm.
+
+CÀI
+1. Giải nén cả thư mục hau-ky-tuyet vào C:\Filmong\hau-ky-tuyet
+   (KHÔNG để trong C:\Program Files hay OneDrive — bộ lọc phải ghi được log).
+2. Bấm đúp kiem-tra.bat. Mọi dòng phải là [ OK ].
+3. dslrBooth: Settings → Effects & Stickers → Post-Processing → On
+   Application: C:\Filmong\hau-ky-tuyet\snow.exe
+4. Chụp thử một phiên. Mở logs\snow.log: mỗi ảnh có đúng một dòng "ev":"done".
+
+KHI CHẠY
+- snow.exe làm trọn: nhặt mụn + làm mịn da → rắc tuyết → chỉnh màu. Mỗi bước bật /
+  tắt riêng trên trang chỉnh (tab Da, tab Màu).
+- Mỗi tấm thêm khoảng 2–4 giây, có retouch thì thêm 1–3 giây nữa (máy có GPU rời
+  nhanh hơn hẳn). dslrBooth chờ xong mới ghép khung và in.
+- Lần chạy đầu tiên snow.exe đo CPU / GPU cho model xoá mụn (vài chục giây):
+  bấm kiem-tra.bat TRƯỚC buổi chụp để bước đo xảy ra lúc đó.
+- Mỗi khách một kiểu tuyết riêng; người đứng che tuyết phía sau.
+- Ảnh gốc được giữ trong thư mục _original cạnh ảnh của dslrBooth.
+- Bộ lọc lỗi thì dslrBooth dùng ảnh gốc, phiên chụp không bị dừng. Lỗi ghi ở logs\snow.log.
+
+TẮT TUYẾT
+- dslrBooth: Post-Processing → Off. Hoặc sửa snow.config.json: "enabled": false.
+
+CHỈNH TUYẾT, CHỈNH MÀU
+- Mở https://softlight-filter.vercel.app/snow.html (không có mạng: web\snow-tuner.html),
+  nạp một ảnh chụp thật, chỉnh, bấm "Lưu snow.config.json", chép đè file đó vào
+  C:\Filmong\hau-ky-tuyet. Ảnh chụp kế tiếp ăn cấu hình mới, không cần khởi động lại.
+- Xem trước đúng dáng người trên trang chỉnh: kéo thả ảnh vào tach-nguoi.bat, rồi nạp
+  file .MATTE.png ở tab Người.
+- Chỉnh màu ở tab Màu (công thức Capture One) — không cần làm LUT nữa.
+- Retouch da (tab Da): trang chỉnh không xem trước được. Lưu cấu hình, chép đè, rồi
+  kéo thả một ảnh vào xem-thu.bat → ra file .SO-SANH.jpg (trái gốc, phải đã xử lý).

@@ -447,6 +447,22 @@ export async function renderSoftLight(inputPath, cfg, { trace = false } = {}) {
     await mark('hạt');
   }
 
+  // ── 7. Chỉnh màu (công thức Capture One, src/filters/instax/look.js) ──
+  // Sau cùng, như trang chỉnh vẽ: màu phủ đều cả ảnh đã làm mềm. Nạp lười để
+  // bản không bật màu khỏi tốn thời gian nạp.
+  let warn;
+  if (cfg.look && cfg.look.enabled) {
+    const [{ renderLook }, { loadUserLut }] = await Promise.all([
+      import('./filters/instax/look.js'),
+      import('./filters/instax/pipeline.js'),
+    ]);
+    const { lut, warn: lutWarn } = loadUserLut(cfg.look);
+    warn = lutWarn;
+    cur = Buffer.from(cur);
+    renderLook(cur, raw.width, raw.height, 3, cfg.look, { userLut: lut, seed: cfg.look.grain.seed || 1 });
+    await mark('màu');
+  }
+
   const jpeg = await sharp(cur, { raw })
     .jpeg({
       quality: cfg.output.quality,
@@ -456,7 +472,7 @@ export async function renderSoftLight(inputPath, cfg, { trace = false } = {}) {
     .withMetadata()
     .toBuffer();
 
-  return { jpeg, width: raw.width, height: raw.height, stages };
+  return { jpeg, width: raw.width, height: raw.height, stages, warn };
 }
 /**
  * Ảnh so sánh trước / sau, ghép cạnh nhau kèm vạch chia — dùng để chỉnh tham số

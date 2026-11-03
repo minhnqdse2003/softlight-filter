@@ -12,13 +12,32 @@ cả bản in lẫn bản digital.
 | **Instax Wide** | `instax` | `instax.exe` | `instax.config.json` | `web/instax-tuner.html` |
 | **Tuyết** | `snow` | `snow.exe` | `snow.config.json` | `web/snow-tuner.html` |
 
+Cả ba bộ lọc có chung một bước **chỉnh màu theo công thức Capture One**
+(`src/filters/instax/look.js`: White Balance, Exposure, HDR, Levels, Curve, Color
+Balance, Color Editor, Clarity, Vignetting, Film Grain, LUT). Chỉnh trên trang web,
+Lưu cấu hình, chép cạnh exe — không cần làm LUT riêng. Soft Light và Tuyết chạy
+bước này sau cùng (mục `look`, mặc định tắt); Instax dùng nó làm toàn bộ look.
+
 Soft Light làm mềm da bằng bloom trên mặt nạ tông da, phông nền giữ nguyên nét.
 Instax Wide dựng chất phim lấy liền: vibrance chọn lọc, matte black, tách tông
 lam/kem, hạt phim.
 Tuyết rắc tuyết theo năm lớp độ sâu (sát ống kính, trước mặt, quanh người, sau
 lưng, xa trong phông) qua một ống kính ảo: hạt gần thành đĩa bokeh, hạt ở mặt
-phẳng nét sắc, hạt phía sau bị vùng người che. Không đổi màu ảnh. Toán nằm ở
+phẳng nét sắc, hạt phía sau bị vùng người che. Toán nằm ở
 `src/filters/snow/snow.js`, dùng chung cho `snow.exe` và trang chỉnh.
+
+`snow.exe` là hậu kỳ trọn gói, theo thứ tự **retouch da → tuyết → màu**, mỗi bước
+bật / tắt riêng trong `snow.config.json` (trang chỉnh: tab Da, tab Màu, tab File):
+
+- **Retouch da** (`retouch`, `src/retouch/` — chép từ máy phòng 1510): YuNet tìm mặt,
+  nhặt mụn, rồi làm mịn da (`smooth` 0–100). Nhặt mụn bằng model Remove Blemishes
+  của Capture One (`blemishMethod: "capture-one"`, model ~33 MB đặt tay vào
+  `models/mun/`, **không nằm trong git**, `dong-goi.bat` tự chép theo); máy có GPU thì
+  chạy DirectML (lần đầu đo CPU / GPU vài chục giây, nhớ ở `models/mun/may.json` —
+  chạy `kiem-tra.bat` trước buổi chụp). Thiếu model thì tự dùng bộ nhặt mụn tự viết
+  (`builtin`). Trang chỉnh không xem trước được bước này: kéo thả ảnh vào
+  **`xem-thu.bat`** để có `.SO-SANH.jpg`. Thêm ~1–3 giây mỗi tấm khi có GPU.
+- **Màu** (`look`): như trên.
 
 Vùng người của Tuyết được **tách tự động** trong từng ảnh (`subject.model`), chạy CPU
 qua `onnxruntime-node`, rồi làm đặc lõi dáng người (lấp lỗ, bỏ mảng bán trong suốt —
