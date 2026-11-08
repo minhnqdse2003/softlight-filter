@@ -1827,7 +1827,7 @@ const SNOW_RANGES = {
  */
 const RETOUCH_METHODS = ["capture-one", "builtin"];
 function defaultRetouch() {
-  return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 25 };
+  return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 25, dodgeBurn: 30, contour: false };
 }
 function normalizeRetouch(raw) {
   const r = obj(raw), d = defaultRetouch();
@@ -1837,6 +1837,8 @@ function normalizeRetouch(raw) {
     blemishMethod: RETOUCH_METHODS.indexOf(r.blemishMethod) >= 0 ? r.blemishMethod : d.blemishMethod,
     blemishAmount: Math.round(num(r.blemishAmount, [0, 100], d.blemishAmount)),
     smooth: Math.round(num(r.smooth, [0, 100], d.smooth)),
+    dodgeBurn: Math.round(num(r.dodgeBurn, [0, 100], d.dodgeBurn)),
+    contour: bool(r.contour, d.contour),
   };
 }
 
@@ -2094,7 +2096,9 @@ const SNOW_DOC =
   "LUT .cube dat trong thu muc luts canh snow.exe. " +
   "retouch: nhat mun + lam min da, chay TRUOC tuyet (enabled = bat/tat; blemish = nhat mun; blemishMethod: capture-one = model " +
   "Remove Blemishes cua Capture One trong models/mun, thieu thi tu dung builtin = bo tu viet; blemishAmount 0-100; " +
-  "smooth = do min 0-100, 0 = khong lam min, nhe 30 / vua 60 / manh 90).";
+  "smooth = do min 0-100, 0 = khong lam min, nhe 30 / vua 60 / manh 90; " +
+  "dodgeBurn = to sang / toi kieu neutral gray 0-100 (lam deu da, quang tham mat, ranh mui-mieng), 0 = tat, mac dinh 30, " +
+  "can models/facemesh-v2.onnx (npm run model -- facemesh); contour = tao khoi theo cung muc dodgeBurn).";
 
 /**
  * File cấu hình dạng dễ đọc: nhóm nào toàn số thì nằm trên một dòng. Mục `look`
@@ -2318,6 +2322,31 @@ function faceTest(cfg, w, h, matte) {
   return z ? (x, y) => inFaceBand(z, x, y) : null;
 }
 
+/**
+ * Chặn theo KHUÔN MẶT THẬT (khung YuNet do snow.exe tìm, `[{ x, y, w, h }]`).
+ * Dải mặt theo matte ở trên chỉ đoán mặt nằm trong 25 % chiều cao khung tính
+ * từ đỉnh đầu: ảnh dọc, người đội mũ / vương miện, hay mặt to sát máy là mặt
+ * lọt ra ngoài dải — đĩa bokeh rơi trúng mũi, má (ảnh booth 02/11/2026). Ở đây
+ * mỗi mặt là một elip phủ trán tới cằm, và ngưỡng cỡ hạt tính theo CỠ MẶT (4 %
+ * bề ngang mặt) chứ không theo khung ảnh: hạt li ti vẫn được rơi qua mặt cho
+ * tự nhiên, còn đĩa đủ to để thành một đốm sáng trên da thì không.
+ * Trang chỉnh không có model tìm mặt nên không có phần này.
+ */
+function faceBoxTest(cfg, faces) {
+  if (!cfg.faceGuard.enabled || !faces || !faces.length) return null;
+  const el = faces.map((f) => ({
+    cx: f.x + f.w / 2, cy: f.y + 0.45 * f.h, rx: 0.7 * f.w, ry: 0.78 * f.h, min: 0.04 * f.w,
+  }));
+  return (x, y, E) => {
+    for (const b of el) {
+      if (E <= b.min) continue;
+      const dx = (x - b.cx) / (b.rx + E / 2), dy = (y - b.cy) / (b.ry + E / 2);
+      if (dx * dx + dy * dy < 1) return true;
+    }
+    return false;
+  };
+}
+
 /** Hạt có đường kính E đặt ở (x, y) có lấn vào dải mặt không: thử tâm và bốn điểm quanh tâm. */
 function hitsFace(test, x, y, E) {
   const r = E * 0.35;
@@ -2369,12 +2398,14 @@ const SPRITE_COUNT = [6, 6, 3];   // clump, chip, crystal
  * nghĩa.
  *
  * `matte` (tuỳ chọn) chỉ dùng để chặn mặt; việc che hạt phía sau làm lúc vẽ.
+ * `faces` (tuỳ chọn): khung mặt thật, xem faceBoxTest.
  */
-function buildScene(w, h, cfg, seed, matte) {
+function buildScene(w, h, cfg, seed, matte, faces) {
   const longPx = Math.max(w, h);
   const op = optics(cfg, longPx);
   const depths = layerDepths(cfg);
   const face = faceTest(cfg, w, h, matte);
+  const faceBox = faceBoxTest(cfg, faces);
   const fl = cfg.flakes;
   const wsum = fl.clump + fl.chip + fl.crystal || 1;
   const guardPx = face ? (cfg.faceGuard.maxSize / 100) * longPx : Infinity;
@@ -2402,17 +2433,20 @@ function buildScene(w, h, cfg, seed, matte) {
 
       const pr = rngOf((Math.imul(seed ^ (li * 7919), 2654435761) + Math.imul(i + 1, 40503)) >>> 0);
       const mu = E / 2 / w, mv = E / 2 / h;
-      let u = 0, v = 0, ok = false;
+      let u = 0, v = 0, ok = false, hit = false;
       for (let t = 0; t < 12 && !ok; t++) {
         u = -mu + pr() * (1 + 2 * mu);
         v = -mv + pr() * (1 + 2 * mv);
         if (kc > 0 && pr() > 1 - kc + kc * dens(u, v)) continue;
         // Hạt to phía trước không được đè lên mặt khách.
-        if (Z < S && E > guardPx && hitsFace(face, u * w, v * h, E)) continue;
+        if (Z < S && ((E > guardPx && hitsFace(face, u * w, v * h, E)) || (faceBox && faceBox(u * w, v * h, E)))) {
+          hit = true;
+          continue;
+        }
         ok = true;
       }
       if (!ok) {
-        if (Z < S && E > guardPx) stats.guarded++;
+        if (hit) stats.guarded++;
         continue;
       }
       particles.push({
@@ -2661,7 +2695,7 @@ function ambientAt(amb, u, v) {
 function drawSnow(data, w, h, ch, cfg0, opts = {}) {
   const seed = opts.seed >>> 0 || 1;
   const cfg = variedSnow(cfg0, seed);
-  const scene = buildScene(w, h, cfg, seed, opts.matte);
+  const scene = buildScene(w, h, cfg, seed, opts.matte, opts.faces);
   const only = opts.only ? new Set(opts.only) : null;
   const amb = ambientGrid(data, w, h, ch);
   const cover = coverFor(cfg, w, h, opts.matte);
@@ -4000,6 +4034,18 @@ function glow(data, w, h, ch, cx, cy, R, k, col, mask) {
       row.appendChild(bt);
     });
     b.appendChild(row);
+    slider(b, { label: "Tô sáng / tối — neutral gray (0 = tắt)", path: "retouch.dodgeBurn", min: 0, max: 100, step: 1, zero: 30 });
+    var row2 = el("div", "btns");
+    [["Tắt", 0], ["Nhẹ", 30], ["Vừa", 50], ["Mạnh", 75]].forEach(function (m) {
+      var bt = el("button", "btn ghost", m[0]);
+      bt.addEventListener("click", function () { cfg.retouch.dodgeBurn = m[1]; syncAll(); commit(); });
+      row2.appendChild(bt);
+    });
+    b.appendChild(row2);
+    checkField(b, "Tạo khối (sáng sống mũi / trán / cằm, tối hõm má / đường hàm)", "retouch.contour");
+    b.appendChild(el("p", "note", "Tô sáng / tối: làm đều độ sáng da (vết loang, quầng thâm mắt, rãnh mũi–miệng) mà KHÔNG xoá vân da — " +
+      "như lớp xám Soft Light của thợ Photoshop. Tạo khối chạy theo cùng mức, hợp ảnh đèn flash chính diện. " +
+      "Cần <code>models/facemesh-v2.onnx</code> (<code>npm run model -- facemesh</code>); thiếu thì bước này tự bỏ qua."));
     b.appendChild(el("p", "note", "Trang này KHÔNG xem trước được retouch (cần model tìm mặt). Để xem: Lưu cấu hình, đặt cạnh " +
       "<code>snow.exe</code>, rồi kéo thả ảnh vào <code>xem-thu.bat</code> — ra file <code>.SO-SANH.jpg</code> trái gốc / phải đã xử lý. " +
       "Model Capture One dùng GPU nếu có (lần đầu đo vài chục giây — chạy <code>kiem-tra.bat</code> trước buổi chụp). " +

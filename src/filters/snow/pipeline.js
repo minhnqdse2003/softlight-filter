@@ -43,7 +43,7 @@ export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {
 
   // Buffer từ libvips có thể đang được chia sẻ, nên sao ra trước khi sửa tại chỗ.
   const cur = Buffer.from(data);
-  let matte = null, warn;
+  let matte = null, warn, faces = null;
   const stages = [];
   const addWarn = (w) => { if (w) warn = warn ? `${warn}; ${w}` : w; };
 
@@ -52,7 +52,8 @@ export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {
     const t = Date.now();
     try {
       const { retouch } = await import('../../retouch/retouch.js');
-      const r = await retouch(cur, info.width, info.height, cfg.retouch);
+      const { boxes, ...r } = await retouch(cur, info.width, info.height, cfg.retouch);
+      if (boxes) faces = boxes;
       addWarn(r.warn);
       if (trace) stages.push({ name: 'retouch', ms: Date.now() - t, ...r });
     } catch (err) {
@@ -75,8 +76,19 @@ export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {
     }
   }
 
+  // Khung mặt thật để chặn đĩa bokeh rơi trúng mặt (snow.js, faceBoxTest).
+  // Retouch tắt / không tìm thì tự tìm — YuNet ~60 ms. Hỏng thì chỉ còn dải mặt theo matte.
+  if (!faces && cfg.faceGuard.enabled && cfg.subject.mode !== 'off') {
+    try {
+      const { detectFaces } = await import('../../retouch/khuon-mat.js');
+      faces = await detectFaces(cur, info.width, info.height);
+    } catch (err) {
+      addWarn(`không tìm được mặt để chặn hạt (${err.message})`);
+    }
+  }
+
   const t0 = Date.now();
-  const stats = drawSnow(cur, info.width, info.height, 3, cfg, { seed: s, matte });
+  const stats = drawSnow(cur, info.width, info.height, 3, cfg, { seed: s, matte, faces });
   if (trace) stages.push({ name: 'tuyết', ms: Date.now() - t0, matteMs: matte ? matte.ms : null, seed: s, ...stats });
 
   // Màu chỉnh SAU tuyết: cả khung ăn cùng một look, hạt phim rơi cả lên hạt tuyết.
@@ -425,6 +437,21 @@ export async function selftest(cfg) {
     return t >= 0 && my >= t && my <= t + 0.25 * matte.height;
   }).length;
   row('Chặn hạt to khỏi mặt (matte)', badM === 0, `${badM} tâm hạt to trong dải mặt của hai người (phải là 0)`);
+
+  // 5c: chặn theo khung mặt thật (YuNet) — mặt nằm THẤP, ngoài dải 25 % tính từ
+  // đỉnh dáng người (ảnh dọc, đội mũ), ngưỡng theo cỡ mặt: không đĩa nào đè lên.
+  const fb = [{ x: 0.3 * W, y: 0.45 * H, w: 0.16 * W, h: 0.2 * H }, { x: 0.58 * W, y: 0.5 * H, w: 0.14 * W, h: 0.18 * H }];
+  const sceneF = buildScene(W, H, guardedM, 7, matte, fb);
+  const badF = sceneF.particles.filter((p) => {
+    const E = p.D + p.C;
+    if (p.Z >= guardedM.camera.focus) return false;
+    return fb.some((f) => {
+      if (E <= 0.04 * f.w) return false;
+      const dx = (p.x - f.x - f.w / 2) / (0.7 * f.w + E / 2), dy = (p.y - f.y - 0.45 * f.h) / (0.78 * f.h + E / 2);
+      return dx * dx + dy * dy < 1;
+    });
+  }).length;
+  row('Chặn hạt khỏi khung mặt thật', badF === 0, `${badF} hạt (to hơn 4 % bề ngang mặt) đè lên mặt (phải là 0)`);
 
   // 6
   const BW = 3000, BH = 2000, big = grayImage(BW, BH);

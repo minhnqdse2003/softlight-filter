@@ -69,6 +69,16 @@ if defined KEM_MUN (
   echo [CANH BAO] Khong co models\mun - retouch da se nhat mun bang bo tu viet.
 )
 
+REM  Luoi mat 478 diem (MediaPipe Face Mesh V2, ~5 MB) cho buoc to sang / toi
+REM  (retouch.dodgeBurn). Tai bang: npm run model -- facemesh. Thieu thi buoc do
+REM  tu bo qua, anh van ra.
+if exist "models\facemesh-v2.onnx" (
+  copy /y "models\facemesh-v2.onnx" "_deploy\models\" >nul
+  echo   Da kem model luoi mat ^(to sang / toi^).
+) else (
+  echo [CANH BAO] Khong co models\facemesh-v2.onnx - buoc to sang / toi se bo qua. Chay 'npm run model -- facemesh'.
+)
+
 REM onnxruntime-node mang binary cho moi he dieu hanh (~290 MB). May booth chi
 REM can win32\x64 (~64 MB) - bo phan con lai cho goi nhe.
 for /d %%D in ("_deploy\node_modules\onnxruntime-node\bin\napi-v*") do (

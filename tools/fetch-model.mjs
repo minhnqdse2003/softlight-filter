@@ -26,6 +26,12 @@ const MODELS = {
     url: 'https://huggingface.co/studioludens/birefnet-lite-512/resolve/962e67969ec6acec9c19fab76acee4f5e22e990c/onnx/model.onnx',
     sha256: '1cb0fb360dadd15af77c639085d77a9df67db0c64315560c3de005f676345ac2',
   },
+  // Lưới mặt 478 điểm cho bước tô sáng / tối (src/retouch/to-sang-toi.js).
+  facemesh: {
+    file: 'facemesh-v2.onnx', mb: 5, licence: 'Apache-2.0 (Google MediaPipe Face Mesh V2)',
+    url: 'https://huggingface.co/fernandotonon/QtMeshEditor-facemesh-onnx/resolve/32714088ed9830a98df6ee653ad406a3b83ef014/face_landmarks.onnx',
+    sha256: 'd16e5a55e6a480284d468ee32469692464049518c311662ab3956681de31e3e9',
+  },
 };
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), '..', 'models');

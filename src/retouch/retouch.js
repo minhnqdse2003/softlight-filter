@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { detectFaces } from './khuon-mat.js';
 import { smoothFaces } from './lam-min.js';
+import { coLuoiMat, openLuoiMat } from './luoi-mat.js';
+import { toSangToi } from './to-sang-toi.js';
 import { nhatMun } from './nhat-mun.js';
 import { MODEL_DIR, MODEL_FILES, openXoaMun, xoaMun } from './xoa-mun.js';
 
@@ -19,16 +21,19 @@ import { MODEL_DIR, MODEL_FILES, openXoaMun, xoaMun } from './xoa-mun.js';
  *                  'builtin'     = bộ nhặt mụn tự viết (nhat-mun.js), ~0,5 giây
  *   blemishAmount  0–100, như thanh Remove Blemishes (chỉ cách 'capture-one')
  *   smooth         độ mịn 0–100: 0 = không làm mịn; Nhẹ 30, Vừa 60, Mạnh 90
+ *   dodgeBurn      tô sáng / tối 0–100 (to-sang-toi.js): 0 = tắt
+ *   contour        tạo khối, chạy theo cùng mức dodgeBurn
  *
  * `rgb`: Buffer RGB 8 bit, SỬA TẠI CHỖ. Không có mặt nào thì không đụng gì.
  * Trả về `{ faces, blemish, method, smoothed, warn }` cho log.
  */
 export async function retouch(rgb, width, height, cfg) {
-  const out = { faces: 0, blemish: 0, method: null, smoothed: 0, warn: null };
-  if (!cfg || !cfg.enabled || (!cfg.blemish && cfg.smooth <= 0)) return out;
+  const out = { faces: 0, blemish: 0, method: null, dodgeBurn: 0, smoothed: 0, warn: null };
+  if (!cfg || !cfg.enabled || (!cfg.blemish && cfg.smooth <= 0 && !(cfg.dodgeBurn > 0))) return out;
 
   const faces = await detectFaces(rgb, width, height);
   out.faces = faces.length;
+  out.boxes = faces; // pipeline dùng lại để chặn hạt tuyết khỏi mặt
   if (!faces.length) return out;
 
   // Nhặt mụn TRƯỚC: làm mịn sau đó còn làm đều chỗ vừa chữa với da quanh nó.
@@ -47,6 +52,15 @@ export async function retouch(rgb, width, height, cfg) {
       ? await xoaMun(rgb, width, height, faces, { amount: cfg.blemishAmount })
       : await nhatMun(rgb, width, height, faces);
   }
+  // Tô sáng / tối sau nhặt mụn (đốm đã chữa không bị tính là vết loang), trước
+  // làm mịn. Thiếu model lưới mặt thì bỏ riêng bước này, các bước khác vẫn chạy.
+  if (cfg.dodgeBurn > 0) {
+    try {
+      out.dodgeBurn = await toSangToi(rgb, width, height, faces, { muc: cfg.dodgeBurn, contour: cfg.contour });
+    } catch (err) {
+      out.warn = [out.warn, `bỏ qua tô sáng / tối (${err.message})`].filter(Boolean).join('; ');
+    }
+  }
   if (cfg.smooth > 0) out.smoothed = await smoothFaces(rgb, width, height, faces, cfg.smooth);
   return out;
 }
@@ -61,6 +75,17 @@ export async function retouchDoctor() {
   } catch (err) {
     rows.push([false, 'Tìm mặt (YuNet)', `LỖI: ${err.message} — retouch sẽ bỏ qua, ảnh vẫn ra`]);
     return rows;
+  }
+  if (!coLuoiMat()) {
+    rows.push([false, 'Lưới mặt (tô sáng / tối)', 'THIẾU models/facemesh-v2.onnx — chỉ cần khi bật dodgeBurn; chạy: npm run model -- facemesh']);
+  } else {
+    try {
+      const t0 = Date.now();
+      await openLuoiMat();
+      rows.push([true, 'Lưới mặt (tô sáng / tối)', `nạp được, ${Date.now() - t0} ms`]);
+    } catch (err) {
+      rows.push([false, 'Lưới mặt (tô sáng / tối)', `LỖI: ${err.message} — bước tô sáng / tối bỏ qua`]);
+    }
   }
   const missing = Object.values(MODEL_FILES).filter((f) => !existsSync(join(MODEL_DIR, f)));
   if (missing.length) {

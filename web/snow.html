@@ -1326,6 +1326,18 @@ return {
       row.appendChild(bt);
     });
     b.appendChild(row);
+    slider(b, { label: "Tô sáng / tối — neutral gray (0 = tắt)", path: "retouch.dodgeBurn", min: 0, max: 100, step: 1, zero: 30 });
+    var row2 = el("div", "btns");
+    [["Tắt", 0], ["Nhẹ", 30], ["Vừa", 50], ["Mạnh", 75]].forEach(function (m) {
+      var bt = el("button", "btn ghost", m[0]);
+      bt.addEventListener("click", function () { cfg.retouch.dodgeBurn = m[1]; syncAll(); commit(); });
+      row2.appendChild(bt);
+    });
+    b.appendChild(row2);
+    checkField(b, "Tạo khối (sáng sống mũi / trán / cằm, tối hõm má / đường hàm)", "retouch.contour");
+    b.appendChild(el("p", "note", "Tô sáng / tối: làm đều độ sáng da (vết loang, quầng thâm mắt, rãnh mũi–miệng) mà KHÔNG xoá vân da — " +
+      "như lớp xám Soft Light của thợ Photoshop. Tạo khối chạy theo cùng mức, hợp ảnh đèn flash chính diện. " +
+      "Cần <code>models/facemesh-v2.onnx</code> (<code>npm run model -- facemesh</code>); thiếu thì bước này tự bỏ qua."));
     b.appendChild(el("p", "note", "Trang này KHÔNG xem trước được retouch (cần model tìm mặt). Để xem: Lưu cấu hình, đặt cạnh " +
       "<code>snow.exe</code>, rồi kéo thả ảnh vào <code>xem-thu.bat</code> — ra file <code>.SO-SANH.jpg</code> trái gốc / phải đã xử lý. " +
       "Model Capture One dùng GPU nếu có (lần đầu đo vài chục giây — chạy <code>kiem-tra.bat</code> trước buổi chụp). " +
