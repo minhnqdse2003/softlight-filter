@@ -22,6 +22,8 @@ const PAGES = [
   { src: 'tuner.html', out: 'softlight-tuner.html', mark: '<div class="app">' },
   { src: 'instax.html', out: 'instax-tuner.html', mark: '<div class="app">' },
   { src: 'snow.html', out: 'snow-tuner.html', mark: '<div class="app">' },
+  // LUT Studio: công cụ Capture One, chỉ nạp / xuất .cube.
+  { src: 'lut.html', out: 'lut-studio.html', mark: '<div class="app">' },
 ];
 
 /*

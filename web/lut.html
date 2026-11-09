@@ -1,0 +1,1317 @@
+<title>LUT Studio</title>
+
+<style>
+/*@@UI_CSS@@*/
+
+/* ── riêng trang LUT Studio ── */
+.stage.picking, .stage.picking canvas { cursor: crosshair; }
+.stage.picking .divider { pointer-events: none; opacity: .25; }
+.base { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.base .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+.base .name b { color: var(--text); font-weight: 500; }
+.adv-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.adv-list button { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; padding: 0; position: relative; }
+.adv-list button[aria-pressed="true"] { border-color: #fff; }
+.adv-list button.changed::after { content: ""; position: absolute; right: -2px; top: -2px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.pickrow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; }
+.pickrow .chip { width: 22px; height: 22px; border-radius: 3px; border: 1px solid #111; }
+.savebar input[type=text] { flex: 1; min-width: 0; background: var(--field); border: 1px solid #3a3a3a; border-radius: 2px; padding: 3px 6px; font-family: var(--mono); font-size: 11px; }
+.savebar { flex-wrap: wrap; }
+.savebar .row2 { display: flex; gap: 6px; width: 100%; }
+.savebar .row2 .btn { flex: 1; }
+.sub { color: var(--dim); font-size: 11px; margin: 10px 0 2px; text-transform: uppercase; letter-spacing: .05em; }
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>LUT Studio <span>· công cụ Capture One → .cube</span></h1>
+    <label class="btn primary filepick">Mở ảnh<input type="file" id="file" accept="image/*"></label>
+    <button class="btn ghost" id="sampleBtn">Ảnh mẫu</button>
+    <div class="seg" role="group" aria-label="Độ phân giải xem trước">
+      <button id="qFast" aria-pressed="false">Nhanh</button>
+      <button id="qFine" aria-pressed="true">Nét</button>
+    </div>
+    <div class="spacer"></div>
+    <span class="status" id="status">chưa có ảnh</span>
+  </header>
+
+  <main class="work">
+    <section class="viewer">
+      <div class="stage" id="stage">
+        <div class="empty" id="empty">
+          <h2>Thả một tấm ảnh hoặc file .cube vào đây</h2>
+          <p>Ảnh chỉ để xem trước, không rời khỏi máy. Kết quả duy nhất của trang này là file LUT .cube.</p>
+          <button class="btn" id="sampleBtn2">Dùng ảnh mẫu</button>
+        </div>
+        <div class="frame" id="frame" hidden>
+          <canvas id="cvAfter"></canvas>
+          <canvas id="cvBefore" class="before"></canvas>
+          <span class="tag l">Gốc</span>
+          <span class="tag r">LUT</span>
+          <div class="divider" id="divider"><span class="glyph">↔</span></div>
+        </div>
+      </div>
+      <div class="viewbar">
+        <button class="btn ghost" id="holdBtn" title="Giữ phím Space cũng được">Giữ để xem ảnh gốc</button>
+        <button class="btn ghost" id="centerBtn">Vạch chia về giữa</button>
+        <button class="btn ghost" id="allAfterBtn">Xem toàn ảnh đã áp</button>
+      </div>
+    </section>
+
+    <aside class="tools">
+      <div class="histo"><canvas id="histo" width="320" height="74"></canvas></div>
+
+      <div class="look">
+        <div class="row"><span class="title">LUT nền</span></div>
+        <div class="base">
+          <span class="name" id="baseName">Không có — bấm Nạp LUT</span>
+          <label class="btn ghost filepick" title="Nạp file .cube làm lớp nền, chỉnh chồng lên">Nạp LUT<input type="file" id="cubeFile" accept=".cube"></label>
+          <button class="btn ghost" id="baseDrop" title="Bỏ LUT nền">Bỏ</button>
+        </div>
+        <div id="baseOpacity"></div>
+        <div class="big" id="strengthHost"></div>
+        <div class="hint">Độ đậm = trộn cả LUT xuất ra với ảnh gốc. Ctrl+Z / Ctrl+Y: hoàn tác / làm lại.</div>
+      </div>
+
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="exposure" aria-selected="true">Phơi sáng</button>
+        <button role="tab" data-tab="color" aria-selected="false">Màu</button>
+      </nav>
+
+      <div class="panes">
+        <div class="pane" id="pane-exposure"></div>
+        <div class="pane" id="pane-color" hidden></div>
+      </div>
+
+      <footer class="savebar">
+        <input type="text" id="lutName" spellcheck="false" aria-label="Tên file LUT" title="Tên file LUT xuất ra">
+        <button class="btn primary" id="exportBtn" title="Xuất toàn bộ chỉnh sửa (gồm LUT nền) thành một file .cube 65³">Xuất LUT .cube</button>
+        <div class="row2">
+          <button class="btn ghost" id="undoBtn" title="Ctrl+Z">Hoàn tác</button>
+          <button class="btn ghost" id="redoBtn" title="Ctrl+Y">Làm lại</button>
+          <button class="btn ghost" id="resetBtn" title="Đưa mọi công cụ về 0 (giữ LUT nền)">Đặt lại</button>
+        </div>
+      </footer>
+    </aside>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/*@@LOOK_JS@@*/
+</script>
+
+<script>
+/*
+ * LUT STUDIO — phần riêng của trang, dựng trên look.js (công thức Capture One).
+ *
+ * Chỉ giữ công cụ tính theo TỪNG ĐIỂM ẢNH, nên ảnh xem trước = đúng file .cube.
+ * Chuỗi: LUT nền (opacity) → White Balance → Exposure → Color Balance Master
+ *   → HDR (bản theo điểm ảnh: nền = chính điểm đó, không lọc theo vùng)
+ *   → Skin Tone → Color Editor Advanced → Color Editor Basic → Saturation
+ *   → Contrast → Brightness → Levels → Curve → Color Balance 3 vùng → B&W
+ *   → trộn với ảnh gốc theo Độ đậm.
+ */
+var STUDIO = (function () {
+  var EXPORT_SIZE = 65, PREVIEW_SIZE = 33;
+
+  function sm01(t) { t = t < 0 ? 0 : t > 1 ? 1 : t; return t * t * (3 - 2 * t); }
+  function hueDiff(to, from) { var d = ((to - from) % 360 + 540) % 360 - 180; return d; }
+  function hdrIsOn(h) { return !!(h.highlight || h.shadow || h.white || h.black); }
+
+  /** Trọng số chọn vùng màu (Advanced / Skin Tone): hue trong lõi ± width, mượt `smooth` độ, bỏ màu gần xám. */
+  function rangeW(lch, s) {
+    var d = Math.abs(hueDiff(lch[2], s.center));
+    var wh = d <= s.width ? 1 : s.smooth > 0 ? sm01(1 - (d - s.width) / s.smooth) : 0;
+    if (!wh) return 0;
+    return s.cmin > 0 ? wh * sm01(lch[1] / s.cmin) : wh;
+  }
+
+  function num(v, lo, hi, d) { v = typeof v === "number" && isFinite(v) ? v : d; return v < lo ? lo : v > hi ? hi : v; }
+  var ADV_DEF = { center: 0, width: 15, smooth: 15, cmin: 6, hue: 0, saturation: 0, lightness: 0 };
+  var ADV_RANGE = { center: [0, 359], width: [1, 90], smooth: [0, 60], cmin: [0, 40], hue: [-30, 30], saturation: [-100, 200], lightness: [-100, 100] };
+  var SKIN_DEF = { center: 55, C0: 28, L0: 65, width: 20, smooth: 20, cmin: 8, hue: 0, saturation: 0, lightness: 0, uniHue: 0, uniSat: 0, uniLight: 0 };
+  var SKIN_RANGE = { center: [0, 359], C0: [0, 150], L0: [0, 100], width: [1, 90], smooth: [0, 60], cmin: [0, 40],
+                     hue: [-30, 30], saturation: [-100, 200], lightness: [-100, 100], uniHue: [0, 100], uniSat: [0, 100], uniLight: [0, 100] };
+  function normObj(raw, def, range) {
+    var o = {}, r = raw && typeof raw === "object" ? raw : {};
+    Object.keys(def).forEach(function (k) { o[k] = num(r[k], range[k][0], range[k][1], def[k]); });
+    return o;
+  }
+
+  /** Bộ số đầy đủ: look.js (trung tính) + Advanced + Skin Tone. Công cụ theo vùng luôn = 0. */
+  function normalize(raw) {
+    var r = raw && typeof raw === "object" ? raw : {};
+    var o = normalizeLook(r, neutralLook());
+    var n = neutralLook();
+    o.clarity = n.clarity; o.vignetting = n.vignetting; o.grain = n.grain;
+    o.advanced = (Array.isArray(r.advanced) ? r.advanced : []).slice(0, 12).map(function (a) { return normObj(a, ADV_DEF, ADV_RANGE); });
+    o.skin = normObj(r.skin, SKIN_DEF, SKIN_RANGE);
+    return o;
+  }
+  function neutral() { return normalize({}); }
+
+  function skinOn(sk) { return !!(sk.hue || sk.saturation || sk.lightness || sk.uniHue || sk.uniSat || sk.uniLight); }
+
+  /** Nửa đầu chuỗi cho một điểm: sRGB 0..1 → ProPhoto tuyến tính trước bước Color Editor. */
+  function headStage(c, userLut) {
+    var st = colourStages(c, { userLut: userLut });
+    var H = c.hdr, hdr = hdrIsOn(H);
+    function head(r, g, b) {
+      var p = st.pre(r, g, b);
+      if (hdr) {
+        var o = Math.log2(Math.max(1e-5, ppLum(p[0], p[1], p[2])) / HDR_REF);
+        var k = hdrGain(o, o, H);
+        p[0] *= k; p[1] *= k; p[2] *= k;
+      }
+      return p;
+    }
+    return { st: st, head: head };
+  }
+
+  /** Màu L*C*h tại chỗ công cụ chọn màu nhìn thấy (cho ống hút). */
+  function lchAt(c, userLut, r, g, b) {
+    var p = headStage(c, userLut).head(r, g, b);
+    return ppToLch(clamp01(p[0]), clamp01(p[1]), clamp01(p[2]));
+  }
+
+  /** Cả chuỗi: sRGB 0..1 → sRGB 0..1 (chưa trộn Độ đậm). */
+  function chain(c, userLut) {
+    var hs = headStage(c, userLut), st = hs.st, head = hs.head;
+    var adv = c.advanced.filter(function (a) { return a.hue || a.saturation || a.lightness; });
+    var sk = c.skin, skOn = skinOn(sk);
+    var editOn = skOn || adv.length > 0;
+    return function (r, g, b) {
+      var p = head(r, g, b);
+      if (editOn) {
+        var q0 = clamp01(p[0]), q1 = clamp01(p[1]), q2 = clamp01(p[2]);
+        var lch = ppToLch(q0, q1, q2), L = lch[0], C = lch[1], h = lch[2], touched = false, w;
+        if (skOn && (w = rangeW(lch, sk))) {
+          h += hueDiff(sk.center, h) * (sk.uniHue / 100) * w;
+          C += (sk.C0 - C) * (sk.uniSat / 100) * w;
+          L += (sk.L0 - L) * (sk.uniLight / 100) * w;
+          h += sk.hue * w;
+          C *= 1 + sk.saturation * 0.0125 * w;
+          L += sk.lightness * 0.01 * C * w;
+          touched = true;
+        }
+        for (var i = 0; i < adv.length; i++) {
+          var a = adv[i];
+          w = rangeW([L, C, h], a);
+          if (!w) continue;
+          h += a.hue * w;
+          C *= 1 + a.saturation * 0.0125 * w;
+          L += a.lightness * 0.01 * C * w;
+          touched = true;
+        }
+        if (touched) {
+          p = lchToPp(L < 0 ? 0 : L > 100 ? 100 : L, C < 0 ? 0 : C > 181 ? 181 : C, ((h % 360) + 360) % 360);
+        } else { p = [q0, q1, q2]; }
+      }
+      return st.post(p[0], p[1], p[2]);
+    };
+  }
+
+  /** Dựng LUT từng lớp B (để chia nhỏ qua nhiều khung hình). */
+  function builder(c, userLut, size, maskSel) {
+    var f, s = c.strength / 100;
+    if (maskSel) {
+      var hs = headStage(c, userLut);
+      f = function (r, g, b) {
+        var p = hs.head(r, g, b);
+        var w = rangeW(ppToLch(clamp01(p[0]), clamp01(p[1]), clamp01(p[2])), maskSel);
+        var y = 0.299 * r + 0.587 * g + 0.114 * b;
+        y = y * 0.6 + 0.2;
+        return [y + (r - y) * w, y + (g - y) * w, y + (b - y) * w];
+      };
+      s = 1;
+    } else f = chain(c, userLut);
+    var data = new Float32Array(size * size * size * 3), n = size - 1, bi = 0, p = 0;
+    return {
+      lut: { size: size, data: data },
+      step: function (planes) {
+        for (var k = 0; k < planes && bi < size; k++, bi++) {
+          for (var gi = 0; gi < size; gi++) {
+            for (var ri = 0; ri < size; ri++) {
+              var r = ri / n, g = gi / n, b = bi / n, o = f(r, g, b);
+              data[p++] = r + (o[0] - r) * s;
+              data[p++] = g + (o[1] - g) * s;
+              data[p++] = b + (o[2] - b) * s;
+            }
+          }
+        }
+        return bi >= size;
+      }
+    };
+  }
+  function build(c, userLut, size, maskSel) { var b = builder(c, userLut, size, maskSel); b.step(1e9); return b.lut; }
+
+  /** LUT → nội dung .cube (R chạy nhanh nhất, 6 chữ số). */
+  function toCube(lut, title, comments) {
+    var lines = ['TITLE "' + String(title).replace(/"/g, "'") + '"'];
+    (comments || []).forEach(function (c) { lines.push("# " + c); });
+    lines.push("LUT_3D_SIZE " + lut.size, "DOMAIN_MIN 0.0 0.0 0.0", "DOMAIN_MAX 1.0 1.0 1.0");
+    var d = lut.data;
+    for (var i = 0; i < d.length; i += 3) lines.push(clamp01(d[i]).toFixed(6) + " " + clamp01(d[i + 1]).toFixed(6) + " " + clamp01(d[i + 2]).toFixed(6));
+    return lines.join("\n") + "\n";
+  }
+
+  /** Áp LUT lên ảnh RGBA (nội suy ba chiều, bảng chỉ số dựng sẵn). */
+  function apply(data, lut) {
+    var S = lut.size, S2 = S * S, N = S - 1, D = lut.data;
+    var idx = new Int32Array(256), frac = new Float32Array(256);
+    for (var v = 0; v < 256; v++) { var f = v / 255 * N; idx[v] = Math.min(f | 0, N - 1); frac[v] = f - idx[v]; }
+    var oG = S * 3, oB = S2 * 3;
+    for (var p = 0; p < data.length; p += 4) {
+      var tr = frac[data[p]], tg = frac[data[p + 1]], tb = frac[data[p + 2]];
+      var base = (idx[data[p + 2]] * S2 + idx[data[p + 1]] * S + idx[data[p]]) * 3;
+      for (var c = 0; c < 3; c++) {
+        var q = base + c;
+        var c00 = D[q] + (D[q + 3] - D[q]) * tr;
+        var c10 = D[q + oG] + (D[q + oG + 3] - D[q + oG]) * tr;
+        var c01 = D[q + oB] + (D[q + oB + 3] - D[q + oB]) * tr;
+        var c11 = D[q + oB + oG] + (D[q + oB + oG + 3] - D[q + oB + oG]) * tr;
+        var o = (c00 + (c10 - c00) * tg) * (1 - tb) + (c01 + (c11 - c01) * tg) * tb;
+        data[p + c] = o <= 0 ? 0 : o >= 1 ? 255 : (o * 255 + 0.5) | 0;
+      }
+    }
+  }
+
+  /** White Balance từ một điểm xám: tìm Kelvin/Tint làm điểm đó trung tính. */
+  function solveWb(lin) {
+    var best = null, bs = Infinity;
+    for (var k = 2500; k <= 10000; k += 50) {
+      for (var t = -50; t <= 50; t++) {
+        var g = wbGains(k, t), r = lin[0] * g[0], gg = lin[1] * g[1], b = lin[2] * g[2], m = (r + gg + b) / 3 || 1e-9;
+        var e = (r - m) * (r - m) + (gg - m) * (gg - m) + (b - m) * (b - m);
+        e /= m * m;
+        if (e < bs) { bs = e; best = [k, t]; }
+      }
+    }
+    return best;
+  }
+
+  /** Màu hiển thị (CSS) của một sắc độ L*C*h. */
+  function lchCss(L, C, h) {
+    var p = lchToPp(L, C, h), s = mul3(PP_TO_SRGB, p[0], p[1], p[2]);
+    return "rgb(" + s.map(function (v) { return Math.round(clamp01(toSrgb(v)) * 255); }).join(",") + ")";
+  }
+
+  return {
+    EXPORT_SIZE: EXPORT_SIZE, PREVIEW_SIZE: PREVIEW_SIZE, ADV_DEF: ADV_DEF, ADV_RANGE: ADV_RANGE, SKIN_DEF: SKIN_DEF,
+    normalize: normalize, neutral: neutral, chain: chain, builder: builder, build: build, toCube: toCube,
+    apply: apply, lchAt: lchAt, solveWb: solveWb, lchCss: lchCss, rangeW: rangeW
+  };
+})();
+</script>
+
+<script>
+(function () {
+  "use strict";
+
+  var $ = function (id) { return document.getElementById(id); };
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+  /* ═══════════════════════════════════════════════════════════════
+     1. TRẠNG THÁI
+     cfg     = bộ số đang chỉnh; base = trung tính (nút ↺ / bấm đúp về đây)
+     userLut = LUT nền đã nạp {size, data, id}
+     ═══════════════════════════════════════════════════════════════ */
+  var base = STUDIO.neutral();
+  var cfg = STUDIO.neutral();
+  var userLut = null;
+  var maskSel = null;           // đang xem vùng chọn (Advanced / Skin Tone)
+  var advMask = null, skinMask = null;   // ô "Xem vùng chọn" của hai tab Color Editor
+
+  /* ═══════════════════════════════════════════════════════════════
+     2. XEM TRƯỚC
+     LUT 33³ dựng ngay khi kéo; dừng tay thì dựng dần 65³ — đúng file xuất.
+     ═══════════════════════════════════════════════════════════════ */
+  var srcImage = null, work = null, quality = 1200, splitPct = 0.5;
+  var cvA = $("cvAfter"), cvB = $("cvBefore");
+  var ctxA = cvA.getContext("2d"), ctxB = cvB.getContext("2d");
+  var lutState = { key: null, lut: null }, refineJob = null, refineTimer = 0;
+
+  function lutKey() { return JSON.stringify(cfg) + "|" + (userLut ? userLut.id : 0) + "|" + (maskSel ? JSON.stringify(maskSel) : ""); }
+
+  function prepare(longEdge) {
+    var iw = srcImage.naturalWidth || srcImage.width, ih = srcImage.naturalHeight || srcImage.height;
+    var s = Math.min(1, longEdge / Math.max(iw, ih));
+    var w = Math.max(2, Math.round(iw * s)), h = Math.max(2, Math.round(ih * s));
+    var tmp = document.createElement("canvas");
+    tmp.width = w; tmp.height = h;
+    var tc = tmp.getContext("2d", { willReadFrequently: true });
+    tc.imageSmoothingQuality = "high";
+    tc.drawImage(srcImage, 0, 0, w, h);
+    var img = tc.getImageData(0, 0, w, h);
+    work = { w: w, h: h, src: img.data, srcW: iw, srcH: ih };
+    cvA.width = w; cvA.height = h; cvB.width = w; cvB.height = h;
+    ctxB.putImageData(img, 0, 0);
+  }
+
+  function currentLut() {
+    var key = lutKey();
+    if (lutState.key !== key) {
+      lutState = { key: key, lut: STUDIO.build(cfg, userLut, STUDIO.PREVIEW_SIZE, maskSel) };
+      scheduleRefine(key);
+    }
+    return lutState.lut;
+  }
+
+  function scheduleRefine(key) {
+    clearTimeout(refineTimer); refineJob = null;
+    refineTimer = setTimeout(function () {
+      if (lutState.key !== key) return;
+      var job = refineJob = STUDIO.builder(cfg, userLut, STUDIO.EXPORT_SIZE, maskSel);
+      (function tick() {
+        if (refineJob !== job || lutState.key !== key) return;
+        var t0 = performance.now(), done = false;
+        while (!done && performance.now() - t0 < 24) done = job.step(1);
+        if (done) { lutState.lut = job.lut; refineJob = null; paint(); }
+        else setTimeout(tick, 0);
+      })();
+    }, 220);
+  }
+
+  function paint() {
+    if (!work) return;
+    var t0 = performance.now();
+    var out = ctxA.createImageData(work.w, work.h);
+    out.data.set(work.src);
+    var lut = currentLut();
+    STUDIO.apply(out.data, lut);
+    ctxA.putImageData(out, 0, 0);
+    drawHisto(out.data);
+    var ms = performance.now() - t0;
+    $("status").textContent = work.srcW + "×" + work.srcH + " → xem " + work.w + "×" + work.h + " · LUT " + lut.size + "³" +
+      (lut.size === STUDIO.EXPORT_SIZE ? " (= file xuất)" : " (đang dựng 65³…)") + " · " + Math.round(ms) + " ms" +
+      (maskSel ? " · ĐANG XEM VÙNG CHỌN" : "");
+  }
+
+  var rafId = 0;
+  function schedule() {
+    if (rafId) return;
+    rafId = requestAnimationFrame(function () { rafId = 0; paint(); });
+  }
+
+  var hcv = $("histo"), hctx = hcv.getContext("2d");
+  function drawHisto(d) {
+    var bins = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
+    var step = Math.max(4, Math.floor(d.length / 4 / 120000) * 4);
+    for (var i = 0; i < d.length; i += step) { bins[0][d[i]]++; bins[1][d[i + 1]]++; bins[2][d[i + 2]]++; }
+    var max = 1;
+    for (var c = 0; c < 3; c++) for (var v = 2; v < 254; v++) max = Math.max(max, bins[c][v]);
+    var W = hcv.width, H = hcv.height;
+    hctx.clearRect(0, 0, W, H);
+    hctx.globalCompositeOperation = "lighter";
+    var cols = ["rgba(220,70,70,.75)", "rgba(70,200,90,.75)", "rgba(80,120,235,.75)"];
+    for (c = 0; c < 3; c++) {
+      hctx.fillStyle = cols[c];
+      hctx.beginPath(); hctx.moveTo(0, H);
+      for (v = 0; v < 256; v++) hctx.lineTo(v / 255 * W, H - Math.min(1, Math.sqrt(bins[c][v] / max)) * (H - 2));
+      hctx.lineTo(W, H); hctx.closePath(); hctx.fill();
+    }
+    hctx.globalCompositeOperation = "source-over";
+  }
+
+  /* ── vạch so sánh trước / sau + ống hút ── */
+  function applySplit() {
+    var pct = (splitPct * 100).toFixed(2);
+    cvB.style.clipPath = "inset(0 " + (100 - pct) + "% 0 0)";
+    $("divider").style.left = "calc(" + pct + "% - 1px)";
+  }
+  function setSplit(p) { splitPct = clamp(p, 0, 1); applySplit(); }
+
+  var picker = null;
+  function startPick(msg, fn) {
+    if (!work) { toast("Mở một tấm ảnh trước."); return; }
+    picker = fn; $("stage").classList.add("picking"); toast(msg + " — bấm lên ảnh (Esc để huỷ)");
+  }
+  function endPick() { picker = null; $("stage").classList.remove("picking"); }
+  /** Trung bình 5×5 điểm ảnh GỐC quanh chỗ bấm, sRGB 0..1. */
+  function sampleAt(e) {
+    var r = cvA.getBoundingClientRect();
+    var cx = Math.round((e.clientX - r.left) / r.width * work.w), cy = Math.round((e.clientY - r.top) / r.height * work.h);
+    var s = [0, 0, 0], n = 0;
+    for (var y = cy - 2; y <= cy + 2; y++) for (var x = cx - 2; x <= cx + 2; x++) {
+      if (x < 0 || y < 0 || x >= work.w || y >= work.h) continue;
+      var p = (y * work.w + x) * 4; s[0] += work.src[p]; s[1] += work.src[p + 1]; s[2] += work.src[p + 2]; n++;
+    }
+    return n ? [s[0] / n / 255, s[1] / n / 255, s[2] / n / 255] : null;
+  }
+
+  (function () {
+    var stage = $("stage"), drag = false;
+    function at(e) { var r = cvA.getBoundingClientRect(); if (r.width) setSplit((e.clientX - r.left) / r.width); }
+    stage.addEventListener("pointerdown", function (e) {
+      if (!work) return;
+      if (picker) {
+        var rgb = sampleAt(e), fn = picker;
+        endPick();
+        if (rgb) fn(rgb);
+        return;
+      }
+      drag = true; stage.setPointerCapture(e.pointerId); at(e);
+    });
+    stage.addEventListener("pointermove", function (e) { if (drag) at(e); });
+    stage.addEventListener("pointerup", function () { drag = false; });
+    stage.addEventListener("pointercancel", function () { drag = false; });
+  })();
+  var holdSaved = null;
+  function holdOn() { if (holdSaved === null) { holdSaved = splitPct; setSplit(1); } }
+  function holdOff() { if (holdSaved !== null) { setSplit(holdSaved); holdSaved = null; } }
+  var holdBtn = $("holdBtn");
+  holdBtn.addEventListener("pointerdown", function (e) { holdBtn.setPointerCapture(e.pointerId); holdOn(); });
+  ["pointerup", "pointercancel", "pointerleave", "blur"].forEach(function (ev) { holdBtn.addEventListener(ev, holdOff); });
+  function typing(t) { return /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== "range" && t.type !== "checkbox"; }
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && picker) { endPick(); return; }
+    if (e.code === "Space" && !typing(e.target) && e.target.tagName !== "BUTTON") { e.preventDefault(); holdOn(); return; }
+    if ((e.ctrlKey || e.metaKey) && !typing(e.target)) {
+      var k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      else if (k === "y" || (k === "z" && e.shiftKey)) { e.preventDefault(); redo(); }
+    }
+  });
+  document.addEventListener("keyup", function (e) { if (e.code === "Space") holdOff(); });
+  $("centerBtn").addEventListener("click", function () { setSplit(0.5); });
+  $("allAfterBtn").addEventListener("click", function () { setSplit(0); });
+
+  /* ── nạp ảnh / .cube ── */
+  function useImage(img) {
+    srcImage = img;
+    $("empty").hidden = true; $("frame").hidden = false;
+    prepare(quality); applySplit(); paint();
+  }
+  function loadImageFile(f) {
+    var url = URL.createObjectURL(f), img = new Image();
+    img.onload = function () { useImage(img); URL.revokeObjectURL(url); };
+    img.onerror = function () { toast("Không đọc được ảnh này."); URL.revokeObjectURL(url); };
+    img.src = url;
+  }
+  function loadAny(f) {
+    if (!f) return;
+    if (/\.cube$/i.test(f.name)) { loadCubeFile(f); return; }
+    if (!/^image\//.test(f.type)) { toast("Cần file ảnh hoặc .cube."); return; }
+    loadImageFile(f);
+  }
+  $("file").addEventListener("change", function (e) { loadAny(e.target.files[0]); e.target.value = ""; });
+  var stage = $("stage");
+  ["dragenter", "dragover"].forEach(function (ev) { stage.addEventListener(ev, function (e) { e.preventDefault(); stage.classList.add("drop"); }); });
+  ["dragleave", "drop"].forEach(function (ev) { stage.addEventListener(ev, function (e) { e.preventDefault(); stage.classList.remove("drop"); }); });
+  stage.addEventListener("drop", function (e) { Array.prototype.forEach.call(e.dataTransfer.files, loadAny); });
+  document.addEventListener("paste", function (e) {
+    var f = e.clipboardData && e.clipboardData.files;
+    if (f && f.length && /^image\//.test(f[0].type)) loadImageFile(f[0]);
+  });
+
+  /** Ảnh mẫu: da, vùng sáng, bóng tối, dải xám và dải ô màu. */
+  function makeSample() {
+    var w = 1260, h = 840, c = document.createElement("canvas");
+    c.width = w; c.height = h;
+    var x = c.getContext("2d");
+    var bg = x.createLinearGradient(0, 0, w, h);
+    bg.addColorStop(0, "#34404e"); bg.addColorStop(0.55, "#5a4c3e"); bg.addColorStop(1, "#14181e");
+    x.fillStyle = bg; x.fillRect(0, 0, w, h);
+    var win = x.createLinearGradient(w * 0.62, 0, w, h * 0.5);
+    win.addColorStop(0, "rgba(255,246,228,0)"); win.addColorStop(1, "rgba(255,250,236,1)");
+    x.fillStyle = win; x.fillRect(w * 0.6, 0, w * 0.4, h);
+    var face = x.createRadialGradient(w * 0.4, h * 0.42, 20, w * 0.4, h * 0.42, h * 0.42);
+    face.addColorStop(0, "#f1cfae"); face.addColorStop(0.55, "#d09f79"); face.addColorStop(1, "rgba(90,60,44,0)");
+    x.fillStyle = face; x.beginPath(); x.ellipse(w * 0.4, h * 0.44, h * 0.27, h * 0.36, 0, 0, 6.3); x.fill();
+    x.fillStyle = "#3f8a3a"; x.beginPath(); x.ellipse(w * 0.12, h * 0.25, 70, 120, 0.4, 0, 6.3); x.fill();
+    x.fillStyle = "#6fb24a"; x.beginPath(); x.ellipse(w * 0.2, h * 0.32, 50, 90, -0.3, 0, 6.3); x.fill();
+    for (var i = 0; i < 16; i++) { var v = Math.round(i * 17); x.fillStyle = "rgb(" + v + "," + v + "," + v + ")"; x.fillRect(i * (w / 16), h * 0.86, w / 16 + 1, h * 0.07); }
+    var HUES = ["#c42a34", "#d6942a", "#e2cc3a", "#2e8054", "#2aa6b4", "#2860ba", "#80389a"];
+    HUES.forEach(function (col, j) { x.fillStyle = col; x.fillRect(j * (w / 7), h * 0.93, w / 7 + 1, h * 0.07); });
+    return c;
+  }
+  function loadSample() {
+    var img = new Image();
+    img.onload = function () { useImage(img); };
+    img.src = makeSample().toDataURL("image/png");
+  }
+  $("sampleBtn").addEventListener("click", loadSample);
+  $("sampleBtn2").addEventListener("click", loadSample);
+
+  function setQuality(px, fast) {
+    quality = px;
+    $("qFast").setAttribute("aria-pressed", String(fast));
+    $("qFine").setAttribute("aria-pressed", String(!fast));
+    if (srcImage) { prepare(quality); paint(); }
+  }
+  $("qFast").addEventListener("click", function () { setQuality(720, true); });
+  $("qFine").addEventListener("click", function () { setQuality(1200, false); });
+
+  /* ═══════════════════════════════════════════════════════════════
+     3. HOÀN TÁC / LÀM LẠI
+     ═══════════════════════════════════════════════════════════════ */
+  var hist = [], hpos = -1;
+  function pushHist() {
+    var s = JSON.stringify(cfg);
+    if (hist[hpos] === s) return;
+    hist = hist.slice(0, hpos + 1); hist.push(s);
+    if (hist.length > 200) hist.shift();
+    hpos = hist.length - 1;
+  }
+  function jump(i) {
+    if (i < 0 || i >= hist.length) return;
+    hpos = i; cfg = STUDIO.normalize(JSON.parse(hist[i]));
+    syncAll(); schedule(); remember();
+  }
+  function undo() { jump(hpos - 1); }
+  function redo() { jump(hpos + 1); }
+  $("undoBtn").addEventListener("click", undo);
+  $("redoBtn").addEventListener("click", redo);
+
+  /* ═══════════════════════════════════════════════════════════════
+     4. THÀNH PHẦN GIAO DIỆN
+     ═══════════════════════════════════════════════════════════════ */
+  function el(tag, cls, html) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (html != null) e.innerHTML = html;
+    return e;
+  }
+
+  var refreshers = [], toolMarks = [];
+  function commit() {
+    schedule();
+    toolMarks.forEach(function (f) { f(); });
+    pushHist();
+    remember();
+  }
+  function syncAll() { refreshers.forEach(function (f) { f(); }); toolMarks.forEach(function (f) { f(); }); }
+
+  function getPath(o, path) { return path.split(".").reduce(function (a, k) { return a[k]; }, o); }
+  function setPath(o, path, v) {
+    var ks = path.split("."), last = ks.pop();
+    ks.reduce(function (a, k) { return a[k]; }, o)[last] = v;
+  }
+
+  function slider(host, spec) {
+    var get = spec.get || function () { return getPath(cfg, spec.path); };
+    var set = spec.set || function (v) { setPath(cfg, spec.path, v); };
+    var def = spec.def || function () { return getPath(base, spec.path); };
+    var digits = spec.digits != null ? spec.digits : (spec.step < 1 ? String(spec.step).split(".")[1].length : 0);
+    var wrap = el("div", "sl");
+    var head = el("div", "sl-head");
+    var lab = el("label", null, spec.label);
+    var box = el("input"); box.type = "number"; box.step = spec.step; box.min = spec.min; box.max = spec.max;
+    var rng = el("input"); rng.type = "range"; rng.min = spec.min; rng.max = spec.max; rng.step = spec.step;
+    rng.setAttribute("aria-label", spec.label);
+    if (spec.track) rng.style.setProperty("--trk", spec.track);
+    head.appendChild(lab); head.appendChild(box);
+    wrap.appendChild(head); wrap.appendChild(rng);
+    host.appendChild(wrap);
+
+    function show(v) {
+      rng.value = v;
+      box.value = Number(v).toFixed(digits);
+      box.classList.toggle("off", Number(v) === spec.zero);
+      if (!spec.track) {
+        var lo = spec.min, hi = spec.max, z = spec.min < 0 && spec.max > 0 ? 0 : lo;
+        var a = (Math.min(z, v) - lo) / (hi - lo) * 100, b = (Math.max(z, v) - lo) / (hi - lo) * 100;
+        rng.style.setProperty("--trk", "linear-gradient(90deg,#555 " + a + "%,#c9c9c9 " + a + "%,#c9c9c9 " + b + "%,#555 " + b + "%)");
+      }
+    }
+    function put(v, live) {
+      v = clamp(Math.round(Number(v) / spec.step) * spec.step, spec.min, spec.max);
+      v = Number(v.toFixed(digits));
+      set(v); show(v);
+      if (spec.onChange) spec.onChange(v);
+      if (!live) commit(); else schedule();
+    }
+    rng.addEventListener("input", function () { put(rng.value, true); });
+    rng.addEventListener("change", function () { put(rng.value, false); });
+    box.addEventListener("change", function () { if (box.value !== "" && isFinite(box.value)) put(box.value, false); else show(get()); });
+    box.addEventListener("keydown", function (e) { if (e.key === "Enter") box.blur(); });
+    var reset = function () { put(def(), false); };
+    lab.addEventListener("dblclick", reset);
+    rng.addEventListener("dblclick", reset);
+    lab.title = "Bấm đúp để về mặc định";
+    var refresh = function () { show(get()); };
+    refreshers.push(refresh);
+    refresh();
+    return { refresh: refresh };
+  }
+
+  function checkField(host, label, path) {
+    var f = el("label", "check"), c = el("input"); c.type = "checkbox";
+    f.appendChild(c); f.appendChild(document.createTextNode(" " + label));
+    c.addEventListener("change", function () { setPath(cfg, path, c.checked); commit(); });
+    var refresh = function () { c.checked = !!getPath(cfg, path); };
+    refreshers.push(refresh); refresh();
+    host.appendChild(f);
+  }
+
+  var openState = { exposure: true };
+  try { openState = JSON.parse(localStorage.getItem("lutstudio.open") || "null") || openState; } catch (e) {}
+
+  function tool(pane, id, title, keys, build) {
+    var sec = el("section", "tool");
+    var hd = el("header");
+    hd.innerHTML = '<span class="chev">▸</span><h3>' + title + '</h3><span class="dot" title="Đã chỉnh"></span>';
+    var rs = el("button", "reset", "↺"); rs.title = "Đưa công cụ này về mặc định";
+    hd.appendChild(rs);
+    var body = el("div", "body");
+    sec.appendChild(hd); sec.appendChild(body);
+    $("pane-" + pane).appendChild(sec);
+    if (openState[id]) sec.classList.add("open");
+    hd.addEventListener("click", function (e) {
+      if (e.target === rs) return;
+      sec.classList.toggle("open");
+      openState[id] = sec.classList.contains("open");
+      try { localStorage.setItem("lutstudio.open", JSON.stringify(openState)); } catch (err) {}
+    });
+    rs.addEventListener("click", function () {
+      keys.forEach(function (k) { setPath(cfg, k, clone(getPath(base, k))); });
+      syncAll(); commit();
+    });
+    toolMarks.push(function () {
+      sec.classList.toggle("changed", keys.some(function (k) { return !same(getPath(cfg, k), getPath(base, k)); }));
+    });
+    build(body);
+    return body;
+  }
+
+  /* ── Vòng màu (Color Balance) — như trang Instax ── */
+  var SAT_ARC = [130, 230], LIGHT_ARC = [-50, 50];
+  function colorWheel(host, o) {
+    var S = o.size, dpr = Math.max(1, window.devicePixelRatio || 1);
+    var box = el("div", "cbw");
+    if (o.label && !o.labelBelow) box.appendChild(el("div", "cbw-lbl", o.label));
+    var cv = el("canvas");
+    cv.width = cv.height = Math.round(S * dpr);
+    cv.style.width = cv.style.height = S + "px";
+    box.appendChild(cv);
+    if (o.label && o.labelBelow) box.appendChild(el("div", "cbw-lbl", o.label));
+    var val = el("div", "cbw-val");
+    box.appendChild(val);
+    host.appendChild(box);
+
+    var x = cv.getContext("2d");
+    var C = S / 2, RO = S * 0.33, RW = Math.max(5, S * 0.045), RI = RO - RW, RA = RO + S * 0.1, PUCK = RI - 7;
+    var get = function (p) { return getPath(cfg, p); };
+    function pt(r, deg) { var a = deg * Math.PI / 180; return [C + r * Math.cos(a), C - r * Math.sin(a)]; }
+    function seg(r, a0, a1) { x.beginPath(); x.arc(C, C, r, -a1 * Math.PI / 180, -a0 * Math.PI / 180); x.stroke(); }
+    function tick(r0, r1, deg, color, width) {
+      var p0 = pt(r0, deg), p1 = pt(r1, deg);
+      x.lineCap = "round";
+      x.strokeStyle = "rgba(0,0,0,.6)"; x.lineWidth = width + 2;
+      x.beginPath(); x.moveTo(p0[0], p0[1]); x.lineTo(p1[0], p1[1]); x.stroke();
+      x.strokeStyle = color; x.lineWidth = width;
+      x.beginPath(); x.moveTo(p0[0], p0[1]); x.lineTo(p1[0], p1[1]); x.stroke();
+      x.lineCap = "butt";
+    }
+    function draw() {
+      var h = get(o.hue), s = get(o.sat), L = o.light ? get(o.light) : 0;
+      x.setTransform(dpr, 0, 0, dpr, 0, 0);
+      x.clearRect(0, 0, S, S);
+      x.lineWidth = RW;
+      for (var a = 0; a < 360; a += 3) { x.strokeStyle = "hsl(" + (a + 1.5) + ",88%,55%)"; seg(RI + RW / 2, a, a + 3.6); }
+      x.fillStyle = "#2a2a2a"; x.beginPath(); x.arc(C, C, RI - 0.5, 0, 6.3); x.fill();
+      x.lineWidth = 3;
+      for (var i = 0; i < 40; i++) {
+        var f = (i + 0.5) / 40;
+        x.strokeStyle = "hsl(" + h + "," + Math.round(f * 85) + "%," + Math.round(96 - f * 42) + "%)";
+        seg(RA, SAT_ARC[1] - (i + 1) * 2.5, SAT_ARC[1] - i * 2.5 + 0.3);
+      }
+      tick(RA - 7, RA + 7, SAT_ARC[1] - s, "#f2f2f2", 2.5);
+      if (o.light) {
+        for (i = 0; i < 40; i++) {
+          f = (i + 0.5) / 40;
+          x.strokeStyle = "hsl(0,0%," + Math.round(28 + f * 70) + "%)";
+          seg(RA, LIGHT_ARC[0] + i * 2.5, LIGHT_ARC[0] + (i + 1) * 2.5 + 0.3);
+        }
+        tick(RA - 7, RA + 7, L / 100 * LIGHT_ARC[1], "#f2f2f2", 2.5);
+      }
+      tick(RO + 2, RO + S * 0.05, h, "hsl(" + h + ",95%,55%)", 2.5);
+      var p = pt(s / 100 * PUCK, h);
+      x.strokeStyle = "rgba(0,0,0,.55)"; x.lineWidth = 3; x.beginPath(); x.arc(p[0], p[1], 6, 0, 6.3); x.stroke();
+      x.strokeStyle = "#ececec"; x.lineWidth = 1.5; x.beginPath(); x.arc(p[0], p[1], 6, 0, 6.3); x.stroke();
+      x.fillStyle = "#ececec"; x.beginPath(); x.arc(p[0], p[1], 1.6, 0, 6.3); x.fill();
+      val.textContent = "H " + Math.round(h) + "° · S " + Math.round(s) + (o.light ? " · L " + Math.round(L) : "");
+    }
+    function local(e) {
+      var r = cv.getBoundingClientRect();
+      var dx = (e.clientX - r.left) / r.width * S - C, dy = C - (e.clientY - r.top) / r.height * S;
+      return { d: Math.sqrt(dx * dx + dy * dy), a: (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360 };
+    }
+    function signed(a) { return a > 180 ? a - 360 : a; }
+    function hit(q) {
+      if (q.d <= RO + 3) return "puck";
+      if (Math.abs(q.d - RA) <= 13) {
+        if (q.a >= SAT_ARC[0] - 12 && q.a <= SAT_ARC[1] + 12) return "sat";
+        if (o.light && Math.abs(signed(q.a)) <= LIGHT_ARC[1] + 12) return "light";
+      }
+      return null;
+    }
+    function apply(mode, q) {
+      if (mode === "puck") {
+        setPath(cfg, o.hue, Math.round(q.a) % 360);
+        setPath(cfg, o.sat, Math.round(clamp(q.d / PUCK, 0, 1) * 100));
+      } else if (mode === "sat") {
+        setPath(cfg, o.sat, Math.round(clamp(SAT_ARC[1] - q.a, 0, 100)));
+      } else if (mode === "light") {
+        setPath(cfg, o.light, Math.round(clamp(signed(q.a) / LIGHT_ARC[1], -1, 1) * 100));
+      }
+      draw();
+    }
+    var mode = null;
+    cv.addEventListener("pointerdown", function (e) {
+      var q = local(e);
+      mode = hit(q);
+      if (!mode) return;
+      cv.setPointerCapture(e.pointerId);
+      apply(mode, q); schedule();
+    });
+    cv.addEventListener("pointermove", function (e) {
+      if (mode) { apply(mode, local(e)); schedule(); return; }
+      var m = hit(local(e));
+      cv.style.cursor = m === "puck" ? "crosshair" : m ? "ns-resize" : "default";
+    });
+    function end() { if (mode) { mode = null; commit(); } }
+    cv.addEventListener("pointerup", end);
+    cv.addEventListener("pointercancel", end);
+    cv.addEventListener("dblclick", function (e) {
+      var m = hit(local(e));
+      if (m === "puck") { setPath(cfg, o.hue, getPath(base, o.hue)); setPath(cfg, o.sat, getPath(base, o.sat)); }
+      else if (m === "sat") setPath(cfg, o.sat, getPath(base, o.sat));
+      else if (m === "light") setPath(cfg, o.light, getPath(base, o.light));
+      else return;
+      draw(); commit();
+    });
+    cv.title = "Kéo nút giữa: màu và độ đậm · cung trái: độ đậm · cung phải: độ sáng · bấm đúp: về 0";
+    refreshers.push(draw);
+    draw();
+  }
+
+  /* ── Curve: kéo điểm, bấm chỗ trống để thêm, bấm đúp / kéo ra ngoài để xoá ── */
+  function curveEditor(host) {
+    var chans = [["rgb", "RGB"], ["luma", "Luma"], ["r", "Red"], ["g", "Green"], ["b", "Blue"]];
+    var cur = "rgb";
+    var chips = el("div", "chips");
+    chans.forEach(function (c) {
+      var b = el("button", null, c[1]); b.dataset.ch = c[0];
+      b.addEventListener("click", function () { cur = c[0]; mark(); draw(); });
+      chips.appendChild(b);
+    });
+    function mark() { Array.prototype.forEach.call(chips.children, function (b) { b.setAttribute("aria-pressed", String(b.dataset.ch === cur)); }); }
+    var box = el("div", "curve");
+    var cv = el("canvas"); var S = 300; cv.width = cv.height = S;
+    var read = el("div", "readout", "<span id='cvIn'>vào —</span><span id='cvOut'>ra —</span>");
+    box.appendChild(chips); box.appendChild(cv); box.appendChild(read);
+    host.appendChild(box);
+    var x = cv.getContext("2d");
+    var COL = { rgb: "#e6e6e6", luma: "#bdbdbd", r: "#ff6a6a", g: "#6ad46a", b: "#6a9cff" };
+    var active = -1, drag = false;
+    function pts() { return cfg.curve[cur]; }
+    function toPx(p) { return [p[0] / 255 * (S - 1), (1 - p[1] / 255) * (S - 1)]; }
+    function draw() {
+      x.clearRect(0, 0, S, S);
+      x.strokeStyle = "#2f2f2f"; x.lineWidth = 1;
+      for (var i = 1; i < 4; i++) { var g = Math.round(i * S / 4) + 0.5; x.beginPath(); x.moveTo(g, 0); x.lineTo(g, S); x.moveTo(0, g); x.lineTo(S, g); x.stroke(); }
+      x.strokeStyle = "#3a3a3a"; x.beginPath(); x.moveTo(0, S); x.lineTo(S, 0); x.stroke();
+      var t = curveTable(pts(), 256);
+      x.strokeStyle = COL[cur]; x.lineWidth = 1.6; x.beginPath();
+      for (i = 0; i < 256; i++) { var px = i / 255 * (S - 1), py = (1 - t[i]) * (S - 1); if (i) x.lineTo(px, py); else x.moveTo(px, py); }
+      x.stroke();
+      pts().forEach(function (p, j) {
+        var q = toPx(p);
+        x.fillStyle = j === active ? COL[cur] : "#1b1b1b"; x.strokeStyle = COL[cur]; x.lineWidth = 1.5;
+        x.beginPath(); x.rect(q[0] - 4, q[1] - 4, 8, 8); x.fill(); x.stroke();
+      });
+      var a = pts()[active];
+      $("cvIn").textContent = a ? "vào " + Math.round(a[0]) : "vào —";
+      $("cvOut").textContent = a ? "ra " + Math.round(a[1]) : "ra —";
+    }
+    function pos(e) {
+      var r = cv.getBoundingClientRect();
+      return [clamp((e.clientX - r.left) / r.width * 255, -40, 295), clamp((1 - (e.clientY - r.top) / r.height) * 255, -40, 295)];
+    }
+    function hit(p) {
+      var best = -1, bd = 9;
+      pts().forEach(function (q, j) { var d = Math.hypot(q[0] - p[0], q[1] - p[1]); if (d < bd) { bd = d; best = j; } });
+      return best;
+    }
+    cv.addEventListener("pointerdown", function (e) {
+      var p = pos(e), list = pts();
+      active = hit(p);
+      if (active < 0) {
+        var xx = clamp(Math.round(p[0]), 1, 254);
+        if (list.some(function (q) { return Math.abs(q[0] - xx) < 2; })) return;
+        list.push([xx, clamp(Math.round(p[1]), 0, 255)]);
+        list.sort(function (a, b) { return a[0] - b[0]; });
+        active = list.findIndex(function (q) { return q[0] === xx; });
+      }
+      drag = true; cv.setPointerCapture(e.pointerId); draw(); schedule();
+    });
+    cv.addEventListener("pointermove", function (e) {
+      if (!drag || active < 0) return;
+      var p = pos(e), list = pts(), n = list.length;
+      var lo = active > 0 ? list[active - 1][0] + 1 : 0, hi = active < n - 1 ? list[active + 1][0] - 1 : 255;
+      var out = (p[1] < -25 || p[1] > 280) && active > 0 && active < n - 1;
+      list[active] = [clamp(Math.round(p[0]), lo, hi), clamp(Math.round(p[1]), 0, 255)];
+      cv.style.cursor = out ? "not-allowed" : "crosshair";
+      draw(); schedule();
+    });
+    function end(e) {
+      if (!drag) return;
+      drag = false; cv.style.cursor = "crosshair";
+      var p = pos(e), list = pts();
+      if ((p[1] < -25 || p[1] > 280) && active > 0 && active < list.length - 1) { list.splice(active, 1); active = -1; }
+      draw(); commit();
+    }
+    cv.addEventListener("pointerup", end);
+    cv.addEventListener("pointercancel", end);
+    cv.addEventListener("dblclick", function (e) {
+      var j = hit(pos(e)), list = pts();
+      if (j > 0 && j < list.length - 1) { list.splice(j, 1); active = -1; draw(); commit(); }
+    });
+    cv.title = "Bấm để thêm điểm · kéo điểm · bấm đúp hoặc kéo ra ngoài để xoá";
+    refreshers.push(function () { active = -1; draw(); });
+    mark(); draw();
+  }
+
+  /** Thanh con: tab nhỏ trong một công cụ (Color Balance, Color Editor). */
+  function subTabs(host, modes, store, initial) {
+    var cur = initial;
+    try { cur = localStorage.getItem(store) || cur; } catch (e) {}
+    var tabs = el("div", "cb-tabs"), panes = {};
+    modes.forEach(function (m) {
+      var bt = el("button", null, m[1]); bt.dataset.k = m[0];
+      bt.addEventListener("click", function () { show(m[0]); });
+      tabs.appendChild(bt);
+      panes[m[0]] = el("div", "cb-pane");
+    });
+    host.appendChild(tabs);
+    modes.forEach(function (m) { host.appendChild(panes[m[0]]); });
+    function show(k) {
+      if (!panes[k]) k = modes[0][0];
+      cur = k;
+      refreshers.forEach(function (f) { f(); });
+      modes.forEach(function (m) { panes[m[0]].hidden = m[0] !== k; });
+      Array.prototype.forEach.call(tabs.children, function (x) { x.setAttribute("aria-pressed", String(x.dataset.k === k)); });
+      try { localStorage.setItem(store, k); } catch (e) {}
+    }
+    return { panes: panes, show: show, init: function () { show(cur); } };
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     5. DỰNG BẢNG CÔNG CỤ
+     ═══════════════════════════════════════════════════════════════ */
+  var R = LOOK_RANGES;
+  var HUE_TRACK = "linear-gradient(90deg,#f33,#ff3 17%,#3f3 33%,#3ff 50%,#33f 67%,#f3f 83%,#f33)";
+  // Rãnh hue theo L*C*h (đúng thang của Color Editor Advanced / Skin Tone).
+  var LCH_TRACK = "linear-gradient(90deg," + [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330, 360].map(function (h) {
+    return STUDIO.lchCss(62, 50, h) + " " + (h / 3.6).toFixed(1) + "%";
+  }).join(",") + ")";
+
+  slider($("strengthHost"), { label: "Độ đậm", path: "strength", min: 0, max: 100, step: 1, zero: 0, def: function () { return 100; } });
+  slider($("baseOpacity"), { label: "Opacity LUT nền", path: "lut.opacity", min: 0, max: 100, step: 1, zero: 0, def: function () { return 100; } });
+
+  // ── Phơi sáng ──
+  tool("exposure", "wb", "White Balance", ["whiteBalance"], function (b) {
+    var row = el("div", "pickrow"), pk = el("button", "btn", "Ống hút: chọn điểm xám");
+    row.appendChild(pk); b.appendChild(row);
+    pk.addEventListener("click", function () {
+      startPick("Chọn một điểm phải là xám / trắng", function (rgb) {
+        var o = rgb;
+        if (userLut && cfg.lut.opacity > 0) {
+          var l = sampleLut(userLut, o[0], o[1], o[2]), m = cfg.lut.opacity / 100;
+          o = [o[0] + (l[0] - o[0]) * m, o[1] + (l[1] - o[1]) * m, o[2] + (l[2] - o[2]) * m];
+        }
+        var lin = [toLinear(o[0]), toLinear(o[1]), toLinear(o[2])];
+        if (Math.max(lin[0], lin[1], lin[2]) < 0.002) { toast("Điểm quá tối để cân màu."); return; }
+        var kt = STUDIO.solveWb(lin);
+        cfg.whiteBalance.kelvin = kt[0]; cfg.whiteBalance.tint = kt[1];
+        syncAll(); commit(); toast("White Balance: " + kt[0] + " K, Tint " + kt[1]);
+      });
+    });
+    slider(b, { label: "Kelvin", path: "whiteBalance.kelvin", min: R.kelvin[0], max: R.kelvin[1], step: 50, zero: 5500,
+                track: "linear-gradient(90deg,#4f7fd8,#d8d8d8 40%,#e8a640)" });
+    slider(b, { label: "Tint", path: "whiteBalance.tint", min: -50, max: 50, step: 1, zero: 0,
+                track: "linear-gradient(90deg,#4fbf5a,#d8d8d8 50%,#d04fc0)" });
+    b.appendChild(el("p", "note", "5500 K = giữ nguyên. Cao hơn ấm lên, thấp hơn lạnh đi. Tint dương ngả hồng, âm ngả lục."));
+  });
+  tool("exposure", "exposure", "Exposure", ["exposure"], function (b) {
+    slider(b, { label: "Exposure", path: "exposure.exposure", min: R.exposure[0], max: R.exposure[1], step: 0.01, zero: 0 });
+    slider(b, { label: "Contrast", path: "exposure.contrast", min: -50, max: 50, step: 1, zero: 0 });
+    slider(b, { label: "Brightness", path: "exposure.brightness", min: -50, max: 50, step: 1, zero: 0 });
+    slider(b, { label: "Saturation", path: "exposure.saturation", min: -100, max: 100, step: 1, zero: 0 });
+  });
+  tool("exposure", "hdr", "High Dynamic Range", ["hdr"], function (b) {
+    ["highlight", "shadow", "white", "black"].forEach(function (k) {
+      slider(b, { label: k[0].toUpperCase() + k.slice(1), path: "hdr." + k, min: -100, max: 100, step: 1, zero: 0 });
+    });
+    b.appendChild(el("p", "note", "Bản theo từng điểm ảnh (công thức HDR của Capture One, nền = chính điểm đó) để LUT chứa được. " +
+                                  "Highlight âm kéo vùng sáng xuống, Shadow dương nâng vùng tối."));
+  });
+  tool("exposure", "levels", "Levels", ["levels"], function (b) {
+    var ch = "rgb", chips = el("div", "chips"), host = el("div");
+    [["rgb", "RGB"], ["r", "Red"], ["g", "Green"], ["b", "Blue"]].forEach(function (c) {
+      var bt = el("button", null, c[1]); bt.dataset.ch = c[0];
+      bt.addEventListener("click", function () { ch = c[0]; mark(); syncAll(); });
+      chips.appendChild(bt);
+    });
+    function mark() { Array.prototype.forEach.call(chips.children, function (x) { x.setAttribute("aria-pressed", String(x.dataset.ch === ch)); }); }
+    b.appendChild(chips); b.appendChild(host); mark();
+    var L = function (k) {
+      return {
+        get: function () { return cfg.levels[ch][k]; },
+        set: function (v) {
+          var l = cfg.levels[ch]; l[k] = v;
+          if (k === "inBlack" && l.inWhite <= v) l.inWhite = Math.min(255, v + 1);
+          if (k === "inWhite" && l.inBlack >= v) l.inBlack = Math.max(0, v - 1);
+        },
+        def: function () { return base.levels[ch][k]; }
+      };
+    };
+    slider(host, Object.assign({ label: "Input black", min: 0, max: 254, step: 1, zero: 0 }, L("inBlack")));
+    slider(host, Object.assign({ label: "Input white", min: 1, max: 255, step: 1, zero: 255 }, L("inWhite")));
+    slider(host, Object.assign({ label: "Midtone", min: -100, max: 100, step: 1, zero: 0 }, L("midtone")));
+    slider(host, Object.assign({ label: "Output black", min: 0, max: 255, step: 1, zero: 0 }, L("outBlack")));
+    slider(host, Object.assign({ label: "Output white", min: 0, max: 255, step: 1, zero: 255 }, L("outWhite")));
+  });
+  tool("exposure", "curve", "Curve", ["curve"], function (b) { curveEditor(b); });
+
+  // ── Màu ──
+  tool("color", "colorBalance", "Color Balance", ["colorBalance"], function (b) {
+    var t = subTabs(b, [["master", "Master"], ["3way", "3-Way"], ["shadow", "Shadow"], ["midtone", "Midtone"], ["highlight", "Highlight"]], "lutstudio.cb", "3way");
+    function zone(z) { return { hue: "colorBalance." + z + ".hue", sat: "colorBalance." + z + ".saturation", light: "colorBalance." + z + ".lightness" }; }
+    colorWheel(t.panes.master, { hue: "colorBalance.master.hue", sat: "colorBalance.master.saturation", size: 210 });
+    var top = el("div", "cb-row center"), row = el("div", "cb-row");
+    t.panes["3way"].appendChild(top); t.panes["3way"].appendChild(row);
+    colorWheel(top, Object.assign({ label: "Midtone", labelBelow: true, size: 150 }, zone("midtone")));
+    colorWheel(row, Object.assign({ label: "Shadow", size: 150 }, zone("shadow")));
+    colorWheel(row, Object.assign({ label: "Highlight", size: 150 }, zone("highlight")));
+    ["shadow", "midtone", "highlight"].forEach(function (z) { colorWheel(t.panes[z], Object.assign({ size: 210 }, zone(z))); });
+    t.init();
+  });
+
+  tool("color", "colorEditor", "Color Editor", ["colorEditor", "advanced", "skin"], function (b) {
+    var t = subTabs(b, [["basic", "Basic"], ["advanced", "Advanced"], ["skin", "Skin Tone"]], "lutstudio.ce", "basic");
+
+    /* Basic: 8 lát cố định của Capture One */
+    (function (host) {
+      var COLORS = { red: "#d9333b", orange: "#e5862e", yellow: "#e5cf33", green: "#3faa45", cyan: "#33c0cf", blue: "#3463d6", purple: "#7a45d0", magenta: "#bf3fc2" };
+      var NAMES = { red: "Red", orange: "Orange", yellow: "Yellow", green: "Green", cyan: "Cyan", blue: "Blue", purple: "Purple", magenta: "Magenta" };
+      var sel = "orange", sw = el("div", "swatches"), title = el("div", "sub"), box = el("div");
+      var row = el("div", "pickrow"), pk = el("button", "btn ghost", "Ống hút: chọn lát theo màu trên ảnh");
+      row.appendChild(pk);
+      COLOR_EDITOR_BANDS.forEach(function (k) {
+        var bt = el("button"); bt.style.background = COLORS[k]; bt.dataset.k = k; bt.title = NAMES[k];
+        bt.addEventListener("click", function () { sel = k; mark(); syncAll(); });
+        sw.appendChild(bt);
+      });
+      pk.addEventListener("click", function () {
+        startPick("Chọn màu cần chỉnh", function (rgb) {
+          var lch = STUDIO.lchAt(cfg, userLut, rgb[0], rgb[1], rgb[2]);
+          if (lch[1] < 6) { toast("Màu này gần như xám — không thuộc lát nào."); return; }
+          var best = null, bw = 0;
+          EDITOR_SLICES.forEach(function (s) { var w = sliceWeight(lch[2], s); if (w > bw) { bw = w; best = s.band; } });
+          if (best) { sel = best; mark(); syncAll(); toast("Lát " + NAMES[best]); }
+        });
+      });
+      function mark() {
+        Array.prototype.forEach.call(sw.children, function (x) {
+          var k = x.dataset.k, c = cfg.colorEditor[k];
+          x.setAttribute("aria-pressed", String(k === sel));
+          x.classList.toggle("changed", !!(c.hue || c.saturation || c.lightness));
+        });
+        title.textContent = NAMES[sel];
+      }
+      host.appendChild(row); host.appendChild(sw); host.appendChild(title); host.appendChild(box);
+      var C = function (k, lo, hi) {
+        return {
+          get: function () { return cfg.colorEditor[sel][k]; },
+          set: function (v) { cfg.colorEditor[sel][k] = v; },
+          def: function () { return 0; },
+          onChange: mark, min: lo, max: hi, step: 1, zero: 0
+        };
+      };
+      slider(box, Object.assign({ label: "Hue" }, C("hue", -30, 30)));
+      slider(box, Object.assign({ label: "Saturation" }, C("saturation", R.editorSat[0], R.editorSat[1])));
+      slider(box, Object.assign({ label: "Lightness" }, C("lightness", -100, 100)));
+      refreshers.push(mark); mark();
+    })(t.panes.basic);
+
+    /* Advanced: vùng màu tự chọn bằng ống hút, nhiều vùng */
+    advMask = el("input"); skinMask = el("input");
+    (function (host) {
+      var sel = 0;
+      var row = el("div", "pickrow");
+      var add = el("button", "btn", "+ Chọn màu trên ảnh"), del = el("button", "btn ghost", "Xoá vùng");
+      var mk = el("label", "check"); advMask.type = "checkbox"; mk.appendChild(advMask); mk.appendChild(document.createTextNode(" Xem vùng chọn"));
+      row.appendChild(add); row.appendChild(del); row.appendChild(mk);
+      var list = el("div", "adv-list"), empty = el("p", "note", "Chưa có vùng màu. Bấm “+ Chọn màu trên ảnh” rồi bấm lên ảnh."), box = el("div");
+      host.appendChild(row); host.appendChild(list); host.appendChild(empty); host.appendChild(box);
+      function cur() { return cfg.advanced[sel]; }
+      function draw() {
+        if (sel >= cfg.advanced.length) sel = Math.max(0, cfg.advanced.length - 1);
+        list.innerHTML = "";
+        cfg.advanced.forEach(function (a, i) {
+          var bt = el("button"); bt.style.background = STUDIO.lchCss(62, 50, a.center);
+          bt.setAttribute("aria-pressed", String(i === sel));
+          bt.classList.toggle("changed", !!(a.hue || a.saturation || a.lightness));
+          bt.title = "Vùng " + (i + 1) + " · hue " + Math.round(a.center) + "°";
+          bt.addEventListener("click", function () { sel = i; syncAll(); updMask(); });
+          list.appendChild(bt);
+        });
+        var has = cfg.advanced.length > 0;
+        box.hidden = !has; empty.hidden = has; del.disabled = !has;
+        add.disabled = cfg.advanced.length >= 12;
+      }
+      function updMask() {
+        var m = advMask.checked && cur() ? cur() : null;
+        if (m) skinMask.checked = false;
+        setMask(m || (skinMask.checked ? cfg.skin : null));
+      }
+      advMask.addEventListener("change", updMask);
+      add.addEventListener("click", function () {
+        startPick("Chọn màu cần chỉnh", function (rgb) {
+          var lch = STUDIO.lchAt(cfg, userLut, rgb[0], rgb[1], rgb[2]);
+          if (lch[1] < 4) { toast("Màu này gần như xám — chọn chỗ có màu hơn."); return; }
+          var a = clone(STUDIO.ADV_DEF); a.center = Math.round(lch[2]) % 360;
+          cfg.advanced.push(a); sel = cfg.advanced.length - 1;
+          syncAll(); commit(); updMask();
+        });
+      });
+      del.addEventListener("click", function () {
+        if (!cur()) return;
+        cfg.advanced.splice(sel, 1); sel = Math.max(0, sel - 1);
+        syncAll(); commit(); updMask();
+      });
+      var A = function (k, label, extra) {
+        var rg = STUDIO.ADV_RANGE[k];
+        return Object.assign({
+          label: label, min: rg[0], max: rg[1], step: 1, zero: STUDIO.ADV_DEF[k],
+          get: function () { return cur() ? cur()[k] : STUDIO.ADV_DEF[k]; },
+          set: function (v) { if (cur()) cur()[k] = v; },
+          def: function () { return STUDIO.ADV_DEF[k]; },
+          onChange: function () { draw(); if (maskSel) updMask(); }
+        }, extra || {});
+      };
+      box.appendChild(el("div", "sub", "Vùng chọn"));
+      slider(box, A("center", "Hue (tâm)", { track: LCH_TRACK, zero: -1, def: function () { return cur() ? cur().center : 0; } }));
+      slider(box, A("width", "Độ rộng ±°"));
+      slider(box, A("smooth", "Smoothness"));
+      slider(box, A("cmin", "Bỏ màu nhạt (chroma)"));
+      box.appendChild(el("div", "sub", "Chỉnh"));
+      slider(box, A("hue", "Hue"));
+      slider(box, A("saturation", "Saturation"));
+      slider(box, A("lightness", "Lightness"));
+      refreshers.push(draw); draw();
+    })(t.panes.advanced);
+
+    /* Skin Tone: kéo màu da về một tông đều (Uniformity) + chỉnh thêm (Amount) */
+    (function (host) {
+      var row = el("div", "pickrow");
+      var chip = el("span", "chip"), info = el("span", "note");
+      var pk = el("button", "btn", "Ống hút: chọn màu da");
+      var mk = el("label", "check"); skinMask.type = "checkbox"; mk.appendChild(skinMask); mk.appendChild(document.createTextNode(" Xem vùng chọn"));
+      row.appendChild(chip); row.appendChild(pk); row.appendChild(mk);
+      host.appendChild(row); host.appendChild(info);
+      function draw() {
+        var s = cfg.skin;
+        chip.style.background = STUDIO.lchCss(s.L0, s.C0, s.center);
+        info.textContent = "Tông đích: L " + Math.round(s.L0) + " · C " + Math.round(s.C0) + " · h " + Math.round(s.center) + "°";
+      }
+      skinMask.addEventListener("change", function () {
+        if (skinMask.checked) advMask.checked = false;
+        setMask(skinMask.checked ? cfg.skin : null);
+      });
+      pk.addEventListener("click", function () {
+        startPick("Chọn một điểm da đẹp làm tông đích", function (rgb) {
+          var lch = STUDIO.lchAt(cfg, userLut, rgb[0], rgb[1], rgb[2]);
+          cfg.skin.center = Math.round(lch[2]) % 360; cfg.skin.C0 = Math.round(lch[1]); cfg.skin.L0 = Math.round(lch[0]);
+          syncAll(); commit(); if (skinMask.checked) setMask(cfg.skin);
+        });
+      });
+      var Sk = function (k, label, extra) {
+        return Object.assign({
+          label: label, path: "skin." + k, min: 0, max: 100, step: 1, zero: 0,
+          def: function () { return STUDIO.SKIN_DEF[k]; },
+          onChange: function () { draw(); if (skinMask.checked) setMask(cfg.skin); }
+        }, extra || {});
+      };
+      host.appendChild(el("div", "sub", "Vùng chọn"));
+      slider(host, Sk("center", "Hue (tâm)", { min: 0, max: 359, track: LCH_TRACK, zero: -1 }));
+      slider(host, Sk("width", "Độ rộng ±°", { min: 1, max: 90, zero: -1 }));
+      slider(host, Sk("smooth", "Smoothness", { min: 0, max: 60, zero: -1 }));
+      slider(host, Sk("cmin", "Bỏ màu nhạt (chroma)", { min: 0, max: 40, zero: -1 }));
+      host.appendChild(el("div", "sub", "Amount"));
+      slider(host, Sk("hue", "Hue", { min: -30, max: 30 }));
+      slider(host, Sk("saturation", "Saturation", { min: -100, max: 200 }));
+      slider(host, Sk("lightness", "Lightness", { min: -100, max: 100 }));
+      host.appendChild(el("div", "sub", "Uniformity"));
+      slider(host, Sk("uniHue", "Hue"));
+      slider(host, Sk("uniSat", "Saturation"));
+      slider(host, Sk("uniLight", "Lightness"));
+      refreshers.push(draw); draw();
+    })(t.panes.skin);
+
+    t.init();
+  });
+
+  tool("color", "blackWhite", "Black & White", ["blackWhite"], function (b) {
+    checkField(b, "Bật Black & White", "blackWhite.enabled");
+    var T = { red: "#d9333b", yellow: "#e5cf33", green: "#3faa45", cyan: "#33c0cf", blue: "#3463d6", magenta: "#bf3fc2" };
+    BW_BANDS.forEach(function (k) {
+      slider(b, { label: k[0].toUpperCase() + k.slice(1), path: "blackWhite." + k, min: -100, max: 100, step: 1, zero: 0,
+                  track: "linear-gradient(90deg,#222," + T[k] + ")" });
+    });
+    b.appendChild(el("div", "sub", "Split Tones"));
+    slider(b, { label: "Highlight hue", path: "blackWhite.highlightHue", min: 0, max: 359, step: 1, track: HUE_TRACK });
+    slider(b, { label: "Highlight saturation", path: "blackWhite.highlightSaturation", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Shadow hue", path: "blackWhite.shadowHue", min: 0, max: 359, step: 1, track: HUE_TRACK });
+    slider(b, { label: "Shadow saturation", path: "blackWhite.shadowSaturation", min: 0, max: 100, step: 1, zero: 0 });
+  });
+
+  function setMask(m) { maskSel = m ? clone(m) : null; schedule(); }
+
+  /* ── tab ── */
+  var tabBtns = document.querySelectorAll(".tabs button");
+  function selectTab(name) {
+    Array.prototype.forEach.call(tabBtns, function (b) { b.setAttribute("aria-selected", String(b.dataset.tab === name)); });
+    ["exposure", "color"].forEach(function (n) { $("pane-" + n).hidden = n !== name; });
+    try { localStorage.setItem("lutstudio.tab", name); } catch (e) {}
+  }
+  Array.prototype.forEach.call(tabBtns, function (b) { b.addEventListener("click", function () { selectTab(b.dataset.tab); }); });
+
+  /* ═══════════════════════════════════════════════════════════════
+     6. LUT NỀN — nạp / bỏ / nhớ (IndexedDB: file 65³ quá lớn cho localStorage)
+     ═══════════════════════════════════════════════════════════════ */
+  var DB = (function () {
+    function open() {
+      return new Promise(function (ok, no) {
+        try {
+          var rq = indexedDB.open("lutstudio", 1);
+          rq.onupgradeneeded = function () { rq.result.createObjectStore("kv"); };
+          rq.onsuccess = function () { ok(rq.result); };
+          rq.onerror = function () { no(rq.error); };
+        } catch (e) { no(e); }
+      });
+    }
+    function tx(mode, fn) {
+      return open().then(function (db) {
+        return new Promise(function (ok, no) {
+          var t = db.transaction("kv", mode), r = fn(t.objectStore("kv"));
+          t.oncomplete = function () { ok(r && r.result); };
+          t.onerror = function () { no(t.error); };
+        });
+      });
+    }
+    return {
+      get: function (k) { return tx("readonly", function (s) { return s.get(k); }).catch(function () { return null; }); },
+      set: function (k, v) { return tx("readwrite", function (s) { s.put(v, k); }).catch(function () {}); },
+      del: function (k) { return tx("readwrite", function (s) { s.delete(k); }).catch(function () {}); }
+    };
+  })();
+
+  function showBase() {
+    var n = $("baseName");
+    if (userLut) n.innerHTML = "<b></b> · " + userLut.size + "³";
+    else n.textContent = "Không có — bấm Nạp LUT";
+    if (userLut) n.querySelector("b").textContent = cfg.lut.file || "LUT";
+    n.title = userLut ? cfg.lut.file : "";
+    $("baseDrop").disabled = !userLut;
+    $("baseOpacity").hidden = !userLut;
+  }
+  refreshers.push(showBase);
+
+  function stem(name) { return String(name || "").replace(/\.cube$/i, "").replace(/[\\/:*?"<>|]+/g, "_").trim(); }
+
+  function loadCubeFile(f) {
+    f.text().then(function (txt) {
+      var lut;
+      try { lut = parseCube(txt); } catch (err) { toast("Không đọc được .cube: " + err.message); return; }
+      userLut = { size: lut.size, data: lut.data, id: Date.now() };
+      cfg.lut.file = f.name; cfg.lut.opacity = 100;
+      DB.set("base", { name: f.name, size: lut.size, data: lut.data, id: userLut.id });
+      var nm = $("lutName");
+      if (!nm.value || nm.dataset.auto === "1") { nm.value = stem(f.name) + "-edit"; nm.dataset.auto = "1"; }
+      syncAll(); commit();
+      toast("Đã nạp LUT nền " + f.name + " (" + lut.size + "³) — chỉnh chồng lên rồi Xuất.");
+    });
+  }
+  $("cubeFile").addEventListener("change", function (e) { var f = e.target.files[0]; e.target.value = ""; if (f) loadCubeFile(f); });
+  $("baseDrop").addEventListener("click", function () {
+    userLut = null; cfg.lut.file = ""; cfg.lut.opacity = 100; DB.del("base");
+    syncAll(); commit(); toast("Đã bỏ LUT nền.");
+  });
+
+  /* ═══════════════════════════════════════════════════════════════
+     7. XUẤT .cube 65³ — LUT nền + mọi công cụ + Độ đậm gộp thành một file
+     ═══════════════════════════════════════════════════════════════ */
+  $("lutName").addEventListener("input", function (e) { e.target.dataset.auto = "0"; remember(); });
+  $("exportBtn").addEventListener("click", function () {
+    var name = stem($("lutName").value) || "filmong-look";
+    var key = JSON.stringify(cfg) + "|" + (userLut ? userLut.id : 0) + "|";
+    var lut = !maskSel && lutState.key === key && lutState.lut.size === STUDIO.EXPORT_SIZE ? lutState.lut
+      : STUDIO.build(cfg, userLut, STUDIO.EXPORT_SIZE, null);
+    var notes = ["Filmong LUT Studio - cong thuc chinh mau Capture One, sRGB vao / sRGB ra"];
+    if (userLut) notes.push("LUT nen: " + (cfg.lut.file || "").replace(/[^\x20-\x7e]/g, "?") + " (opacity " + cfg.lut.opacity + "%)");
+    if (cfg.strength !== 100) notes.push("Do dam: " + cfg.strength + "%");
+    var text = STUDIO.toCube(lut, name, notes);
+    try {
+      var a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));
+      a.download = name + ".cube";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+      toast("Đã xuất " + name + ".cube (" + lut.size + "³)");
+    } catch (e) { toast("Trình duyệt không cho tải file."); }
+  });
+
+  $("resetBtn").addEventListener("click", function () {
+    var keep = clone(cfg.lut);
+    cfg = STUDIO.neutral(); cfg.lut = keep;
+    advMask.checked = false; skinMask.checked = false; maskSel = null;
+    syncAll(); commit(); toast("Đã đặt lại mọi công cụ (giữ LUT nền). Ctrl+Z để quay lại.");
+  });
+
+  function toast(msg) {
+    var t = $("toast"); t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t); toast._t = setTimeout(function () { t.classList.remove("show"); }, 2600);
+  }
+
+  function remember() {
+    try { localStorage.setItem("lutstudio.cfg", JSON.stringify({ cfg: cfg, name: $("lutName").value, auto: $("lutName").dataset.auto })); } catch (e) {}
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     8. KHỞI ĐỘNG
+     ═══════════════════════════════════════════════════════════════ */
+  (function init() {
+    var nm = $("lutName");
+    nm.value = "filmong-look"; nm.dataset.auto = "1";
+    try {
+      var s = JSON.parse(localStorage.getItem("lutstudio.cfg") || "null");
+      if (s && s.cfg) {
+        cfg = STUDIO.normalize(s.cfg);
+        if (s.name) { nm.value = s.name; nm.dataset.auto = s.auto || "0"; }
+      }
+    } catch (e) {}
+    var t = "exposure";
+    try { t = localStorage.getItem("lutstudio.tab") || t; } catch (e) {}
+    selectTab(t);
+    pushHist();
+    syncAll();
+    applySplit();
+    loadSample();
+    DB.get("base").then(function (v) {
+      if (v && v.data && v.size && cfg.lut.file) {
+        userLut = { size: v.size, data: v.data instanceof Float32Array ? v.data : new Float32Array(v.data), id: v.id || 1 };
+        syncAll(); schedule();
+      } else if (cfg.lut.file) {
+        cfg.lut.file = ""; syncAll();
+      }
+    });
+  })();
+})();
+</script>
