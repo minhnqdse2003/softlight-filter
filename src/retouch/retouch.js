@@ -5,7 +5,7 @@ import { smoothFaces } from './lam-min.js';
 import { coLuoiMat, openLuoiMat } from './luoi-mat.js';
 import { toSangToi } from './to-sang-toi.js';
 import { nhatMun } from './nhat-mun.js';
-import { MODEL_DIR, MODEL_FILES, openXoaMun, xoaMun } from './xoa-mun.js';
+import { MODEL_DIR, MODEL_FILES, openMatNa, openXoaMun, xoaMun } from './xoa-mun.js';
 
 /**
  * RETOUCH DA — nhặt mụn rồi làm mịn da trên mọi khuôn mặt, chạy TRƯỚC tuyết và
@@ -18,8 +18,13 @@ import { MODEL_DIR, MODEL_FILES, openXoaMun, xoaMun } from './xoa-mun.js';
  *   blemishMethod  'capture-one' = model Remove Blemishes của Capture One
  *                  (models/mun, chọn CPU / GPU nhanh hơn); thiếu model hay nạp
  *                  hỏng thì tự lùi về 'builtin'
+ *                  = Retouch v1
+ *                  'c1-mask'     = Retouch v2: cùng khung xử lý Capture One (thu mặt
+ *                  về 450, bản đồ sửa, trộn theo mặt nạ da skinMasking của Capture
+ *                  One, thanh Mức) nhưng phần CHỮA là bộ nhặt mụn tự viết — không
+ *                  cần DnCNN; thiếu skinMasking thì lùi về 'builtin'
  *                  'builtin'     = bộ nhặt mụn tự viết (nhat-mun.js), ~0,5 giây
- *   blemishAmount  0–100, như thanh Remove Blemishes (chỉ cách 'capture-one')
+ *   blemishAmount  0–100, như thanh Remove Blemishes ('capture-one', 'c1-mask')
  *   smooth         độ mịn 0–100: 0 = không làm mịn; Nhẹ 30, Vừa 60, Mạnh 90
  *   dodgeBurn      tô sáng / tối 0–100 (to-sang-toi.js): 0 = tắt
  *   contour        tạo khối, chạy theo cùng mức dodgeBurn
@@ -39,18 +44,19 @@ export async function retouch(rgb, width, height, cfg) {
   // Nhặt mụn TRƯỚC: làm mịn sau đó còn làm đều chỗ vừa chữa với da quanh nó.
   if (cfg.blemish) {
     let method = cfg.blemishMethod;
-    if (method === 'capture-one') {
+    if (method === 'capture-one' || method === 'c1-mask') {
       try {
-        await openXoaMun();
+        await (method === 'c1-mask' ? openMatNa() : openXoaMun());
       } catch (err) {
-        out.warn = `không dùng được model xoá mụn Capture One (${err.message}) — dùng bộ nhặt mụn tự viết`;
+        const ten = method === 'c1-mask' ? 'mặt nạ da Capture One (Retouch v2)' : 'model xoá mụn Capture One (Retouch v1)';
+        out.warn = `không dùng được ${ten} (${err.message}) — dùng bộ nhặt mụn tự viết`;
         method = 'builtin';
       }
     }
     out.method = method;
-    out.blemish = method === 'capture-one'
-      ? await xoaMun(rgb, width, height, faces, { amount: cfg.blemishAmount })
-      : await nhatMun(rgb, width, height, faces);
+    out.blemish = method === 'builtin'
+      ? await nhatMun(rgb, width, height, faces)
+      : await xoaMun(rgb, width, height, faces, { amount: cfg.blemishAmount, chua: method === 'c1-mask' ? 'tu-viet' : 'dncnn' });
   }
   // Tô sáng / tối sau nhặt mụn (đốm đã chữa không bị tính là vết loang), trước
   // làm mịn. Thiếu model lưới mặt thì bỏ riêng bước này, các bước khác vẫn chạy.
@@ -87,17 +93,29 @@ export async function retouchDoctor() {
       rows.push([false, 'Lưới mặt (tô sáng / tối)', `LỖI: ${err.message} — bước tô sáng / tối bỏ qua`]);
     }
   }
+  // Retouch v2 chỉ cần mặt nạ da của Capture One.
+  if (!existsSync(join(MODEL_DIR, MODEL_FILES.skin))) {
+    rows.push([false, 'Retouch v2 (mặt nạ da C1)', `THIẾU ${MODEL_FILES.skin} trong models/mun — Retouch v2 dùng bộ tự viết`]);
+  } else {
+    try {
+      const t0 = Date.now();
+      const e = await openMatNa();
+      rows.push([true, 'Retouch v2 (mặt nạ da C1)', `nạp được (${e.may.skin}), ${Date.now() - t0} ms`]);
+    } catch (err) {
+      rows.push([false, 'Retouch v2 (mặt nạ da C1)', `LỖI: ${err.message} — Retouch v2 dùng bộ tự viết`]);
+    }
+  }
   const missing = Object.values(MODEL_FILES).filter((f) => !existsSync(join(MODEL_DIR, f)));
   if (missing.length) {
-    rows.push([false, 'Xoá mụn Capture One', `THIẾU ${missing.join(', ')} trong models/mun — nhặt mụn dùng bộ tự viết`]);
+    rows.push([false, 'Retouch v1 (Capture One)', `THIẾU ${missing.join(', ')} trong models/mun — nhặt mụn dùng bộ tự viết`]);
     return rows;
   }
   try {
     const t0 = Date.now();
     const e = await openXoaMun();
-    rows.push([true, 'Xoá mụn Capture One', `${e.may.ghiChu}; một ô ${e.msO} ms (nạp + đo ${Date.now() - t0} ms)`]);
+    rows.push([true, 'Retouch v1 (Capture One)', `${e.may.ghiChu}; một ô ${e.msO} ms (nạp + đo ${Date.now() - t0} ms)`]);
   } catch (err) {
-    rows.push([false, 'Xoá mụn Capture One', `LỖI: ${err.message} — nhặt mụn dùng bộ tự viết`]);
+    rows.push([false, 'Retouch v1 (Capture One)', `LỖI: ${err.message} — nhặt mụn dùng bộ tự viết`]);
   }
   return rows;
 }

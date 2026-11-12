@@ -7,7 +7,7 @@ import { renderLook } from '../instax/look.js';
 import { loadUserLut } from '../instax/pipeline.js';
 import { loadConfig, lookPreset } from './config.js';
 import { MATTE_MODELS, modelPath, mattePng, openSession, personMatte } from './matte.js';
-import { buildScene, drawSnow, normalizeSnow, seedFromName } from './snow.js';
+import { buildScene, defaultSnow, drawSnow, normalizeSnow, overlayFlakes, seedFromName, settledFlakes, snowV1 } from './snow.js';
 
 /**
  * BỘ LỌC TUYẾT — phần chạy trên máy booth.
@@ -387,7 +387,7 @@ export async function selftest(cfg) {
 
   // 4: chỉ lớp sau lưng + xa, vùng người (elip) ở giữa khung
   const layersBehind = { ...base.layers, lens: { ...base.layers.lens, enabled: false }, front: { ...base.layers.front, enabled: false }, focus: { ...base.layers.focus, enabled: false } };
-  const behindOnly = normalizeSnow({ ...base, layers: layersBehind, subject: { mode: 'ellipse', x: 50, y: 50, w: 40, h: 60, feather: 10 } });
+  const behindOnly = normalizeSnow({ ...base, layers: layersBehind, overlay: { enabled: false }, subject: { mode: 'ellipse', x: 50, y: 50, w: 40, h: 60, feather: 10 } });
   const e = Buffer.from(g);
   drawSnow(e, W, H, 3, behindOnly, { seed: 99 });
   const rx = 0.2 * W, ry = 0.3 * H;
@@ -400,7 +400,8 @@ export async function selftest(cfg) {
 
   // 4b: cùng phép thử, vùng người là matte (hai người cao thấp khác nhau)
   const matte = twoPeopleMatte(W, H);
-  const viaMatte = normalizeSnow({ ...base, layers: layersBehind, subject: { mode: 'auto' } });
+  // Tuyết đọng cố ý nằm TRÊN người — tắt ở phép thử này, thử riêng ở 4c.
+  const viaMatte = normalizeSnow({ ...base, layers: layersBehind, subject: { mode: 'auto' }, overlay: { enabled: false }, settle: { enabled: false } });
   const f = Buffer.from(g);
   drawSnow(f, W, H, 3, viaMatte, { seed: 99, matte });
   const occM = countChanges(f, g, W, H, (x, y) => {
@@ -409,6 +410,48 @@ export async function selftest(cfg) {
   });
   row('Hạt sau lưng bị matte che', occM.in === 0 && occM.out > 0,
     `lõi dáng người đổi ${occM.in} điểm ảnh (phải là 0) · ngoài người đổi ${occM.out}`);
+
+  // 4c: chỉ tuyết đọng — nằm trong người, dồn ở phần trên (đỉnh đầu) hơn phần dưới
+  const offLayers = Object.fromEntries(Object.entries(base.layers).map(([k, L]) => [k, { ...L, enabled: false }]));
+  const settleOnly = normalizeSnow({ ...base, layers: offLayers, subject: { mode: 'auto' }, settle: { enabled: true } });
+  const sf = settledFlakes(W, H, settleOnly, 99, matte, null, g, 3);
+  const mTops = columnTops(matte);
+  let outside = 0, upper = 0, lower = 0;
+  for (const p of sf) {
+    const mx = Math.min(matte.width - 1, Math.floor((p.x * matte.width) / W));
+    const my = Math.min(matte.height - 1, Math.floor((p.y * matte.height) / H));
+    if (matte.data[my * matte.width + mx] < 128) { outside++; continue; }
+    if (p.group !== 0) continue;
+    if (my - mTops[mx] < 0.08 * matte.height) upper++; else lower++;
+  }
+  row('Tuyết đọng nằm trên người', sf.length > 0 && outside === 0 && upper > 3 * lower,
+    `${sf.length} mảnh · ${outside} mảnh ngoài người (phải là 0) · dồn đỉnh: ${upper} ở 8% trên cùng / ${lower} bên dưới`);
+
+  // 4d: lớp phủ phía trước — có mảnh, rải khắp khung, mảnh to không đè lên mặt thật
+  const face = { x: 0.4 * W, y: 0.2 * H, w: 0.2 * W, h: 0.28 * H };
+  const ovCfg = normalizeSnow({ ...base, subject: { mode: 'auto' } });
+  const ov = overlayFlakes(W, H, ovCfg, 99, matte, [face]);
+  const fcx = face.x + face.w / 2, fcy = face.y + face.h / 2;
+  const onFaceBig = ov.filter((p) => p.D + p.C > 0.015 * face.w &&
+    ((p.x - fcx) / (0.5 * face.w)) ** 2 + ((p.y - fcy) / (0.55 * face.h)) ** 2 < 1).length;
+  const leftHalf = ov.filter((p) => p.x < W / 2).length;
+  // 4e: công tắc v1 / v2 — đọc đúng từ file, giá trị lạ về v2, hai bản cho ảnh khác nhau
+  const bufV1 = Buffer.from(g), bufV2 = Buffer.from(g);
+  drawSnow(bufV1, W, H, 3, normalizeSnow(snowV1()), { seed: 5, matte });
+  drawSnow(bufV2, W, H, 3, normalizeSnow(defaultSnow()), { seed: 5, matte });
+  let vd = 0; for (let i = 0; i < bufV1.length; i++) if (bufV1[i] !== bufV2[i]) vd++;
+  const sv = [normalizeSnow({ style: 'v1' }).style, normalizeSnow({ style: 'v9' }).style, normalizeSnow({}).style].join('/');
+  // File cấu hình của bản trước (không có style) phải ra đúng ảnh Tuyết v1 — máy booth nâng bộ lọc không đổi ảnh.
+  const cu = snowV1();
+  delete cu.style; delete cu.overlay; delete cu.settle; delete cu.flakes.real;
+  const bufCu = Buffer.from(g);
+  drawSnow(bufCu, W, H, 3, normalizeSnow(JSON.parse(JSON.stringify(cu))), { seed: 5, matte });
+  const cuGiong = bufCu.equals(bufV1);
+  row('Công tắc tuyết v1 / v2', sv === 'v1/v2/v2' && vd > 0 && cuGiong,
+    `style đọc ra ${sv} (phải là v1/v2/v2) · hai bản khác nhau ${vd} byte · file cũ (không style) ${cuGiong ? 'ra đúng v1' : 'KHÁC v1'}`);
+
+  row('Lớp phủ phía trước', ov.length > 500 && onFaceBig === 0 && leftHalf > 0.3 * ov.length && leftHalf < 0.7 * ov.length,
+    `${ov.length} cụm · ${onFaceBig} cụm to đè lên mặt (phải là 0) · nửa trái ${leftHalf} / nửa phải ${ov.length - leftHalf}`);
 
   // 5
   const guarded = normalizeSnow({

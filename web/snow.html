@@ -94,9 +94,17 @@
 
       <div class="look">
         <div class="row">
+          <span class="title">Kiểu tuyết</span>
+          <div class="seg" role="group" aria-label="Kiểu tuyết">
+            <button id="verV1" aria-pressed="false" title="Bản đầu: đĩa bokeh sáng có quầng, hạt cục bông / mảnh giấy">Tuyết v1</button>
+            <button id="verV2" aria-pressed="true" title="Tuyết thật: lớp phủ cụm tuyết sắc phía trước, đĩa mờ ít và mềm">Tuyết v2</button>
+          </div>
+        </div>
+        <div class="row">
           <span class="title">Cảnh tuyết</span>
           <select id="styleSel" aria-label="Bộ dựng sẵn">
-            <option value="mercies">Giống mẫu mercies</option>
+            <option value="v2">Tuyết v2 — tuyết thật</option>
+            <option value="v1">Tuyết v1 — bản đầu (bokeh)</option>
             <option value="light">Tuyết nhẹ</option>
             <option value="blizzard">Bão tuyết</option>
             <option value="loaded" hidden>Từ file đã nạp</option>
@@ -209,8 +217,8 @@ return {
     return o;
   }
   var loadedStyle = null, loadedLook = null;
-  var styleName = "mercies", lookName = "neutral";
-  var base = compose(presetCfg("mercies"), lookPreset("neutral"));
+  var styleName = "v2", lookName = "neutral";
+  var base = compose(presetCfg("v2"), lookPreset("neutral"));
   var fileOpts = snowFileOptions({});
   var cfg = compose(base, base.look, { enabled: true });
   Object.assign(cfg, clone(fileOpts));
@@ -1224,11 +1232,33 @@ return {
     slider(b, { label: "Hạt to nhất (mm)", path: "flakes.maxMm", min: R.sizeMm[0], max: R.sizeMm[1], step: 0.5 });
     b.appendChild(el("div", "sub", "Tỉ lệ kiểu hạt"));
     slider(b, { label: "Cục bông", path: "flakes.clump", min: 0, max: 100, step: 1, zero: 0 });
-    slider(b, { label: "Mảnh giấy / bọt (như mẫu)", path: "flakes.chip", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Mảnh giấy / bọt (tuyết giả)", path: "flakes.chip", min: 0, max: 100, step: 1, zero: 0 });
     slider(b, { label: "Tinh thể (cách điệu)", path: "flakes.crystal", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Cụm tuyết thật (như mẫu)", path: "flakes.real", min: 0, max: 100, step: 1, zero: 0 });
     b.appendChild(el("div", "sub", "Phân bố"));
     slider(b, { label: "Độ tụ đám", path: "flakes.clumping", min: 0, max: 100, step: 1, zero: 0 });
     b.appendChild(el("p", "note", "Hình dạng chỉ đọc được ở hạt đủ nét và đủ to (lớp Quanh mẫu). Hạt mờ hẳn thì thành đĩa theo hình khẩu."));
+  }, true);
+  tool("flakes", "overlay", "Lớp phủ phía trước (tuyết thật)", ["overlay"], function (b) {
+    checkField(b, "Bật", "overlay.enabled");
+    slider(b, { label: "Lượng (%)", path: "overlay.amount", min: R.overlay[0], max: R.overlay[1], step: 1, zero: 0 });
+    slider(b, { label: "Mảnh nhỏ nhất (mm)", path: "overlay.minMm", min: R.settleMm[0], max: R.settleMm[1], step: 0.1 });
+    slider(b, { label: "Mảnh to nhất (mm)", path: "overlay.maxMm", min: R.settleMm[0], max: R.settleMm[1], step: 0.1 });
+    slider(b, { label: "Trải sâu (mảnh hơi mờ)", path: "overlay.blur", min: 0, max: 100, step: 1, zero: 0 });
+    b.appendChild(el("p", "note", "Cụm tuyết thật lơ lửng ngay trước người, rải khắp khung, sắc nét, hình không đều — kiểu tuyết trong ảnh mẫu. " +
+      "Không bám vào đầu. Mảnh to tự tránh mắt, mũi, miệng; độ tụ đám lấy theo mục Cỡ & kiểu hạt."));
+  }, true);
+  tool("flakes", "settle", "Tuyết đọng trên người", ["settle"], function (b) {
+    checkField(b, "Bật", "settle.enabled");
+    slider(b, { label: "Lượng tuyết đọng (%)", path: "settle.amount", min: R.settle[0], max: R.settle[1], step: 1, zero: 0 });
+    slider(b, { label: "Dồn trên đỉnh đầu, vai", path: "settle.crown", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Rải trên tóc, áo", path: "settle.scatter", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Tinh thể li ti (sương muối)", path: "settle.frost", min: 0, max: 100, step: 1, zero: 0 });
+    slider(b, { label: "Mảnh nhỏ nhất (mm)", path: "settle.minMm", min: R.settleMm[0], max: R.settleMm[1], step: 0.1 });
+    slider(b, { label: "Mảnh to nhất (mm)", path: "settle.maxMm", min: R.settleMm[0], max: R.settleMm[1], step: 0.1 });
+    b.appendChild(el("p", "note", "Tuyết đã rơi đọng lại: dày trên đỉnh đầu / tóc mái / vai, thưa dần xuống dưới, da mặt không dính. " +
+      "Mặc định tắt. Cần vùng người tự động — trên trang này phải nạp file <code>.MATTE.png</code> " +
+      "(mục Vùng người) mới thấy; snow.exe tự tách người nên luôn có."));
   }, true);
   tool("flakes", "wind", "Gió & chuyển động", ["wind"], function (b) {
     slider(b, { label: "Hướng rơi (°)", path: "wind.angle", min: R.angle[0], max: R.angle[1], step: 1, zero: 0 });
@@ -1315,9 +1345,25 @@ return {
   tool("retouch", "retouch", "Retouch da", ["retouch"], function (b) {
     checkField(b, "Bật retouch (trước khi rắc tuyết)", "retouch.enabled");
     checkField(b, "Nhặt mụn", "retouch.blemish");
-    selectField(b, "Cách nhặt mụn", [["capture-one", "Model Capture One — đẹp nhất (cần thư mục models/mun)"],
+    // Công tắc Retouch v1 / v2 (như Tuyết v1 / v2) — chỉ đổi cách nhặt mụn, các thanh khác giữ nguyên.
+    var vrow = el("div", "field"), vseg = el("div", "seg");
+    vseg.setAttribute("role", "group"); vseg.setAttribute("aria-label", "Bản retouch");
+    var rv1 = el("button", null, "Retouch v1"), rv2 = el("button", null, "Retouch v2");
+    rv1.title = "Đúng Capture One: mặt nạ da + model xoá mụn DnCNN của Capture One";
+    rv2.title = "Khung xử lý + mặt nạ da của Capture One, phần chữa mụn là bộ tự viết (chỉ cần skinMasking.onnx)";
+    vseg.appendChild(rv1); vseg.appendChild(rv2);
+    vrow.appendChild(el("span", null, "Bản retouch")); vrow.appendChild(vseg);
+    b.appendChild(vrow);
+    rv1.addEventListener("click", function () { cfg.retouch.blemishMethod = "capture-one"; syncAll(); commit(); });
+    rv2.addEventListener("click", function () { cfg.retouch.blemishMethod = "c1-mask"; syncAll(); commit(); });
+    refreshers.push(function () {
+      rv1.setAttribute("aria-pressed", String(cfg.retouch.blemishMethod === "capture-one"));
+      rv2.setAttribute("aria-pressed", String(cfg.retouch.blemishMethod === "c1-mask"));
+    });
+    selectField(b, "Cách nhặt mụn", [["capture-one", "Retouch v1 — model Capture One (cần models/mun)"],
+      ["c1-mask", "Retouch v2 — mặt nạ da Capture One + chữa tự viết"],
       ["builtin", "Bộ tự viết — nhanh, không cần model"]], "retouch.blemishMethod");
-    slider(b, { label: "Mức xoá mụn (model Capture One)", path: "retouch.blemishAmount", min: 0, max: 100, step: 1, zero: 100 });
+    slider(b, { label: "Mức xoá mụn (Retouch v1 / v2)", path: "retouch.blemishAmount", min: 0, max: 100, step: 1, zero: 100 });
     slider(b, { label: "Độ mịn da (0 = không làm mịn)", path: "retouch.smooth", min: 0, max: 100, step: 1, zero: 25 });
     var row = el("div", "btns");
     [["Không làm mịn", 0], ["Nhẹ", 30], ["Vừa", 60], ["Mạnh", 90]].forEach(function (m) {
@@ -1522,15 +1568,16 @@ return {
   Array.prototype.forEach.call(tabBtns, function (b) { b.addEventListener("click", function () { selectTab(b.dataset.tab); }); });
 
   /* ── bộ dựng sẵn ── */
-  var styleSel = $("styleSel");
+  var styleSel = $("styleSel"), verV1 = $("verV1"), verV2 = $("verV2");
   function useStyle(name) {
+    if (name === "mercies") name = "v2";   // tên cũ của bộ mặc định
     styleName = name;
-    var scene = name === "loaded" && loadedStyle ? loadedStyle : presetCfg(SNOW_PRESETS[name] ? name : "mercies");
+    var scene = name === "loaded" && loadedStyle ? loadedStyle : presetCfg(SNOW_PRESETS[name] ? name : "v2");
     base = compose(scene, base.look);
     styleSel.value = name;
   }
-  styleSel.addEventListener("change", function () {
-    useStyle(styleSel.value);
+  function applyStyle(name) {
+    useStyle(name);
     // Đổi cảnh: giữ nguyên màu và retouch đang chỉnh.
     var keepRetouch = cfg.retouch;
     cfg = compose(base, cfg.look, { enabled: cfg.enabled });
@@ -1538,6 +1585,14 @@ return {
     cfg.retouch = keepRetouch;
     syncAll(); commit();
     toast("Đã áp cảnh “" + styleSel.options[styleSel.selectedIndex].text + "”.");
+  }
+  styleSel.addEventListener("change", function () { applyStyle(styleSel.value); });
+  // Công tắc v1 / v2: nạp nguyên bộ thông số của bản đó (màu, retouch giữ nguyên).
+  verV1.addEventListener("click", function () { if (cfg.style !== "v1") applyStyle("v1"); });
+  verV2.addEventListener("click", function () { if (cfg.style !== "v2") applyStyle("v2"); });
+  refreshers.push(function () {
+    verV1.setAttribute("aria-pressed", String(cfg.style === "v1"));
+    verV2.setAttribute("aria-pressed", String(cfg.style !== "v1"));
   });
 
   /* ── preset màu ── */
@@ -1696,7 +1751,7 @@ return {
         if (loadedStyle) styleSel.querySelector('option[value="loaded"]').hidden = false;
         if (loadedLook) lookSel.querySelector('option[value="loaded"]').hidden = false;
         useLook(s.look === "loaded" && !loadedLook ? "neutral" : (SNOW_LOOKS[s.look] || s.look === "loaded" ? s.look : "neutral"));
-        useStyle(s.style === "loaded" && !loadedStyle ? "mercies" : (s.style || "mercies"));
+        useStyle(s.style === "loaded" && !loadedStyle ? "v2" : (s.style || "v2"));
         fileOpts = snowFileOptions(s.cfg);
         var restore = function (c) {
           var o = compose(normalizeSnow(c, base), normLook(c.look), { enabled: c.enabled !== false });

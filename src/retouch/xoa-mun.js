@@ -187,6 +187,56 @@ export function openXoaMun() {
   return engine;
 }
 
+let engineDa = null;
+
+/**
+ * Chỉ cần MẶT NẠ DA (Retouch v2: mặt nạ Capture One + bộ chữa tự viết). Có đủ
+ * hai model thì dùng chung phiên của openXoaMun (đã chọn CPU / GPU); thiếu DnCNN
+ * thì nạp riêng skinMasking trên CPU — model nhẹ, ~0,4 giây một mặt.
+ */
+export function openMatNa() {
+  if (!engineDa) {
+    engineDa = (async () => {
+      if (!fs.existsSync(path.join(MODEL_DIR, MODEL_FILES.skin))) throw new Error(`thiếu model ${MODEL_FILES.skin} trong ${MODEL_DIR}`);
+      if (fs.existsSync(path.join(MODEL_DIR, MODEL_FILES.dn))) {
+        try {
+          return await openXoaMun();
+        } catch {
+          // DnCNN hỏng không sao: v2 không cần nó
+        }
+      }
+      const ort = (await import('onnxruntime-node')).default;
+      const skin = await ort.InferenceSession.create(docModel('skin'), tuyChonPhien('cpu'));
+      return { ort, skin, dn: null, may: { skin: 'cpu', ghiChu: 'CPU (chỉ mặt nạ da)' }, msO: null };
+    })();
+    engineDa.catch(() => {
+      engineDa = null;
+    });
+  }
+  return engineDa;
+}
+
+/**
+ * Bản đồ sửa bằng BỘ CHỮA TỰ VIẾT (nhat-mun.js) thay cho DnCNN — cùng chỗ trong
+ * khung Capture One: chạy trên đúng ảnh nhỏ (mặt rộng ~450) mà DnCNN sẽ nhận,
+ * sửa = ảnh đã chữa − ảnh nhỏ. Phần còn lại (phóng bicubic, trộn theo mặt nạ
+ * da Capture One làm mềm, nhân thanh Mức) giữ nguyên như v1.
+ * `f`: khung mặt YuNet (toạ độ ảnh gốc); `ox, oy`: góc ảnh nhỏ trên ảnh gốc.
+ */
+async function banDoTuViet(small, sw, sh, f, ox, oy, kx, ky) {
+  const { nhatMun } = await import('./nhat-mun.js');
+  const healed = Buffer.from(small);
+  const fs2 = {
+    ...f,
+    x: (f.x - ox) * kx, y: (f.y - oy) * ky, w: f.w * kx, h: f.h * ky,
+    lm: f.lm ? f.lm.map(([x, y]) => [(x - ox) * kx, (y - oy) * ky]) : f.lm,
+  };
+  const so = await nhatMun(healed, sw, sh, [fs2]);
+  const corr = new Float32Array(sw * sh * 3);
+  for (let i = 0; i < corr.length; i++) corr[i] = (healed[i] - small[i]) / 255;
+  return { corr, so };
+}
+
 /** Chỉ số phản xạ kiểu numpy 'reflect' (không lặp điểm biên). */
 function phanXa(v, n) {
   if (n === 1) return 0;
@@ -317,10 +367,13 @@ async function banDoSua(e, small, sw, sh, coDa) {
  * Xoá mụn trên mọi mặt trong `faces` (`rgb`: Buffer RGB 8 bit, SỬA TẠI CHỖ).
  * Trả về số mặt đã xử lý. `amount`: 0–100 như thanh Remove Blemishes (100 =
  * đủ mức model). `onMat` (chỉ để thử): nhận { vung, mask, ra } của mỗi mặt.
+ * `chua`: 'dncnn' (Retouch v1 — đúng Capture One) | 'tu-viet' (Retouch v2 —
+ * mặt nạ da Capture One, chữa bằng bộ tự viết; không cần model DnCNN).
  */
-export async function xoaMun(rgb, width, height, faces, { amount = 100, onMat = null } = {}) {
+export async function xoaMun(rgb, width, height, faces, { amount = 100, onMat = null, chua = 'dncnn' } = {}) {
   if (!faces.length || amount <= 0) return 0;
-  const e = await openXoaMun();
+  const tuViet = chua === 'tu-viet';
+  const e = tuViet ? await openMatNa() : await openXoaMun();
   // Khung Capture One của từng mặt, và tâm + cỡ để chia điểm ảnh cho mặt gần nhất.
   const khung = faces.map((f) => {
     const w = f.w * K_RONG;
@@ -394,7 +447,9 @@ export async function xoaMun(rgb, width, height, faces, { amount = 100, onMat = 
       .raw()
       .toBuffer();
     for (let j = 0; j < coDa.length; j++) coDa[j] = coDa[j] > 25 ? 1 : 0;
-    const { corr } = await banDoSua(e, small, sw, sh, coDa);
+    const { corr } = tuViet
+      ? await banDoTuViet(small, sw, sh, faces[i], x0 + c.left, y0 + c.top, sw / c.width, sh / c.height)
+      : await banDoSua(e, small, sw, sh, coDa);
     const mem = await sharp(maskVung, { raw: { width: c.width, height: c.height, channels: 1 } })
       .blur(3)
       .extractChannel(0)

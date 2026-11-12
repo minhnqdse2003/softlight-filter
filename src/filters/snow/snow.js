@@ -57,6 +57,13 @@ export const SNOW_RANGES = {
   varyBokeh: [0, 100, 50],     // ± % số đĩa bokeh sát ống kính
   varySize: [0, 50, 15],       // ± % cỡ hạt
   varyClump: [0, 50, 15],      // ± điểm độ tụ đám
+  overlay: [0, 300, 100],      // % — lượng mảnh tuyết thật phủ phía trước
+  overlayBlur: [0, 100, 35],   // độ trải sâu: 0 = mọi mảnh sắc, 100 = nhiều mảnh mờ
+  settle: [0, 300, 100],       // % — lượng tuyết đọng trên người
+  settleMm: [0.3, 20, 1],      // mm, cỡ mảnh tuyết đọng / lớp phủ
+  crown: [0, 100, 60],         // tuyết dồn trên đỉnh đầu / vai
+  scatter: [0, 100, 45],       // tuyết rải khắp tóc, áo
+  frost: [0, 100, 35],         // tinh thể li ti như sương muối
 };
 
 /**
@@ -64,7 +71,8 @@ export const SNOW_RANGES = {
  * cảnh hay màu trên trang chỉnh không đụng tới nó, như các mục file bên dưới.
  * Mặc định TẮT, để máy đang chạy bản cũ không tự dưng có retouch.
  */
-export const RETOUCH_METHODS = ["capture-one", "builtin"];
+/** capture-one = Retouch v1 (đúng Capture One), c1-mask = Retouch v2 (mặt nạ da C1 + chữa tự viết), builtin = dự phòng. */
+export const RETOUCH_METHODS = ["capture-one", "c1-mask", "builtin"];
 export function defaultRetouch() {
   return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 25, dodgeBurn: 30, contour: false };
 }
@@ -84,6 +92,15 @@ export function normalizeRetouch(raw) {
 /** Năm lớp độ sâu, từ gần máy ảnh ra xa. Thứ tự này là thứ tự trong file cấu hình. */
 export const SNOW_LAYERS = ["lens", "front", "focus", "behind", "far"];
 /** Chế độ vùng người — xem chú thích ở phần "vùng người" bên dưới. */
+/**
+ * Hai bản tuyết để chuyển qua lại (trường `style` trong snow.config.json):
+ *   v1 — bản đầu: đĩa bokeh sáng có quầng, hạt cục bông / mảnh giấy, viền đĩa gọn.
+ *   v2 — tuyết thật: lớp phủ cụm tuyết sắc phía trước, đĩa mờ ít và mềm, không quầng.
+ * Mỗi bản là một bộ dựng sẵn đầy đủ (snowV1 / defaultSnow); riêng cách vẽ đĩa mờ
+ * khác nhau theo `style` (xem drawSnow).
+ */
+export const SNOW_STYLES = ["v1", "v2"];
+
 export const SNOW_SUBJECT_MODES = ["auto", "ellipse", "off"];
 /** Model tách người cho chế độ "auto" — xem src/filters/snow/matte.js. */
 export const SNOW_SUBJECT_MODELS = ["modnet", "birefnet"];
@@ -96,31 +113,56 @@ export const SNOW_LAYER_NAMES = {
   far: "Xa, trong phông",
 };
 
-/** Bộ "Giống mẫu": tuyết giả cỡ to, vài đĩa bokeh sát ống kính, nhiều hạt li ti phía sau. */
+/**
+ * Bộ "Giống mẫu" (ảnh mẫu studio tuyết 11/2026): tuyết thật cỡ vừa, đĩa mờ ít và
+ * nhạt, không quầng, nhiều hạt li ti phía sau — và lớp phủ phía trước gồm các cụm
+ * tuyết thật, sắc, không đều. Tuyết đọng trên đầu có sẵn nhưng TẮT (khách không
+ * muốn tuyết bám lên đầu). Bản trước (tuyết giả cỡ to, đĩa sáng có quầng) trông như
+ * đốm sáng dán lên ảnh.
+ */
 export function defaultSnow() {
   return {
+    style: "v2",
     amount: 100,
     seed: 0,
     camera: { focal: 35, focus: 1.8, backdrop: 2.6, aperture: 2.8, blades: 0 },
-    flakes: { minMm: 2.5, maxMm: 14, clump: 60, chip: 40, crystal: 0, clumping: 40 },
+    flakes: { minMm: 2, maxMm: 7, clump: 20, chip: 0, crystal: 0, real: 80, clumping: 40 },
     wind: { angle: 10, trail: 15 },
     vary: { amount: 20, wind: 8, bokeh: 50, size: 15, clumping: 15 },
-    light: { brightness: 95, ambient: 30, backlight: 40, glow: 30 },
+    light: { brightness: 95, ambient: 30, backlight: 10, glow: 4 },
     layers: {
-      lens: { enabled: true, count: 5, size: 100, opacity: 60 },
-      front: { enabled: true, count: 50, size: 100, opacity: 90 },
-      focus: { enabled: true, count: 160, size: 100, opacity: 95 },
+      lens: { enabled: true, count: 3, size: 100, opacity: 30 },
+      front: { enabled: true, count: 40, size: 100, opacity: 55 },
+      focus: { enabled: true, count: 160, size: 100, opacity: 85 },
       behind: { enabled: true, count: 260, size: 100, opacity: 90 },
       far: { enabled: true, count: 420, size: 100, opacity: 70, depth: 6 },
     },
+    overlay: { enabled: true, amount: 100, minMm: 3.5, maxMm: 16, blur: 20 },
+    settle: { enabled: false, amount: 100, minMm: 2, maxMm: 10, crown: 60, scatter: 45, frost: 35 },
     subject: { mode: "auto", model: "modnet", x: 50, y: 60, w: 70, h: 100, feather: 12 },
     faceGuard: { enabled: true, maxSize: 4 },
   };
 }
 
 /** Các bộ dựng sẵn cho trang chỉnh. Mỗi mục là một hàm, để không ai sửa nhầm bản gốc. */
+/** Tuyết v1 — đúng bộ mặc định của bản đầu (trước 12/11/2026). */
+export function snowV1() {
+  const s = defaultSnow();
+  s.style = "v1";
+  s.flakes = { minMm: 2.5, maxMm: 14, clump: 60, chip: 40, crystal: 0, real: 0, clumping: 40 };
+  s.light = { brightness: 95, ambient: 30, backlight: 40, glow: 30 };
+  s.layers.lens = { enabled: true, count: 5, size: 100, opacity: 60 };
+  s.layers.front = { enabled: true, count: 50, size: 100, opacity: 90 };
+  s.layers.focus = { enabled: true, count: 160, size: 100, opacity: 95 };
+  s.overlay.enabled = false;
+  s.settle.enabled = false;
+  return s;
+}
+
 export const SNOW_PRESETS = {
-  mercies: defaultSnow,
+  v2: defaultSnow,
+  v1: snowV1,
+  mercies: defaultSnow,   // tên cũ của bộ mặc định — trạng thái trang chỉnh đã lưu vẫn mở được
   light() {
     const s = defaultSnow();
     s.layers.lens.count = 2;
@@ -222,13 +264,21 @@ function bool(v, d) { return typeof v === "boolean" ? v : d; }
  * sửa tay, số sai phải bị kẹp im lặng chứ không làm gián đoạn phiên chụp.
  */
 export function normalizeSnow(raw, base) {
-  const d = base || defaultSnow();
   const r = obj(raw);
+  // File cấu hình của bản trước khi có Tuyết v1 / v2 (không có `style` mà có
+  // thông số tuyết) là tuyết v1: nâng bộ lọc trên máy booth không được làm đổi
+  // ảnh của khách — khoá nào thiếu lấy theo v1 (không lớp phủ, không cụm tuyết thật).
+  const legacy = r.style === undefined && (r.flakes !== undefined || r.layers !== undefined);
+  const d = base || (legacy ? snowV1() : defaultSnow());
   const R = SNOW_RANGES;
   const cam = obj(r.camera), fl = obj(r.flakes), wi = obj(r.wind), li = obj(r.light);
   const ly = obj(r.layers), su = obj(r.subject), fg = obj(r.faceGuard);
 
-  const o = { amount: num(r.amount, R.amount, d.amount), seed: Math.round(num(r.seed, R.seed, d.seed)) };
+  const o = {
+    style: SNOW_STYLES.indexOf(r.style) >= 0 ? r.style : d.style || "v2",
+    amount: num(r.amount, R.amount, d.amount),
+    seed: Math.round(num(r.seed, R.seed, d.seed)),
+  };
 
   o.camera = {
     focal: num(cam.focal, R.focal, d.camera.focal),
@@ -247,10 +297,11 @@ export function normalizeSnow(raw, base) {
     clump: num(fl.clump, R.weight, d.flakes.clump),
     chip: num(fl.chip, R.weight, d.flakes.chip),
     crystal: num(fl.crystal, R.weight, d.flakes.crystal),
+    real: num(fl.real, R.weight, d.flakes.real || 0),
     clumping: num(fl.clumping, R.clumping, d.flakes.clumping),
   };
   if (o.flakes.maxMm < o.flakes.minMm) o.flakes.maxMm = o.flakes.minMm;
-  if (o.flakes.clump + o.flakes.chip + o.flakes.crystal <= 0) o.flakes.clump = 100;
+  if (o.flakes.clump + o.flakes.chip + o.flakes.crystal + o.flakes.real <= 0) o.flakes.real = 100;
 
   o.wind = { angle: num(wi.angle, R.angle, d.wind.angle), trail: num(wi.trail, R.trail, d.wind.trail) };
   const va = obj(r.vary), dv = Object.assign({ amount: 0, wind: 0, bokeh: 0, size: 0, clumping: 0 }, d.vary);
@@ -293,6 +344,26 @@ export function normalizeSnow(raw, base) {
     feather: num(su.feather, R.feather, d.subject.feather),
   };
   o.faceGuard = { enabled: bool(fg.enabled, d.faceGuard.enabled), maxSize: num(fg.maxSize, R.guard, d.faceGuard.maxSize) };
+  const ov = obj(r.overlay), dov = d.overlay || defaultSnow().overlay;
+  o.overlay = {
+    enabled: bool(ov.enabled, dov.enabled),
+    amount: num(ov.amount, R.overlay, dov.amount),
+    minMm: num(ov.minMm, R.settleMm, dov.minMm),
+    maxMm: num(ov.maxMm, R.settleMm, dov.maxMm),
+    blur: num(ov.blur, R.overlayBlur, dov.blur),
+  };
+  if (o.overlay.maxMm < o.overlay.minMm) o.overlay.maxMm = o.overlay.minMm;
+  const se = obj(r.settle), ds = d.settle || defaultSnow().settle;
+  o.settle = {
+    enabled: bool(se.enabled, ds.enabled),
+    amount: num(se.amount, R.settle, ds.amount),
+    minMm: num(se.minMm, R.settleMm, ds.minMm),
+    maxMm: num(se.maxMm, R.settleMm, ds.maxMm),
+    crown: num(se.crown, R.crown, ds.crown),
+    scatter: num(se.scatter, R.scatter, ds.scatter),
+    frost: num(se.frost, R.frost, ds.frost),
+  };
+  if (o.settle.maxMm < o.settle.minMm) o.settle.maxMm = o.settle.minMm;
   return o;
 }
 
@@ -326,15 +397,18 @@ export function snowFileOptions(raw) {
 /* Ghi chú đi kèm file cấu hình. Không dấu, để Notepad trên máy booth nào cũng đọc được. */
 const SNOW_DOC =
   "Bo loc Tuyet - cau hinh v1. Chinh bang web/snow-tuner.html roi bam Luu, dat file nay canh snow.exe. " +
+  "style = kieu tuyet: v1 = ban dau (dia bokeh sang, co quang), v2 = tuyet that (lop phu cum tuyet sac phia truoc); doi kieu tren trang chinh se nap bo thong so cua kieu do. " +
   "amount = luong tuyet (%, nhan so hat moi lop). vary = bien thien giua cac anh (+/- luong tuyet %, huong gio do, so bokeh %, co hat %, do tu dam). seed 0 = moi anh mot bo hat rieng (theo ten file). camera: ong kinh AO de tinh do mo cua tuyet (met, mm). " +
   "layers: lens = sat ong kinh, front = truoc mat mau, focus = quanh mau, behind = sau lung mau (bi nguoi che), " +
-  "far = xa trong phong. subject.mode: auto = tach nguoi tu dong; subject.model: modnet (nhanh, ~0.5 s) hoac birefnet (dep hon, ~5 s/tam, " +
+  "far = xa trong phong. flakes.real = ty le cum tuyet that. overlay = lop phu phia truoc: cum tuyet that sac, rai khap khung (amount %, minMm/maxMm, blur 0-100 = do trai sau). settle = tuyet dong tren nguoi (mac dinh tat) (can subject.mode auto): amount %, minMm/maxMm = co manh (mm), " +
+  "crown = don tren dinh dau/vai, scatter = rai tren toc/ao, frost = tinh the li ti; da mat khong dinh tuyet. subject.mode: auto = tach nguoi tu dong; subject.model: modnet (nhanh, ~0.5 s) hoac birefnet (dep hon, ~5 s/tam, " +
   "tai bang: npm run model -- birefnet), " +
   "neu khong chay duoc thi dung elip x/y/w/h (%); ellipse = luon dung elip; off = khong che. " +
   "look: chinh mau SAU khi rac tuyet, cung bo cong cu voi Instax (enabled = bat/tat, strength = do dam); " +
   "LUT .cube dat trong thu muc luts canh snow.exe. " +
-  "retouch: nhat mun + lam min da, chay TRUOC tuyet (enabled = bat/tat; blemish = nhat mun; blemishMethod: capture-one = model " +
-  "Remove Blemishes cua Capture One trong models/mun, thieu thi tu dung builtin = bo tu viet; blemishAmount 0-100; " +
+  "retouch: nhat mun + lam min da, chay TRUOC tuyet (enabled = bat/tat; blemish = nhat mun; blemishMethod: capture-one = Retouch v1, model " +
+  "Remove Blemishes cua Capture One trong models/mun; c1-mask = Retouch v2, mat na da Capture One + bo chua mun tu viet (chi can skinMasking.onnx); " +
+  "thieu model thi tu dung builtin = bo tu viet; blemishAmount 0-100; " +
   "smooth = do min 0-100, 0 = khong lam min, nhe 30 / vua 60 / manh 90; " +
   "dodgeBurn = to sang / toi kieu neutral gray 0-100 (lam deu da, quang tham mat, ranh mui-mieng), 0 = tat, mac dinh 30, " +
   "can models/facemesh-v2.onnx (npm run model -- facemesh); contour = tao khoi theo cung muc dodgeBurn).";
@@ -626,7 +700,8 @@ function densityField(seed) {
   return (u, v) => smooth(0.25, 0.8, n(u * 4.5, v * 3.5));
 }
 
-const SPRITE_COUNT = [6, 6, 3];   // clump, chip, crystal
+const SPRITE_COUNT = [6, 6, 3, 10, 8];  // clump, chip, crystal, mảnh tuyết đọng, cụm tuyết thật đang rơi
+const SETTLE_FEATHER = 6;             // 6 sprite tuyết đọng đầu là mảnh xơ, còn lại mảnh gọn
 
 /**
  * Sinh toàn bộ hạt của một ảnh, đã xếp từ xa đến gần (thứ tự vẽ).
@@ -646,7 +721,7 @@ export function buildScene(w, h, cfg, seed, matte, faces) {
   const face = faceTest(cfg, w, h, matte);
   const faceBox = faceBoxTest(cfg, faces);
   const fl = cfg.flakes;
-  const wsum = fl.clump + fl.chip + fl.crystal || 1;
+  const wsum = fl.clump + fl.chip + fl.crystal + (fl.real || 0) || 1;
   const guardPx = face ? (cfg.faceGuard.maxSize / 100) * longPx : Infinity;
   const S = cfg.camera.focus;
   const dens = densityField((seed ^ 0x9e3779b9) >>> 0);
@@ -668,7 +743,7 @@ export function buildScene(w, h, cfg, seed, matte, faces) {
       // Lệch về phía hạt nhỏ: nhiều hạt li ti, ít hạt to — như tuyết thật.
       const dMm = fl.minMm * Math.pow(fl.maxMm / fl.minMm, Math.pow(rd, 2.2)) * (L.size / 100);
       const D = op.size(dMm, Z), C = op.blur(Z), E = D + C;
-      const kind = rk * wsum < fl.clump ? 0 : rk * wsum < fl.clump + fl.chip ? 1 : 2;
+      const kind = rk * wsum < fl.clump ? 0 : rk * wsum < fl.clump + fl.chip ? 1 : rk * wsum < fl.clump + fl.chip + fl.crystal ? 2 : 4;
 
       const pr = rngOf((Math.imul(seed ^ (li * 7919), 2654435761) + Math.imul(i + 1, 40503)) >>> 0);
       const mu = E / 2 / w, mv = E / 2 / h;
@@ -690,9 +765,10 @@ export function buildScene(w, h, cfg, seed, matte, faces) {
       }
       particles.push({
         layer: li, Z, D, C, x: u * w, y: v * h, kind,
+        // Kiểu 4 = cụm tuyết thật (cùng hình với lớp phủ phía trước).
         sprite: Math.floor(rs * SPRITE_COUNT[kind]),
         rot: rr * Math.PI * 2,
-        tilt: kind === 0 ? 0.75 + 0.25 * rt : 0.3 + 0.7 * rt,
+        tilt: kind === 0 ? 0.75 + 0.25 * rt : kind === 4 ? 0.55 + 0.45 * rt : 0.3 + 0.7 * rt,
         bright: 0.7 + 0.35 * rb,
         alpha: L.opacity / 100,
         behind: Z > S,
@@ -703,6 +779,251 @@ export function buildScene(w, h, cfg, seed, matte, faces) {
 
   particles.sort((a, b) => b.Z - a.Z);
   return { particles, stats };
+}
+
+/* ═════════════════════════ tuyết đọng trên người ═════════════════════════ */
+
+/*
+ * Thứ làm ảnh tuyết studio trông THẬT không phải hạt đang rơi mà là tuyết đã
+ * đọng lại (ảnh mẫu studio 11/2026):
+ *   - DỒN THÀNH ĐỐNG ở chỗ cao nhất của đỉnh đầu, loang ra rồi thưa dần xuống
+ *     tóc mái — không phải một dải đều dọc viền tóc;
+ *   - mảnh DÀI, XƠ như lông vũ, nằm XUÔI THEO SỢI TÓC; mảnh to xen mảnh nhỏ,
+ *     có mảnh xám trong, có mảnh trắng sáng, chỗ dày thì chồng lên nhau;
+ *   - vài mảnh lạc trên áo, và một lớp tinh thể li ti lấp lánh trên tóc, len.
+ *
+ * Cần matte (vùng người thật). Từ matte lấy đường đỉnh của từng cột:
+ *   - độ phẳng: mặt càng nằm ngang (độ dốc đường đỉnh nhỏ) càng giữ tuyết —
+ *     sườn đầu dốc thì tuyết trượt đi;
+ *   - độ "đỉnh": cột càng gần chỗ cao nhất trong vùng lân cận càng dày — đó là
+ *     đống tuyết trên xoáy tóc;
+ *   - theo chiều dọc: thưa dần theo khoảng cách từ đường đỉnh xuống.
+ * Hướng sợi tóc lấy từ tensor cấu trúc của chính ảnh quanh vị trí mảnh.
+ * Da (mặt, tay) gần như không giữ tuyết: hạt rơi trúng là tan — dò da bằng
+ * YCbCr ngay trên điểm ảnh, cộng khung mặt thật nếu snow.exe có.
+ */
+const SETTLE_CROWN = 420000, SETTLE_SCATTER = 2400, SETTLE_FROST = 14000;
+
+/** Hai bản đồ cỡ matte: `crown` (đống trên đỉnh) và `fall` (thưa dần từ đỉnh xuống). */
+function exposureMap(matte) {
+  const mw = matte.width, mh = matte.height, md = matte.data;
+  const top = new Float32Array(mw).fill(-1);
+  for (let x = 0; x < mw; x++) {
+    for (let y = 0; y < mh; y++) if (md[y * mw + x] >= 128) { top[x] = y; break; }
+  }
+  // Đường đỉnh làm mượt (bỏ sợi tóc dựng), rồi độ dốc và độ "đỉnh" theo cột.
+  const sr = Math.max(1, Math.round(0.008 * mw)), sm = new Float32Array(mw).fill(-1);
+  for (let x = 0; x < mw; x++) {
+    if (top[x] < 0) continue;
+    let a = 0, n = 0;
+    for (let k = -sr; k <= sr; k++) {
+      const t = top[Math.min(mw - 1, Math.max(0, x + k))];
+      if (t >= 0) { a += t; n++; }
+    }
+    sm[x] = a / n;
+  }
+  const d = Math.max(1, Math.round(0.012 * mw)), win = Math.max(2, Math.round(0.07 * mw));
+  const apexK = 1 / Math.max(1, 0.09 * mh), wcol = new Float32Array(mw);
+  for (let x = 0; x < mw; x++) {
+    if (sm[x] < 0) continue;
+    const l = sm[Math.max(0, x - d)], r = sm[Math.min(mw - 1, x + d)];
+    const s = l >= 0 && r >= 0 ? (r - l) / (2 * d) : 2;
+    const flat = 1 / (1 + 1.5 * s * s);
+    let lo = sm[x];
+    for (let k = -win; k <= win; k++) {
+      const t = sm[Math.min(mw - 1, Math.max(0, x + k))];
+      if (t >= 0 && t < lo) lo = t;
+    }
+    const apex = Math.exp(-(sm[x] - lo) * apexK);
+    wcol[x] = flat * (0.2 + 0.8 * apex);
+  }
+  const lc = 1 / Math.max(2, 0.06 * mh), lf = 1 / Math.max(2, 0.11 * mh);
+  const crown = new Float32Array(mw * mh), fall = new Float32Array(mw * mh);
+  for (let x = 0; x < mw; x++) {
+    let run = -1;
+    for (let y = 0; y < mh; y++) {
+      const o = y * mw + x;
+      if (md[o] < 128) { run = -1; continue; }
+      run++;
+      crown[o] = wcol[x] * Math.exp(-run * lc);
+      fall[o] = Math.exp(-run * lf);
+    }
+  }
+  return { crown, fall };
+}
+
+function isSkin(data, i) {
+  const r = data[i], g = data[i + 1], b = data[i + 2];
+  const y = 0.299 * r + 0.587 * g + 0.114 * b;
+  const cb = 128 - 0.168736 * r - 0.331264 * g + 0.5 * b;
+  const cr = 128 + 0.5 * r - 0.418688 * g - 0.081312 * b;
+  return y > 50 && cr > 133 && cr < 178 && cb > 75 && cb < 130 && r > b;
+}
+
+/**
+ * Hướng sợi tóc / thớ vải quanh (x, y): tensor cấu trúc của kênh xanh lá trong
+ * cửa sổ bán kính r. Trả về góc (rad) DỌC theo thớ, hoặc null nếu vùng đó không
+ * có hướng rõ (da, vải trơn) — khi đó mảnh xoay ngẫu nhiên.
+ */
+function strandAngle(data, w, h, ch, x, y, r) {
+  r = Math.max(2, Math.min(14, Math.round(r)));
+  const st = Math.max(1, Math.round(r / 5));
+  let jxx = 0, jxy = 0, jyy = 0;
+  const x0 = Math.max(1, (x | 0) - r), x1 = Math.min(w - 2, (x | 0) + r);
+  const y0 = Math.max(1, (y | 0) - r), y1 = Math.min(h - 2, (y | 0) + r);
+  for (let yy = y0; yy <= y1; yy += st) {
+    for (let xx = x0; xx <= x1; xx += st) {
+      const i = (yy * w + xx) * ch + 1;
+      const gx = data[i + ch] - data[i - ch], gy = data[i + w * ch] - data[i - w * ch];
+      jxx += gx * gx; jxy += gx * gy; jyy += gy * gy;
+    }
+  }
+  const tr = jxx + jyy;
+  if (tr < 1) return null;
+  const coh = Math.sqrt((jxx - jyy) * (jxx - jyy) + 4 * jxy * jxy) / tr;
+  if (coh < 0.2) return null;
+  return 0.5 * Math.atan2(2 * jxy, jxx - jyy) + Math.PI / 2;
+}
+
+/** Các mảnh tuyết đọng của một ảnh — rỗng nếu tắt hoặc không có matte. */
+export function settledFlakes(w, h, cfg, seed, matte, faces, data, ch) {
+  const st = cfg.settle;
+  if (!st || !st.enabled || !st.amount || cfg.subject.mode !== "auto" || !matte || !matte.data) return [];
+  const mw = matte.width, mh = matte.height, md = matte.data;
+  const ex = exposureMap(matte);
+  const op = optics(cfg, Math.max(w, h)), S = cfg.camera.focus;
+  const patch = noise2((seed ^ 0x2c1b3c6d) >>> 0);
+  const fbox = (faces || []).map((f) => ({ cx: f.x + f.w / 2, cy: f.y + 0.58 * f.h, rx: 0.48 * f.w, ry: 0.5 * f.h }));
+  const inFace = (x, y) => fbox.some((b) => {
+    const dx = (x - b.cx) / b.rx, dy = (y - b.cy) / b.ry;
+    return dx * dx + dy * dy < 1;
+  });
+  const mo = (x, y) => Math.min(mh - 1, Math.max(0, ((y * mh) / h) | 0)) * mw + Math.min(mw - 1, Math.max(0, ((x * mw) / w) | 0));
+  const pix = (x, y) => (Math.min(h - 1, Math.max(0, y | 0)) * w + Math.min(w - 1, Math.max(0, x | 0))) * ch;
+  const out = [];
+  const k = st.amount / 100;
+  const nFeather = SETTLE_FEATHER;   // sprite đầu = mảnh xơ (lông vũ), còn lại = mảnh gọn
+
+  const push = (g, x, y, dMm, rs, rr, rt, rb) => {
+    const D = op.size(dMm, S);
+    // Chỉ mảnh xơ: mảnh gọn ở cỡ vài pixel đọc thành chấm tròn, giống bokeh hơn tuyết.
+    const feather = g !== 2;
+    const sp = feather ? Math.floor(rs * nFeather) : nFeather + Math.floor(rs * (SPRITE_COUNT[3] - nFeather));
+    const ang = g === 2 ? null : strandAngle(data, w, h, ch, x, y, Math.max(3, D * 1.2));
+    out.push({
+      settled: true, group: g, Z: S, C: 0.18 * D, D, x, y, kind: 3,
+      sprite: Math.min(SPRITE_COUNT[3] - 1, Math.max(0, sp)),
+      // Mảnh dài nằm xuôi theo sợi tóc (lệch ±20°); không thấy thớ thì xoay ngẫu nhiên.
+      rot: ang === null ? rr * Math.PI * 2 : ang + (rr - 0.5) * 0.7,
+      tilt: feather ? 0.75 + 0.25 * rt : 0.6 + 0.4 * rt,
+      // Tuyết trên tóc không trắng đều: mảnh mỏng trong, ngả xám; mảnh dày trắng sáng.
+      bright: g === 2 ? 0.75 + 0.3 * rb : 0.66 + 0.32 * rb,
+      alpha: g === 2 ? 0.35 + 0.4 * rb : 0.7 + 0.3 * Math.max(rb, rt),
+      behind: false,
+    });
+  };
+
+  // g: 0 = đống trên đỉnh, 1 = rải, 2 = sương muối li ti
+  const groups = [
+    [Math.round(k * (st.crown / 100) * SETTLE_CROWN), 0],
+    [Math.round(k * (st.scatter / 100) * SETTLE_SCATTER), 1],
+    [Math.round(k * (st.frost / 100) * SETTLE_FROST), 2],
+  ];
+  groups.forEach(([n, g]) => {
+    const rng = rngOf((seed + Math.imul(g + 11, 0x27d4eb2f)) >>> 0);
+    for (let i = 0; i < n; i++) {
+      const u = rng(), v = rng(), ra = rng(), rd = rng(), rs = rng(), rr = rng(), rt = rng(), rb = rng(), rc = rng();
+      const x = u * w, y = v * h, o = mo(x, y);
+      if (md[o] < 153) continue;
+      // Tuyết đọng thành mảng: nhiễu tần thấp làm chỗ dày chỗ thưa.
+      const pz = 0.3 + 0.7 * smooth(0.2, 0.75, patch(u * 9, v * 9));
+      const c = ex.crown[o], f = ex.fall[o];
+      const p = g === 0 ? c * c * pz : g === 1 ? pz * (0.25 + 0.75 * f) : Math.min(1, 0.2 + 0.5 * f + 1.5 * c);
+      if (ra >= p) continue;
+      if (fbox.length && inFace(x, y)) continue;
+      if (isSkin(data, pix(x, y)) && rb > (g === 2 ? 0 : 0.04)) continue;
+      const dMm = g === 2
+        ? 0.4 + 0.6 * rd
+        : st.minMm * Math.pow(st.maxMm / st.minMm, Math.pow(rd, g === 0 ? 1.2 : 2.4));
+      push(g, x, y, dMm, rs, rr, rt, rb);
+      // Trên đống: mảnh rơi sau đè lên mảnh trước — vài mảnh nhỏ dính sát quanh.
+      if (g === 0 && rc < 0.8 * c) {
+        const D = op.size(dMm, S), m = 1 + Math.floor(c * 9 * rng());
+        for (let j = 0; j < m; j++) {
+          const a = rng() * Math.PI * 2, dd = (0.5 + rng()) * D;
+          const cx = x + Math.cos(a) * dd, cy = y + Math.sin(a) * dd * 0.7;
+          if (md[mo(cx, cy)] < 153 || (fbox.length && inFace(cx, cy))) continue;
+          push(0, cx, cy, Math.max(st.minMm * 0.7, dMm * (0.35 + 0.5 * rng())), rng(), rng(), rng(), rng());
+        }
+      }
+    }
+  });
+  return out;
+}
+
+/*
+ * LỚP PHỦ PHÍA TRƯỚC — mảnh tuyết thật (cùng hình mảnh xơ như tuyết đọng trên
+ * tóc trong ảnh mẫu) đang lơ lửng ngay trước người, quanh mặt phẳng nét. Không
+ * bám vào đầu, không phụ thuộc matte: rải khắp khung, tụ thành chùm theo nhiễu
+ * tần thấp, mảnh sắc xen mảnh hơi mờ cho có chiều sâu. Mảnh to không đè lên
+ * mắt / mũi / miệng; mảnh li ti thì vẫn được bay qua mặt cho tự nhiên.
+ */
+const OVERLAY_COUNT = 1100;
+
+export function overlayFlakes(w, h, cfg, seed, matte, faces) {
+  const o = cfg.overlay;
+  if (!o || !o.enabled || !o.amount) return [];
+  const longPx = Math.max(w, h), op = optics(cfg, longPx), S = cfg.camera.focus;
+  const n = Math.round((o.amount / 100) * OVERLAY_COUNT);
+  const patch = noise2((seed ^ 0x3c6ef372) >>> 0);
+  const kc = cfg.flakes.clumping / 100, blurK = o.blur / 100;
+  // Mặt: khung mặt thật (snow.exe) — chặn mảnh to hơn 1.5 % bề ngang mặt;
+  // không có khung (trang chỉnh) thì dùng dải mặt theo matte / elip.
+  const fb = cfg.faceGuard.enabled && faces && faces.length
+    ? faces.map((f) => ({ cx: f.x + f.w / 2, cy: f.y + 0.5 * f.h, rx: 0.55 * f.w, ry: 0.62 * f.h, min: 0.015 * f.w }))
+    : null;
+  const band = fb ? null : faceTest(cfg, w, h, matte), bandMin = 0.004 * longPx;
+  const onFace = (x, y, E) => {
+    if (fb) {
+      return fb.some((b) => {
+        if (E <= b.min) return false;
+        const dx = (x - b.cx) / (b.rx + E / 2), dy = (y - b.cy) / (b.ry + E / 2);
+        return dx * dx + dy * dy < 1;
+      });
+    }
+    return !!band && E > bandMin && hitsFace(band, x, y, E);
+  };
+  const rng = rngOf((seed ^ 0x7f4a7c15) >>> 0);
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const rd = rng(), rz = rng(), rs = rng(), rr = rng(), rt = rng(), rb = rng(), ra = rng();
+    const dMm = o.minMm * Math.pow(o.maxMm / o.minMm, Math.pow(rd, 1.3));
+    const Z = S * (0.82 + 0.16 * rz);   // ngay trước người
+    const D = op.size(dMm, Z);
+    // Một phần mảnh hơi lệch nét: vòng mờ tới 0.8 cỡ mảnh (vẫn đọc ra hình mảnh).
+    const C = D * (0.03 + 0.6 * blurK * (1 - rz) * (1 - rz));
+    let x = 0, y = 0, ok = false;
+    for (let t = 0; t < 10 && !ok; t++) {
+      const u = rng(), v = rng(), q = rng();
+      if (kc > 0 && q > 1 - kc + kc * smooth(0.25, 0.8, patch(u * 4.5, v * 3.5))) continue;
+      x = u * w; y = v * h;
+      if (onFace(x, y, D + C)) continue;
+      ok = true;
+    }
+    if (!ok) continue;
+    out.push({
+      settled: true, overlay: true, group: 1, Z, C, D, x, y, kind: 4,
+      sprite: Math.floor(rs * SPRITE_COUNT[4]),
+      rot: rr * Math.PI * 2,
+      tilt: 0.55 + 0.45 * rt,
+      // Mảnh trước người hứng thẳng đèn flash: trắng sáng, không xám.
+      bright: 1 + 0.12 * rb,
+      alpha: (0.9 + 0.1 * ra) * (1 - 0.3 * (C / Math.max(D, 1))),
+      aa: 18,   // chống răng cưa nhẹ hơn hạt thường: mảnh trước người phải sắc
+      behind: false,
+    });
+  }
+  return out;
 }
 
 /* ═════════════════════════ sprite hạt ═════════════════════════ */
@@ -731,9 +1052,12 @@ function spritesOf(kind, seed) {
   if (!set) {
     if (SPRITES.size >= 9) SPRITES.clear();
     const rng = rngOf((0x5eed5 + kind * 7919 + Math.imul(seed, 2654435761)) >>> 0);
-    const shape = [clumpShape, chipShape, crystalShape][kind];
+    const shape = [clumpShape, chipShape, crystalShape, settledShape, aggregateShape][kind];
     set = [];
-    for (let i = 0; i < SPRITE_COUNT[kind]; i++) set.push(variants(rasterize(shape(rng))));
+    for (let i = 0; i < SPRITE_COUNT[kind]; i++) {
+      const sh = kind === 3 && i < SETTLE_FEATHER ? featherShape : shape;
+      set.push(variants(rasterize(sh(rng))));
+    }
     SPRITES.set(key, set);
   }
   return set;
@@ -819,6 +1143,131 @@ function chipShape(rng) {
   }
   const gx = Math.cos(off * 1.7), gy = Math.sin(off * 1.7);
   return (x, y) => (insidePoly(pts, x, y) ? 0.82 + 0.18 * (0.5 + 0.5 * (x * gx + y * gy)) : 0);
+}
+
+/**
+ * Mảnh tuyết đọng: một đến ba mảnh tinh thể vỡ dính nhau, viền răng cưa (đỉnh
+ * đa giác lệch bán kính mạnh), ruột sáng không đều — như tuyết thật rơi trên tóc
+ * nhìn gần: không tròn, không phải cục bông.
+ */
+/**
+ * Mảnh tuyết đọng dạng XƠ: tinh thể nhánh cây bị gãy, nằm bẹp trên tóc — một
+ * sống dài hơi cong, vài nhánh ngắn chĩa hai bên, nhánh mỏng trong hơn sống,
+ * thêm vụn nhỏ ở đầu mút. Trục dài là trục x của sprite: settledFlakes xoay nó
+ * xuôi theo sợi tóc.
+ */
+/**
+ * Cụm tuyết đang rơi: vài tinh thể vỡ dính nhau thành một bông xốp — nhánh DÀY
+ * chĩa nhiều hướng từ gần tâm, thêm vài cục nhỏ, ruột sáng không đều. Ở cỡ vài
+ * pixel vẫn đọc ra là một bông tuyết (mảnh xơ nhánh mảnh thì thành sợi xơ vải).
+ */
+function aggregateShape(rng) {
+  // Các mảnh vỡ đặt LỆCH nhau, mỗi mảnh một hướng — không tỏa đều từ một tâm
+  // (tỏa đều thì thành dấu sao, trông như hình vẽ).
+  const segs = [], n = 3 + Math.floor(rng() * 4);
+  for (let i = 0; i < n; i++) {
+    const ca = rng() * Math.PI * 2, cd = (i ? 0.2 + 0.3 * rng() : 0.1 * rng());
+    const cx = Math.cos(ca) * cd, cy = Math.sin(ca) * cd;
+    const a = rng() * Math.PI, len = 0.25 + 0.4 * rng(), wd = 0.16 + 0.12 * rng();
+    const dx = Math.cos(a) * len, dy = Math.sin(a) * len;
+    segs.push([cx - dx, cy - dy, cx + dx * (0.4 + 0.6 * rng()), cy + dy * (0.4 + 0.6 * rng()), wd, 0.7 + 0.3 * rng()]);
+    const nb = Math.floor(rng() * 3);
+    for (let j = 0; j < nb; j++) {
+      const t = rng() * 2 - 1, bx = cx + dx * t * 0.8, by = cy + dy * t * 0.8;
+      const ba = a + (rng() < 0.5 ? -1 : 1) * (0.6 + 0.6 * rng()), bl = 0.12 + 0.2 * rng();
+      segs.push([bx, by, bx + Math.cos(ba) * bl, by + Math.sin(ba) * bl, wd * (0.5 + 0.3 * rng()), 0.55 + 0.35 * rng()]);
+    }
+  }
+  // Lõi: các mảnh dính vào một khối ở giữa — thiếu lõi thì bông rời ra như nét chữ.
+  segs.push([0, 0, (rng() - 0.5) * 0.2, (rng() - 0.5) * 0.2, 0.24 + 0.1 * rng(), 0.95]);
+  const nb = Math.floor(rng() * 3);
+  for (let i = 0; i < nb; i++) {
+    const a = rng() * Math.PI * 2, d = 0.15 + 0.45 * rng();
+    segs.push([Math.cos(a) * d, Math.sin(a) * d, Math.cos(a) * d, Math.sin(a) * d, 0.08 + 0.12 * rng(), 0.75]);
+  }
+  let ext = 0;
+  segs.forEach((g) => { ext = Math.max(ext, Math.hypot(g[0], g[1]) + g[4], Math.hypot(g[2], g[3]) + g[4]); });
+  const sc = 0.95 / ext;
+  segs.forEach((g) => { for (let q = 0; q < 5; q++) g[q] *= sc; });
+  const nz = noise2((rng() * 4294967296) >>> 0);
+  return (x, y) => {
+    let v = 0;
+    for (let i = 0; i < segs.length; i++) {
+      const g = segs[i];
+      const d = segDist(x, y, g[0], g[1], g[2], g[3] + (g[0] === g[2] && g[1] === g[3] ? 1e-6 : 0));
+      if (d < g[4]) {
+        const a = g[5] * (1 - smooth(g[4] * 0.45, g[4], d));
+        v = v + a - v * a;   // chồng mảnh: chỗ dính nhau dày, sáng hơn
+      }
+    }
+    return Math.min(1, v) * (0.86 + 0.14 * nz(x * 6 + 4, y * 6 + 9));
+  };
+}
+
+function featherShape(rng) {
+  const segs = [];
+  const L = 0.8 + rng() * 0.15, w0 = 0.12 + rng() * 0.08, bend = (rng() - 0.5) * 0.35;
+  const spine = (t) => [t * L, bend * (1 - t * t) * L];
+  for (let i = 0; i < 6; i++) {
+    const t0 = -1 + i / 3, t1 = -1 + (i + 1) / 3, a = spine(t0), b = spine(t1);
+    segs.push([a[0], a[1], b[0], b[1], w0 * (1 - 0.45 * Math.abs((t0 + t1) / 2)), 0.85 + 0.15 * rng()]);
+  }
+  const nb = 6 + Math.floor(rng() * 8);
+  for (let i = 0; i < nb; i++) {
+    const t = -0.85 + 1.7 * rng(), base = spine(t);
+    const ang = (rng() < 0.5 ? -1 : 1) * (0.4 + rng() * 0.7), flip = rng() < 0.5 ? -1 : 1;
+    const len = (0.3 + 0.5 * rng()) * (1 - 0.35 * Math.abs(t));
+    segs.push([base[0], base[1], base[0] + flip * Math.cos(ang) * len, base[1] + Math.sin(ang) * len, w0 * (0.55 + 0.45 * rng()), 0.7 + 0.3 * rng()]);
+  }
+  const nf = Math.floor(rng() * 3);
+  for (let i = 0; i < nf; i++) {
+    const t = rng() < 0.5 ? -1.05 : 1.05, p = spine(t), j = (rng() - 0.5) * 0.25;
+    segs.push([p[0] + j, p[1] + j, p[0] + j, p[1] + j, w0 * (0.6 + 0.5 * rng()), 0.6 + 0.4 * rng()]);
+  }
+  let ext = 0;
+  segs.forEach((g) => { ext = Math.max(ext, Math.hypot(g[0], g[1]) + g[4], Math.hypot(g[2], g[3]) + g[4]); });
+  const s = 0.95 / ext;
+  segs.forEach((g) => { for (let q = 0; q < 5; q++) g[q] *= s; });
+  const nz = noise2((rng() * 4294967296) >>> 0);
+  return (x, y) => {
+    let v = 0;
+    for (let i = 0; i < segs.length; i++) {
+      const g = segs[i];
+      const d = segDist(x, y, g[0], g[1], g[2], g[3] + (g[0] === g[2] && g[1] === g[3] ? 1e-6 : 0));
+      if (d < g[4]) {
+        const a = g[5] * (1 - smooth(g[4] * 0.5, g[4], d));
+        if (a > v) v = a;
+      }
+    }
+    return v * (0.72 + 0.28 * nz(x * 7 + 2, y * 7 + 5));
+  };
+}
+
+function settledShape(rng) {
+  const parts = [], n = 1 + Math.floor(rng() * 4);
+  let ext = 0;
+  for (let p = 0; p < n; p++) {
+    const ca = rng() * Math.PI * 2, cd = p ? 0.25 + rng() * 0.35 : 0;
+    const cx = Math.cos(ca) * cd, cy = Math.sin(ca) * cd;
+    const r0 = p ? 0.2 + rng() * 0.25 : 0.45 + rng() * 0.3;
+    const m = 7 + Math.floor(rng() * 7), off = rng() * Math.PI * 2, pts = [];
+    for (let i = 0; i < m; i++) {
+      const a = off + ((i + (rng() - 0.5) * 0.7) * Math.PI * 2) / m;
+      const r = r0 * (0.55 + 0.5 * rng());
+      pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+      ext = Math.max(ext, Math.hypot(cx + Math.cos(a) * r, cy + Math.sin(a) * r));
+    }
+    parts.push(pts);
+  }
+  const s = 0.95 / ext;
+  parts.forEach((pts) => pts.forEach((q) => { q[0] *= s; q[1] *= s; }));
+  const nz = noise2((rng() * 4294967296) >>> 0);
+  return (x, y) => {
+    for (let i = 0; i < parts.length; i++) {
+      if (insidePoly(parts[i], x, y)) return 0.78 + 0.22 * nz(x * 6 + 3, y * 6 + 1);
+    }
+    return 0;
+  };
 }
 
 function insidePoly(pts, x, y) {
@@ -938,6 +1387,16 @@ export function drawSnow(data, w, h, ch, cfg0, opts = {}) {
   const only = opts.only ? new Set(opts.only) : null;
   const amb = ambientGrid(data, w, h, ch);
   const cover = coverFor(cfg, w, h, opts.matte);
+  // Tuyết đọng nằm trên người: vẽ sau hạt sau lưng, trước hạt phía trước (Z = S).
+  // Dò da trên ảnh gốc, trước khi có hạt nào được vẽ.
+  const settled = settledFlakes(w, h, cfg, seed, opts.matte, opts.faces, data, ch)
+    .concat(overlayFlakes(w, h, cfg, seed, opts.matte, opts.faces));
+  scene.stats.settled = settled.filter((p) => !p.overlay).length;
+  scene.stats.overlay = settled.length - scene.stats.settled;
+  if (settled.length) {
+    scene.particles = scene.particles.concat(settled);
+    scene.particles.sort((a, b) => b.Z - a.Z || (a.settled ? -1 : 0) - (b.settled ? -1 : 0));
+  }
 
   const li = cfg.light;
   const backK = (0.6 * li.backlight) / 100;
@@ -949,8 +1408,14 @@ export function drawSnow(data, w, h, ch, cfg0, opts = {}) {
   const blades = cfg.camera.blades;
   const S = cfg.camera.focus;
   const col = [0, 0, 0], gcol = [0, 0, 0];
+  const mottle = noise2((seed ^ 0x6a09e667) >>> 0);
+  const v1 = cfg.style === "v1";
 
   for (const p of scene.particles) {
+    if (p.settled) {
+      if (!only || only.has("settle")) drawSettled(data, w, h, ch, p, seed, amb, li);
+      continue;
+    }
     if (only && !only.has(SNOW_LAYERS[p.layer])) continue;
     const E = Math.max(1.2, p.D + p.C);
     const sharp = Math.min(1, Math.max(p.D, 0.7) / E);
@@ -996,13 +1461,33 @@ export function drawSnow(data, w, h, ch, cfg0, opts = {}) {
       sprite(data, w, h, ch, p, spritesOf(p.kind, seed)[p.sprite], cov, col, mask);
     } else {
       // Tuyết là vật mờ, đang rơi, không phải nguồn sáng điểm: bokeh của nó
-      // mềm viền hơn hẳn bokeh đèn. Mép sáng chỉ còn chút ít ở hạt rất mờ.
-      const soft = Math.min(1, Math.max(0.3, 0.3 + 0.5 * sharp + 1.2 / (E / 2)));
-      const rim = p.C > 3 * p.D ? 1 : 0;
-      disc(data, w, h, ch, p.x, p.y, E, cov, col, soft, rim, blades, p.rot, mask);
+      // mềm viền hơn hẳn bokeh đèn, ruột loang không đều (hạt thật không phải
+      // đĩa đặc). Viền cứng + ruột phẳng là thứ làm tuyết trông như hình dán.
+      // Mép sáng chỉ còn ở hạt cực mờ sát ống kính.
+      // v1 giữ nguyên cách vẽ của bản đầu (viền gọn hơn, mép sáng sớm hơn, ruột phẳng).
+      const soft = v1
+        ? Math.min(1, Math.max(0.3, 0.3 + 0.5 * sharp + 1.2 / (E / 2)))
+        : Math.min(1, Math.max(0.65, 0.55 + 0.4 * sharp + 1.2 / (E / 2)));
+      const rim = p.C > (v1 ? 3 : 6) * p.D ? 1 : 0;
+      disc(data, w, h, ch, p.x, p.y, E, cov, col, soft, rim, blades, p.rot, mask, v1 ? null : mottle);
     }
   }
   return scene.stats;
+}
+
+/**
+ * Một mảnh tuyết đọng: nằm đúng mặt phẳng nét nên không có vòng mờ, không quầng,
+ * không vệt. Sáng gần trắng, chỉ nhuốm nhẹ màu môi trường (nửa mức "ăn màu nền").
+ */
+function drawSettled(data, w, h, ch, p, seed, amb, li) {
+  const c = ambientAt(amb, p.x / w, p.y / h), cm = Math.max(c[0], c[1], c[2], 1);
+  const ambK = (0.5 * li.ambient) / 100, lv = Math.min(1.08, li.brightness / 100 + 0.1) * p.bright * 255;
+  const col = [0, 0, 0];
+  // Tuyết đọng ngả lạnh nhẹ (phản sáng trời / phông), không trắng tinh như giấy.
+  const cool = p.overlay ? [0.98, 0.99, 1] : [0.95, 0.975, 1];
+  for (let k = 0; k < 3; k++) col[k] = lv * cool[k] * (1 - ambK + (ambK * c[k]) / cm);
+  if (p.D >= 2.5) sprite(data, w, h, ch, p, spritesOf(p.kind, seed)[p.sprite], p.alpha, col, null);
+  else disc(data, w, h, ch, p.x, p.y, Math.max(0.9, p.D), p.alpha, col, 1, 0, 0, 0, null);
 }
 
 function blend(data, i, a, col) {
@@ -1021,7 +1506,7 @@ function blend(data, i, a, col) {
  * `blades` ≥ 5 cho đĩa đa giác. Đĩa nhỏ hơn 4px thì vẽ thành chấm Gauss để
  * không răng cưa.
  */
-function disc(data, w, h, ch, cx, cy, E, peak, col, soft, rim, blades, rot, mask) {
+function disc(data, w, h, ch, cx, cy, E, peak, col, soft, rim, blades, rot, mask, nz) {
   const R = E / 2;
   if (R < 2) {
     // Cùng "lượng sáng" với đĩa bán kính R: p·πR² = pk·2πσ².
@@ -1056,6 +1541,7 @@ function disc(data, w, h, ch, cx, cy, E, peak, col, soft, rim, blades, rot, mask
       }
       if (rho >= 1) continue;
       let a = peak * (1 - smooth(1 - soft, 1, rho));
+      if (nz) a *= 0.72 + 0.4 * nz(dx * inv * 1.4 + rot * 13, dy * inv * 1.4 + rot * 7);
       if (rim) a *= 0.85 + 0.25 * smooth(0.35, 0.8, rho);
       if (mask) a *= 1 - mask.at(x, y);
       if (a > 0.003) blend(data, (y * w + x) * ch, a > 1 ? 1 : a, col);
@@ -1067,7 +1553,7 @@ function disc(data, w, h, ch, cx, cy, E, peak, col, soft, rim, blades, rot, mask
 function sprite(data, w, h, ch, p, sv, peak, col, mask) {
   const D = p.D;
   // Độ mờ cần trên lưới sprite: vòng mờ ống kính (σ ≈ C/4) hoặc chống răng cưa khi thu nhỏ.
-  const need = Math.max((16 * p.C) / D, 25.6 / D);
+  const need = Math.max((16 * p.C) / D, (p.aa || 25.6) / D);
   let j = 0;
   while (j < SP_SIGMA.length - 1 && SP_SIGMA[j + 1] <= need) j++;
   const A = sv[j], B = j < SP_SIGMA.length - 1 ? sv[j + 1] : null;
