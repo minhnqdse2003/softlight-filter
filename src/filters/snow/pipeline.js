@@ -33,6 +33,9 @@ export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {
   // Mở model TRƯỚC khi giải mã, để hai việc chạy song song.
   const auto = cfg.subject.mode === 'auto', model = cfg.subject.model;
   if (auto) openSession(model).catch(() => {});
+  // Model retouch cũng nạp ngay từ đầu (GPU khởi tạo ~2 giây) — xem chuanBiRetouch.
+  const retouchMod = cfg.retouch && cfg.retouch.enabled ? import('../../retouch/retouch.js') : null;
+  if (retouchMod) retouchMod.then((m) => m.chuanBiRetouch(cfg.retouch), () => {});
 
   const s = seed || cfg.seed || seedFromFile(inputPath);
   const { data, info } = await sharp(inputPath, { failOn: 'none' }).rotate().toColourspace('srgb').raw()
@@ -47,11 +50,20 @@ export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {
   const stages = [];
   const addWarn = (w) => { if (w) warn = warn ? `${warn}; ${w}` : w; };
 
+  // Tách người chạy SONG SONG với retouch, trên ẢNH GỐC (`data` — retouch chỉ sửa
+  // `cur`): retouch chỉ đổi da, không đổi dáng người nên matte như nhau, mà model
+  // tách người chạy trong luồng của onnxruntime trong lúc retouch tính bằng JS.
+  // Lỗi giữ lại để xử lý (lùi MODNet / elip) đúng như trước.
+  const tMatte = Date.now();
+  const matteP = auto
+    ? personMatte(data, info.width, info.height, model).then((m) => ({ m }), (loi) => ({ loi }))
+    : null;
+
   // Retouch nạp lười: tắt thì không nạp model tìm mặt / xoá mụn.
   if (cfg.retouch && cfg.retouch.enabled) {
     const t = Date.now();
     try {
-      const { retouch } = await import('../../retouch/retouch.js');
+      const { retouch } = await retouchMod;
       const { boxes, ...r } = await retouch(cur, info.width, info.height, cfg.retouch);
       if (boxes) faces = boxes;
       addWarn(r.warn);
@@ -63,7 +75,10 @@ export async function renderSnow(inputPath, cfg, { trace = false, seed = 0 } = {
 
   if (auto) {
     try {
-      matte = await personMatte(cur, info.width, info.height, model);
+      const kq = await matteP;
+      if (kq.loi) throw kq.loi;
+      matte = kq.m;
+      if (trace) stages.push({ name: 'tách người (song song)', ms: Date.now() - tMatte });
     } catch (err) {
       // Model "đẹp" hỏng / thiếu thì thử MODNet trước khi rơi về elip.
       if (model !== 'modnet') {
@@ -162,7 +177,7 @@ export async function doctor() {
   }
   if (cfg.retouch.enabled) {
     const { retouchDoctor } = await import('../../retouch/retouch.js');
-    rows.push(...(await retouchDoctor()));
+    rows.push(...(await retouchDoctor(cfg.retouch)));
   } else {
     rows.push([true, 'Retouch da', 'đang tắt trong snow.config.json']);
   }

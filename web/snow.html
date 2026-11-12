@@ -1364,6 +1364,8 @@ return {
       ["c1-mask", "Retouch v2 — mặt nạ da Capture One + chữa tự viết"],
       ["builtin", "Bộ tự viết — nhanh, không cần model"]], "retouch.blemishMethod");
     slider(b, { label: "Mức xoá mụn (Retouch v1 / v2)", path: "retouch.blemishAmount", min: 0, max: 100, step: 1, zero: 100 });
+    selectField(b, "Máy chạy model Capture One", [["auto", "Tự động — tính cả thời gian nạp GPU (nhanh nhất cho snow.exe)"],
+      ["gpu", "GPU nếu chạy nhanh hơn — cách cũ"], ["cpu", "Luôn CPU"]], "retouch.device");
     slider(b, { label: "Độ mịn da (0 = không làm mịn)", path: "retouch.smooth", min: 0, max: 100, step: 1, zero: 25 });
     var row = el("div", "btns");
     [["Không làm mịn", 0], ["Nhẹ", 30], ["Vừa", 60], ["Mạnh", 90]].forEach(function (m) {

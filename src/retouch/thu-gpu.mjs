@@ -1,8 +1,11 @@
 // Chạy trong TIẾN TRÌNH CON (xoa-mun.js gọi lúc nạp model): đo từng model xoá
 // mụn trên CPU và trên mỗi GPU của máy (Mac: CoreML; Windows: DirectML, từng
 // card), trên một ô ảnh giả. In một dòng JSON:
-//   { skin: { cpu: { ms }, coreml: { ms, lech } | { loi }, ..., chon: 'coreml' }, dn: { ... } }
-// `chon` = máy NHANH NHẤT trong số máy ra cùng kết quả với CPU (lệch trung bình nhỏ).
+//   { skin: { cpu: { ms, tao }, coreml: { ms, tao, lech, dung } | { loi }, ..., chon }, dn: { ... } }
+// `ms` = một lần chạy (trung vị), `tao` = thời gian TẠO PHIÊN (GPU dịch model —
+// với snow.exe, mỗi tấm một tiến trình, khoản này phải trả lại ở mỗi tấm),
+// `dung` = ra cùng kết quả với CPU (lệch trung bình nhỏ). `chon` = máy chạy
+// nhanh nhất trong số máy `dung`; xoa-mun.js tự chọn lại theo chế độ (chonCho).
 //
 //   node thu-gpu.mjs <máy GPU, cách nhau dấu phẩy>   vd: coreml   hoặc   dml:0,dml:1
 //   (model: như xoa-mun.js — MUN_MODEL_DIR hoặc models/mun)
@@ -50,15 +53,22 @@ async function do1(phien, feeds) {
 const kq = {};
 for (const k of Object.keys(MODEL_FILES)) {
   const r = { chon: 'cpu' };
+  let model;
+  try {
+    model = docModel(k);
+  } catch {
+    continue; // thiếu model này (vd. chỉ có skinMasking cho Retouch v2): đo model còn lại
+  }
   kq[k] = r;
-  const model = docModel(k);
   const shape = k === 'skin' ? [1, 512, 512, 3] : [1, 3, TILE, TILE];
   const x = oGia(k === 'skin' ? 512 : TILE, k === 'skin');
   let goc;
   try {
+    const t0 = Date.now();
     const cpu = await ort.InferenceSession.create(model, tuyChonPhien('cpu'));
+    const tao = Date.now() - t0;
     const a = await do1(cpu, { [cpu.inputNames[0]]: new ort.Tensor('float32', x, shape) });
-    r.cpu = { ms: a.ms };
+    r.cpu = { ms: a.ms, tao };
     goc = a.data;
     await cpu.release?.();
   } catch (err) {
@@ -68,14 +78,17 @@ for (const k of Object.keys(MODEL_FILES)) {
   let nhanh = r.cpu.ms;
   for (const g of gpus) {
     try {
+      const t0 = Date.now();
       const s = await ort.InferenceSession.create(model, tuyChonPhien(g));
+      const tao = Date.now() - t0;
       const b = await do1(s, { [s.inputNames[0]]: new ort.Tensor('float32', x, shape) });
       let tong = 0;
       for (let i = 0; i < goc.length; i++) tong += Math.abs(goc[i] - b.data[i]);
       // skinMasking ra logit (thang ~±10), DnCNN ra ảnh 0–1.
       const lech = +(tong / goc.length).toFixed(5);
-      r[g] = { ms: b.ms, lech };
-      if (lech < (k === 'skin' ? 0.05 : 0.003) && b.ms < nhanh) {
+      const dung = lech < (k === 'skin' ? 0.05 : 0.003);
+      r[g] = { ms: b.ms, tao, lech, dung };
+      if (dung && b.ms < nhanh) {
         nhanh = b.ms;
         r.chon = g;
       }

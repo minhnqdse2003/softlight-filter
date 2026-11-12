@@ -73,8 +73,10 @@ export const SNOW_RANGES = {
  */
 /** capture-one = Retouch v1 (đúng Capture One), c1-mask = Retouch v2 (mặt nạ da C1 + chữa tự viết), builtin = dự phòng. */
 export const RETOUCH_METHODS = ["capture-one", "c1-mask", "builtin"];
+/** Máy chạy model Capture One — xem chonCho trong src/retouch/xoa-mun.js. */
+export const RETOUCH_DEVICES = ["auto", "gpu", "cpu"];
 export function defaultRetouch() {
-  return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 25, dodgeBurn: 30, contour: false };
+  return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 25, dodgeBurn: 30, contour: false, device: "auto" };
 }
 export function normalizeRetouch(raw) {
   const r = obj(raw), d = defaultRetouch();
@@ -86,6 +88,7 @@ export function normalizeRetouch(raw) {
     smooth: Math.round(num(r.smooth, [0, 100], d.smooth)),
     dodgeBurn: Math.round(num(r.dodgeBurn, [0, 100], d.dodgeBurn)),
     contour: bool(r.contour, d.contour),
+    device: RETOUCH_DEVICES.indexOf(r.device) >= 0 ? r.device : d.device,
   };
 }
 
@@ -411,7 +414,7 @@ const SNOW_DOC =
   "thieu model thi tu dung builtin = bo tu viet; blemishAmount 0-100; " +
   "smooth = do min 0-100, 0 = khong lam min, nhe 30 / vua 60 / manh 90; " +
   "dodgeBurn = to sang / toi kieu neutral gray 0-100 (lam deu da, quang tham mat, ranh mui-mieng), 0 = tat, mac dinh 30, " +
-  "can models/facemesh-v2.onnx (npm run model -- facemesh); contour = tao khoi theo cung muc dodgeBurn).";
+  "can models/facemesh-v2.onnx (npm run model -- facemesh); contour = tao khoi theo cung muc dodgeBurn; device = may chay model Capture One: auto (mac dinh, snow.exe tinh ca thoi gian nap GPU - thuong chay mat na da tren CPU, nhanh hon ~1 s/tam), gpu (cach cu: may chay nhanh nhat), cpu).";
 
 /**
  * File cấu hình dạng dễ đọc: nhóm nào toàn số thì nằm trên một dòng. Mục `look`

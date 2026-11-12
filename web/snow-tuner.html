@@ -1842,8 +1842,10 @@ const SNOW_RANGES = {
  */
 /** capture-one = Retouch v1 (đúng Capture One), c1-mask = Retouch v2 (mặt nạ da C1 + chữa tự viết), builtin = dự phòng. */
 const RETOUCH_METHODS = ["capture-one", "c1-mask", "builtin"];
+/** Máy chạy model Capture One — xem chonCho trong src/retouch/xoa-mun.js. */
+const RETOUCH_DEVICES = ["auto", "gpu", "cpu"];
 function defaultRetouch() {
-  return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 25, dodgeBurn: 30, contour: false };
+  return { enabled: false, blemish: true, blemishMethod: "capture-one", blemishAmount: 100, smooth: 25, dodgeBurn: 30, contour: false, device: "auto" };
 }
 function normalizeRetouch(raw) {
   const r = obj(raw), d = defaultRetouch();
@@ -1855,6 +1857,7 @@ function normalizeRetouch(raw) {
     smooth: Math.round(num(r.smooth, [0, 100], d.smooth)),
     dodgeBurn: Math.round(num(r.dodgeBurn, [0, 100], d.dodgeBurn)),
     contour: bool(r.contour, d.contour),
+    device: RETOUCH_DEVICES.indexOf(r.device) >= 0 ? r.device : d.device,
   };
 }
 
@@ -2180,7 +2183,7 @@ const SNOW_DOC =
   "thieu model thi tu dung builtin = bo tu viet; blemishAmount 0-100; " +
   "smooth = do min 0-100, 0 = khong lam min, nhe 30 / vua 60 / manh 90; " +
   "dodgeBurn = to sang / toi kieu neutral gray 0-100 (lam deu da, quang tham mat, ranh mui-mieng), 0 = tat, mac dinh 30, " +
-  "can models/facemesh-v2.onnx (npm run model -- facemesh); contour = tao khoi theo cung muc dodgeBurn).";
+  "can models/facemesh-v2.onnx (npm run model -- facemesh); contour = tao khoi theo cung muc dodgeBurn; device = may chay model Capture One: auto (mac dinh, snow.exe tinh ca thoi gian nap GPU - thuong chay mat na da tren CPU, nhanh hon ~1 s/tam), gpu (cach cu: may chay nhanh nhat), cpu).";
 
 /**
  * File cấu hình dạng dễ đọc: nhóm nào toàn số thì nằm trên một dòng. Mục `look`
@@ -4558,6 +4561,8 @@ function glow(data, w, h, ch, cx, cy, R, k, col, mask) {
       ["c1-mask", "Retouch v2 — mặt nạ da Capture One + chữa tự viết"],
       ["builtin", "Bộ tự viết — nhanh, không cần model"]], "retouch.blemishMethod");
     slider(b, { label: "Mức xoá mụn (Retouch v1 / v2)", path: "retouch.blemishAmount", min: 0, max: 100, step: 1, zero: 100 });
+    selectField(b, "Máy chạy model Capture One", [["auto", "Tự động — tính cả thời gian nạp GPU (nhanh nhất cho snow.exe)"],
+      ["gpu", "GPU nếu chạy nhanh hơn — cách cũ"], ["cpu", "Luôn CPU"]], "retouch.device");
     slider(b, { label: "Độ mịn da (0 = không làm mịn)", path: "retouch.smooth", min: 0, max: 100, step: 1, zero: 25 });
     var row = el("div", "btns");
     [["Không làm mịn", 0], ["Nhẹ", 30], ["Vừa", 60], ["Mạnh", 90]].forEach(function (m) {

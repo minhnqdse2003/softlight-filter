@@ -58,7 +58,6 @@ export const TILE = 576;
 const STEP = TILE - 2 * PAD;
 export const LUONG = 4;
 
-let engine = null;
 
 /**
  * Đọc model thành Buffer. DnCNN khai đầu vào [1, 3, "H", "W"] (cỡ động): đổi
@@ -105,115 +104,178 @@ function gpuCuaMay() {
   return [];
 }
 
+/** `retouch.device` trong snow.config.json — xem chonCho. */
+export const THIET_BI = ['auto', 'gpu', 'cpu'];
+
+/** Đổi khi cách đo đổi: may.json cũ (chưa có thời gian tạo phiên) bị đo lại một lần. */
+const KHOA_DO = 'do-v2';
+
 /**
- * Chọn máy tính cho từng model: đo CPU và mỗi GPU, lấy cái nhanh hơn. Đo trong
+ * Đo CPU và mỗi GPU cho từng model (thời gian CHẠY và thời gian TẠO PHIÊN), trong
  * TIẾN TRÌNH CON: lỗi trong thư viện GPU làm chết cả tiến trình — chết ở đó thì
- * bộ lọc vẫn sống, và dùng CPU. Nhớ kết quả ở models/mun/may.json (theo máy,
- * hệ điều hành, cỡ model): lần đo đầu mất vài chục giây vì CoreML dịch model;
- * cài bản mới thì thư mục app thay hẳn nên đo lại một lần.
+ * bộ lọc vẫn sống, và dùng CPU. Nhớ kết quả ở models/mun/may.json (theo máy, hệ
+ * điều hành, cỡ model): lần đo đầu mất vài chục giây vì GPU dịch model; cài bản
+ * mới thì thư mục app thay hẳn nên đo lại một lần.
  */
-async function chonMay() {
-  const cpu = { skin: 'cpu', dn: 'cpu', ghiChu: 'CPU' };
-  // Ép máy (để đo): MUN_MAY=cpu | coreml | dml:<card> — bỏ qua bước đo.
-  const ep = process.env.MUN_MAY;
-  if (ep && /^(cpu|coreml|dml(:\d+)?)$/.test(ep)) return { skin: ep, dn: ep, ghiChu: `${ep} (ép bằng MUN_MAY)` };
+async function doMay() {
   const gpus = process.env.MUN_THU_GPU === '0' ? [] : gpuCuaMay();
-  if (!gpus.length) return cpu;
-  const khoa = [process.platform, process.arch, os.release(), gpus.join(','),
-    ...Object.values(MODEL_FILES).map((f) => fs.statSync(path.join(MODEL_DIR, f)).size)].join('|');
+  if (!gpus.length) return { gpus, kq: null, ghiChu: 'CPU (không có GPU để thử)' };
+  const co = Object.values(MODEL_FILES).filter((f) => fs.existsSync(path.join(MODEL_DIR, f)));
+  const khoa = [KHOA_DO, process.platform, process.arch, os.release(), gpus.join(','),
+    ...co.map((f) => `${f}:${fs.statSync(path.join(MODEL_DIR, f)).size}`)].join('|');
   const fNho = path.join(MODEL_DIR, 'may.json');
   try {
     const nho = JSON.parse(fs.readFileSync(fNho, 'utf8'));
-    if (nho.khoa === khoa) return nho.may;
+    if (nho.khoa === khoa && nho.kq) return { gpus, kq: nho.kq };
   } catch {
     // chưa đo lần nào
   }
-  const may = await new Promise((resolve) => {
+  const kq = await new Promise((resolve) => {
     execFile(process.execPath, [path.join(HERE, 'thu-gpu.mjs'), gpus.join(',')], { timeout: 240_000, cwd: HERE }, (err, out) => {
       if (err) {
-        resolve({ ...cpu, ghiChu: `CPU (đo GPU hỏng: ${(err.message || '').split('\n')[0].slice(0, 160)})` });
+        resolve({ loi: `đo GPU hỏng: ${(err.message || '').split('\n')[0].slice(0, 160)}` });
         return;
       }
       try {
-        const kq = JSON.parse(out.trim().split('\n').pop());
-        const m = {};
-        const ghi = [];
-        for (const k of Object.keys(MODEL_FILES)) {
-          const r = kq[k] || {};
-          m[k] = r.chon || 'cpu';
-          const doDuoc = ['cpu', ...gpus].map((g) => `${g} ${r[g]?.ms != null ? `${r[g].ms} ms` : 'lỗi'}`).join(', ');
-          ghi.push(`${k} → ${m[k]} (${doDuoc})`);
-        }
-        m.ghiChu = ghi.join('; ');
-        resolve(m);
+        resolve(JSON.parse(out.trim().split('\n').pop()));
       } catch (e) {
-        resolve({ ...cpu, ghiChu: `CPU (không đọc được kết quả đo GPU: ${e.message})` });
+        resolve({ loi: `không đọc được kết quả đo GPU: ${e.message}` });
       }
     });
   });
+  if (kq.loi) return { gpus, kq: null, ghiChu: `CPU (${kq.loi})` };
   try {
-    fs.writeFileSync(fNho, JSON.stringify({ khoa, may, at: new Date().toISOString() }));
+    fs.writeFileSync(fNho, JSON.stringify({ khoa, kq, at: new Date().toISOString() }));
   } catch {
     // thư mục chỉ đọc: lần sau đo lại, không sao
   }
-  return may;
+  return { gpus, kq };
+}
+
+/** Số lần chạy mỗi model trong một tấm điển hình (2 mặt): mặt nạ da 1 lần / mặt, DnCNN ~2 ô / mặt. */
+const LAN_MOT_TAM = { skin: 2, dn: 4 };
+
+/** Tiến trình chỉ xử lý MỘT tấm rồi thoát (snow.exe — src/cli.js đặt MUN_CHE_DO=mot-tam). */
+const motTam = () => process.env.MUN_CHE_DO === 'mot-tam';
+
+/**
+ * Chọn máy cho model `k` từ kết quả đo `r`:
+ *   'cpu'  luôn CPU
+ *   'gpu'  máy CHẠY nhanh nhất (cách trước 13/11/2026) — hợp tiến trình sống lâu
+ *   'auto' tiến trình một tấm: máy có tổng (tạo phiên + chạy × số lần trong một
+ *          tấm) nhỏ nhất. Phần lớn "tạo phiên" GPU là KHỞI TẠO CARD (~1,5–3 giây
+ *          với DirectML), trả một lần cho mỗi card mỗi tiến trình: card `daCo` (model
+ *          kia đã nằm trên đó) coi như không tốn tạo phiên. Máy dev 13/11: DnCNN chọn
+ *          GTX 1650 rồi mặt nạ da theo luôn card đó; máy không có GPU tốt thì cả hai
+ *          về CPU thay vì trả tiền khởi tạo card cho vài lần chạy. Tiến trình sống
+ *          lâu (máy phòng Mac) thì như 'gpu', vì phiên chỉ tạo một lần.
+ * Chỉ chọn GPU ra cùng kết quả với CPU (`dung`), nên đổi máy không đổi chất lượng.
+ */
+function chonCho(k, r, thietBi, daCo = null) {
+  if (!r || thietBi === 'cpu' || !r.cpu || r.cpu.ms == null) return 'cpu';
+  const tinhTao = thietBi !== 'gpu' && motTam();
+  const gia = (m, g) => (tinhTao ? (g === daCo ? 0 : m.tao || 0) + LAN_MOT_TAM[k] * m.ms : m.ms);
+  let chon = 'cpu';
+  let tot = gia(r.cpu, 'cpu');
+  for (const [g, m] of Object.entries(r)) {
+    if (g === 'cpu' || !m || typeof m !== 'object' || m.ms == null) continue;
+    // may.json đo trước khi có `dung`: dùng ngưỡng lệch như thu-gpu.mjs.
+    const dung = m.dung ?? (m.lech != null && m.lech < (k === 'skin' ? 0.05 : 0.003));
+    if (dung && gia(m, g) < tot) {
+      tot = gia(m, g);
+      chon = g;
+    }
+  }
+  return chon;
+}
+
+/** Máy cho từng model + dòng ghi chú cho nhật ký / kiem-tra.bat. */
+async function chonMay(thietBi = 'auto', khongEp = false, chiDa = false) {
+  // Ép máy (để đo): MUN_MAY=cpu | coreml | dml:<card> — bỏ qua bước đo.
+  const ep = khongEp ? null : process.env.MUN_MAY;
+  if (ep && /^(cpu|coreml|dml(:\d+)?)$/.test(ep)) return { skin: ep, dn: ep, ghiChu: `${ep} (ép bằng MUN_MAY)` };
+  // Ép riêng từng model (để đo tổ hợp): MUN_MAY_SKIN / MUN_MAY_DN.
+  const es = process.env.MUN_MAY_SKIN, ed = process.env.MUN_MAY_DN, hop = /^(cpu|coreml|dml(:\d+)?)$/;
+  if (!khongEp && ((es && hop.test(es)) || (ed && hop.test(ed)))) {
+    const m = await chonMay(thietBi === 'cpu' ? 'cpu' : thietBi, true, chiDa);
+    if (es && hop.test(es)) m.skin = es;
+    if (ed && hop.test(ed)) m.dn = ed;
+    m.ghiChu = `skin ${m.skin}, dn ${m.dn} (ép bằng MUN_MAY_SKIN / MUN_MAY_DN)`;
+    return m;
+  }
+  if (thietBi === 'cpu') return { skin: 'cpu', dn: 'cpu', ghiChu: 'CPU (retouch.device = cpu)' };
+  const d = await doMay();
+  if (!d.kq) return { skin: 'cpu', dn: 'cpu', ghiChu: d.ghiChu };
+  const m = {};
+  const ghi = [];
+  // DnCNN trước (nặng nhất), mặt nạ da sau — được ưu tiên ngồi chung card với nó.
+  // `chiDa` (Retouch v2): không nạp DnCNN nên mặt nạ da tự trả tiền khởi tạo card.
+  for (const k of ['dn', 'skin']) {
+    const r = d.kq[k];
+    if (k === 'dn' && chiDa) continue;
+    m[k] = chonCho(k, r, thietBi, k === 'skin' && !chiDa && m.dn !== 'cpu' ? m.dn : null);
+    if (!r) continue;
+    const doDuoc = ['cpu', ...d.gpus].map((g) => (r[g]?.ms != null ? `${g} ${r[g].ms} ms${r[g].tao != null ? ` + tạo ${r[g].tao} ms` : ''}` : `${g} lỗi`)).join(', ');
+    ghi.push(`${k} → ${m[k]} (${doDuoc})`);
+  }
+  const cheDo = thietBi === 'gpu' ? 'device gpu' : motTam() ? 'auto, một tấm / tiến trình' : 'auto, tiến trình sống lâu';
+  m.ghiChu = `${ghi.join('; ')} [${cheDo}]`;
+  return m;
+}
+
+const engines = new Map();
+
+/** Nạp một lần mỗi tiến trình (theo khoá); hỏng thì lần sau thử lại. */
+function napMotLan(khoa, nap) {
+  if (!engines.has(khoa)) {
+    const p = nap();
+    engines.set(khoa, p);
+    p.catch(() => engines.delete(khoa));
+  }
+  return engines.get(khoa);
 }
 
 /**
- * Nạp model một lần cho cả tiến trình. Hỏng thì lần sau thử lại. Trả về kèm
- * `msO`: thời gian một ô DnCNN trên máy đã chọn (đo lần chạy thứ hai — lần đầu
- * GPU còn dịch model) để ghi nhật ký.
+ * Nạp hai model Retouch v1 (mặt nạ da + DnCNN). KHÔNG chạy khởi động: trước
+ * 13/11 mỗi lần nạp chạy DnCNN hai lần chỉ để ghi thời gian vào nhật ký — mỗi tấm
+ * của snow.exe mất ~0,2 giây trên GPU, ~3,5 giây trên máy không có GPU. Đo thời
+ * gian một ô: doMotO (kiem-tra.bat, và server máy phòng gọi lúc khởi động để làm nóng).
  */
-export function openXoaMun() {
-  if (!engine) {
-    engine = (async () => {
-      for (const f of Object.values(MODEL_FILES)) {
-        if (!fs.existsSync(path.join(MODEL_DIR, f))) throw new Error(`thiếu model ${f} trong ${MODEL_DIR}`);
-      }
-      const ort = (await import('onnxruntime-node')).default;
-      const may = await chonMay();
-      const [skin, dn] = await Promise.all(['skin', 'dn'].map((k) =>
-        ort.InferenceSession.create(docModel(k), tuyChonPhien(may[k]))));
-      const o = { [dn.inputNames[0]]: new ort.Tensor('float32', new Float32Array(3 * TILE * TILE).fill(0.6), [1, 3, TILE, TILE]) };
-      await dn.run(o);
-      const t = Date.now();
-      await dn.run(o);
-      return { ort, skin, dn, may, msO: Date.now() - t };
-    })();
-    engine.catch(() => {
-      engine = null;
-    });
-  }
-  return engine;
+export function openXoaMun({ thietBi = 'auto' } = {}) {
+  return napMotLan(`v1|${thietBi}`, async () => {
+    for (const f of Object.values(MODEL_FILES)) {
+      if (!fs.existsSync(path.join(MODEL_DIR, f))) throw new Error(`thiếu model ${f} trong ${MODEL_DIR}`);
+    }
+    const ort = (await import('onnxruntime-node')).default;
+    const may = await chonMay(thietBi);
+    const [skin, dn] = await Promise.all(['skin', 'dn'].map((k) =>
+      ort.InferenceSession.create(docModel(k), tuyChonPhien(may[k]))));
+    return { ort, skin, dn, may };
+  });
 }
 
-let engineDa = null;
-
 /**
- * Chỉ cần MẶT NẠ DA (Retouch v2: mặt nạ Capture One + bộ chữa tự viết). Có đủ
- * hai model thì dùng chung phiên của openXoaMun (đã chọn CPU / GPU); thiếu DnCNN
- * thì nạp riêng skinMasking trên CPU — model nhẹ, ~0,4 giây một mặt.
+ * Chỉ MẶT NẠ DA (Retouch v2: mặt nạ Capture One + bộ chữa tự viết) — không nạp
+ * DnCNN (trước 13/11 nạp thừa cả nó, ~1,5 giây mỗi tấm). Máy chọn như v1.
  */
-export function openMatNa() {
-  if (!engineDa) {
-    engineDa = (async () => {
-      if (!fs.existsSync(path.join(MODEL_DIR, MODEL_FILES.skin))) throw new Error(`thiếu model ${MODEL_FILES.skin} trong ${MODEL_DIR}`);
-      if (fs.existsSync(path.join(MODEL_DIR, MODEL_FILES.dn))) {
-        try {
-          return await openXoaMun();
-        } catch {
-          // DnCNN hỏng không sao: v2 không cần nó
-        }
-      }
-      const ort = (await import('onnxruntime-node')).default;
-      const skin = await ort.InferenceSession.create(docModel('skin'), tuyChonPhien('cpu'));
-      return { ort, skin, dn: null, may: { skin: 'cpu', ghiChu: 'CPU (chỉ mặt nạ da)' }, msO: null };
-    })();
-    engineDa.catch(() => {
-      engineDa = null;
-    });
-  }
-  return engineDa;
+export function openMatNa({ thietBi = 'auto' } = {}) {
+  return napMotLan(`v2|${thietBi}`, async () => {
+    if (!fs.existsSync(path.join(MODEL_DIR, MODEL_FILES.skin))) throw new Error(`thiếu model ${MODEL_FILES.skin} trong ${MODEL_DIR}`);
+    const ort = (await import('onnxruntime-node')).default;
+    const may = await chonMay(thietBi, false, true);
+    const skin = await ort.InferenceSession.create(docModel('skin'), tuyChonPhien(may.skin));
+    return { ort, skin, dn: null, may: { skin: may.skin, ghiChu: may.ghiChu.split('; ').filter((s) => s.startsWith('skin') || s.startsWith('CPU') || s.includes('MUN_MAY')).join('; ') || may.ghiChu } };
+  });
+}
+
+/** Thời gian một ô DnCNN (ms, lần chạy thứ hai — lần đầu GPU còn dịch). Cũng làm nóng phiên. */
+export async function doMotO(e) {
+  if (!e.dn) return null;
+  const o = { [e.dn.inputNames[0]]: new e.ort.Tensor('float32', new Float32Array(3 * TILE * TILE).fill(0.6), [1, 3, TILE, TILE]) };
+  await e.dn.run(o);
+  const t = Date.now();
+  await e.dn.run(o);
+  return Date.now() - t;
 }
 
 /**
@@ -370,10 +432,10 @@ async function banDoSua(e, small, sw, sh, coDa) {
  * `chua`: 'dncnn' (Retouch v1 — đúng Capture One) | 'tu-viet' (Retouch v2 —
  * mặt nạ da Capture One, chữa bằng bộ tự viết; không cần model DnCNN).
  */
-export async function xoaMun(rgb, width, height, faces, { amount = 100, onMat = null, chua = 'dncnn' } = {}) {
+export async function xoaMun(rgb, width, height, faces, { amount = 100, onMat = null, chua = 'dncnn', thietBi = 'auto' } = {}) {
   if (!faces.length || amount <= 0) return 0;
   const tuViet = chua === 'tu-viet';
-  const e = tuViet ? await openMatNa() : await openXoaMun();
+  const e = tuViet ? await openMatNa({ thietBi }) : await openXoaMun({ thietBi });
   // Khung Capture One của từng mặt, và tâm + cỡ để chia điểm ảnh cho mặt gần nhất.
   const khung = faces.map((f) => {
     const w = f.w * K_RONG;

@@ -7,6 +7,12 @@ import { basename, dirname, extname, join } from 'node:path';
 import { ROOT } from './config.js';
 import { configPathOf, FILTERS, pickFilter } from './filters/registry.js';
 
+// Mỗi lần dslrBooth gọi là một tiến trình mới xử lý MỘT tấm: retouch chọn CPU /
+// GPU theo tổng (tạo phiên + chạy), không chỉ tốc độ chạy — xem chonCho trong
+// src/retouch/xoa-mun.js. cmdDir (cả thư mục trong một tiến trình) đặt lại.
+// Server máy phòng nạp thẳng pipeline, không qua file này: giữ cách chọn cũ.
+if (!process.env.MUN_CHE_DO) process.env.MUN_CHE_DO = 'mot-tam';
+
 /**
  * ĐIỂM VÀO — vừa là đích của dslrBooth Triggers, vừa là công cụ dòng lệnh.
  *
@@ -148,6 +154,8 @@ async function cmdDir(dir, cfg, force, opts = {}) {
     .map((f) => join(dir, f))
     .filter((f) => statSync(f).isFile());
   console.log(`Xử lý ${files.length} ảnh trong ${dir}`);
+  // Nhiều tấm trong một tiến trình: phiên model tạo một lần, chọn máy chạy nhanh nhất.
+  if (files.length > 2 && process.env.MUN_CHE_DO === 'mot-tam') process.env.MUN_CHE_DO = 'nhieu-tam';
   const t0 = Date.now();
   for (const f of files) await processFile(f, cfg, { force, ...opts });
   console.log(`Xong ${files.length} ảnh trong ${((Date.now() - t0) / 1000).toFixed(1)}s`);
