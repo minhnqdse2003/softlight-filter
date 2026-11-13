@@ -41,7 +41,9 @@ REM  Goi day du: CA BA bo loc phai co mat - truoc day script kiem tra instax.exe
 REM  va bao operator tro dslrBooth toi no, nhung chi chep softlight sang _deploy.
 REM  Goi /chi-tuyet: src van chep NGUYEN (cli.js nap ca registry), chi bo exe va
 REM  cau hinh cua hai bo loc kia de khong ai tro nham dslrBooth vao chung.
-set "FILES=softlight.exe softlight.config.json instax.exe instax.config.json snow.exe snow.config.json"
+REM  instaxlight / instaxblue: mau preset Light / Blue cua may Instax (dslrBooth
+REM  Post-Processing, FilmongBooth tu tro event vao) - di cung instax.exe.
+set "FILES=softlight.exe softlight.config.json instax.exe instax.config.json instaxlight.exe instaxlight.config.json instaxblue.exe instaxblue.config.json snow.exe snow.config.json"
 if defined CHI_TUYET set "FILES=snow.exe snow.config.json"
 for %%F in (%FILES% kiem-tra.bat tach-nguoi.bat xem-thu.bat package.json README.md) do copy /y "%%F" "_deploy\" >nul
 xcopy /e /i /q /y "src"          "_deploy\src"          >nul

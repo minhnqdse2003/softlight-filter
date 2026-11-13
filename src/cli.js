@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {
   appendFileSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync,
-  readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync,
+  readdirSync, readFileSync, readSync, renameSync, statSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import { basename, dirname, extname, join } from 'node:path';
 import { ROOT } from './config.js';
@@ -42,6 +42,50 @@ function log(fields) {
   if (process.env.SOFTLIGHT_VERBOSE || !process.env.SOFTLIGHT_QUIET) console.log(line);
 }
 
+/* ═══════════════════════ dấu "đã qua bộ lọc" trong file ═══════════════════════ */
+
+/**
+ * Mỗi ảnh bộ lọc ghi ra mang một đoạn COM của JPEG: "filmong-filter:<id>,<id>…" —
+ * các bộ lọc ĐÃ chạy trên ảnh này, theo thứ tự. Bản backup _original chỉ chặn chạy
+ * lại trên CÙNG một đường dẫn; ảnh bị chép sang chỗ khác (FilmongBooth chép ảnh đơn
+ * sang InstaxDigital rồi lọc tiếp) thì mất dấu đó, và một bộ lọc chồng lên chính nó
+ * (14/11/2026: preset Light áp hai lần lên ảnh đơn tải về, đen bị nâng lên xám) là
+ * hỏng ảnh khách. Dấu đi theo nội dung file nên chép đi đâu cũng còn; bộ lọc thấy
+ * id của chính nó thì bỏ qua. Đoạn COM không đụng tới pixel hay EXIF.
+ */
+const MARK = 'filmong-filter:';
+
+function marksOf(path) {
+  let fd;
+  try {
+    fd = openSync(path, 'r');
+    const head = Buffer.alloc(131072);
+    const n = readSync(fd, head, 0, head.length, 0);
+    const s = head.subarray(0, n).toString('latin1');
+    const i = s.indexOf(MARK);
+    if (i < 0) return [];
+    const end = s.indexOf('\0', i);
+    return s.slice(i + MARK.length, end < 0 ? i + 256 : end).split(',').filter(Boolean);
+  } catch {
+    return [];
+  } finally {
+    if (fd !== undefined) try { closeSync(fd); } catch { /* bỏ qua */ }
+  }
+}
+
+/** Chèn đoạn COM mang dấu ngay sau các đoạn APPn (JFIF / EXIF / ICC) của JPEG. */
+function withMarks(jpeg, marks) {
+  if (jpeg[0] !== 0xff || jpeg[1] !== 0xd8) return jpeg;
+  let at = 2;
+  while (at + 4 <= jpeg.length && jpeg[at] === 0xff && jpeg[at + 1] >= 0xe0 && jpeg[at + 1] <= 0xef) {
+    at += 2 + jpeg.readUInt16BE(at + 2);
+  }
+  const text = Buffer.from(MARK + marks.join(',') + '\0', 'latin1');
+  const seg = Buffer.alloc(4);
+  seg[0] = 0xff; seg[1] = 0xfe; seg.writeUInt16BE(text.length + 2, 2);
+  return Buffer.concat([jpeg.subarray(0, at), seg, text, jpeg.subarray(at)]);
+}
+
 /* ═══════════════════════ xử lý một file ═══════════════════════ */
 
 async function processFile(path, cfg, { force = false, via = 'cli', bw = false, maxEdge = 0 } = {}) {
@@ -67,6 +111,10 @@ async function processFile(path, cfg, { force = false, via = 'cli', bw = false, 
   if (!force && cfg.backup.enabled && existsSync(backupPath)) {
     return log({ ev: 'skip', reason: 'đã xử lý trước đó', path });
   }
+  // Ảnh mang dấu của chính bộ lọc này (đã lọc ở chỗ khác rồi bị chép sang đây).
+  if (!force && marksOf(path).includes(FILTER.id)) {
+    return log({ ev: 'skip', reason: `ảnh đã qua ${FILTER.id} (dấu trong file)`, path });
+  }
 
   // Chốt chống chạy song song. Bản backup ở trên không đủ: nếu cùng một ảnh
   // được gọi hai lần gần như đồng thời (ví dụ cấu hình cả Post-Processing lẫn
@@ -87,7 +135,9 @@ async function processFile(path, cfg, { force = false, via = 'cli', bw = false, 
   }
 
   try {
-    await processLocked(path, cfg, { via, started, backupDir, backupPath, bw, maxEdge });
+    // dslrBooth Post-Processing chỉ truyền đường dẫn: cạnh dài lấy từ cấu hình.
+    const edge = maxEdge || (cfg.limits && cfg.limits.maxEdge) || 0;
+    await processLocked(path, cfg, { via, started, backupDir, backupPath, bw, maxEdge: edge });
   } finally {
     try { closeSync(lockFd); unlinkSync(lockPath); } catch { /* dọn dẹp */ }
   }
@@ -102,6 +152,7 @@ async function processLocked(path, cfg, { via, started, backupDir, backupPath, b
     return log({ ev: 'skip', reason: `ảnh nhỏ (${meta.width}x${meta.height})`, path });
   }
 
+  const marks = marksOf(path);
   if (cfg.backup.enabled) {
     mkdirSync(backupDir, { recursive: true });
     copyFileSync(path, backupPath);
@@ -112,7 +163,7 @@ async function processLocked(path, cfg, { via, started, backupDir, backupPath, b
   const tmp = `${path}.${FILTER.id}.tmp`;
   try {
     const { jpeg, width, height, warn } = await FILTER.render(path, cfg, { bw, maxEdge });
-    writeFileSync(tmp, jpeg);
+    writeFileSync(tmp, withMarks(jpeg, [...marks, FILTER.id]));
     renameSync(tmp, path);
     const ms = Date.now() - started;
     const warns = [warn, ms > cfg.limits.maxMs ? `chậm hơn ngưỡng ${cfg.limits.maxMs}ms` : null].filter(Boolean);

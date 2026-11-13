@@ -302,6 +302,9 @@ export function normalizeFileOptions(raw) {
     limits: {
       minEdge: Math.round(num(l.minEdge, [0, 20000, 400])),
       maxMs: Math.round(num(l.maxMs, [100, 60000, 2500])),
+      // Thu nhỏ cạnh dài trước khi xử lý khi lệnh gọi không có --max-edge (0 = giữ
+      // nguyên). Cho Post-Processing của dslrBooth, vốn chỉ truyền đường dẫn ảnh.
+      maxEdge: Math.round(num(l.maxEdge, [0, 20000, 0])),
     },
   };
 }
@@ -1068,6 +1071,10 @@ function hdrGain(o, f, H) {
     if (aS >= 0) {
       const x = -local;
       e = hdrSoft(x, 2.1) + Math.max(0, x) * (f - o);
+      // Số hạng (f - o) không bị chặn: ô gần đen (x ~ 10) nằm cạnh nền sáng hơn
+      // vài stop cho e ~ 30 EV, ảnh đen lấm tấm đốm trắng (áo đen, tóc, con
+      // ngươi). Giữ đúng giới hạn của thanh trượt: Shadow tối đa 2.1 EV.
+      if (e > 2.1) e = 2.1;
     } else {
       e = -hdrSoft(-avg, 2.1);
     }

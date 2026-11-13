@@ -1,0 +1,99 @@
+{
+  "_doc": "Bo loc Instax Wide - cau hinh v2 (cong thuc Capture One). Moi so = dung so tren thanh truot (Contrast 12, Exposure 0.3 EV, Kelvin 5800...). strength = do dam cua ca look (0 = anh goc, 100 = du). HDR: highlight AM = keo vung sang xuong (quy uoc Capture One moi). Levels: midtone -100..100, duong = sang len. Chinh bang web/instax-tuner.html roi bam Luu, dat file nay canh instax.exe. LUT .cube dat trong thu muc luts canh instax.exe. Thu tu: LUT > White Balance > Exposure > Color Balance Master > HDR > Color Editor > Saturation > Contrast > Brightness > Levels > Curve > Color Balance 3 vung > Black & White > Clarity > Vignetting > Film Grain.",
+  "version": 2,
+  "enabled": true,
+  "strength": 100,
+  "lut": {
+    "file": "",
+    "opacity": 100
+  },
+  "whiteBalance": {
+    "kelvin": 4900,
+    "tint": -3
+  },
+  "exposure": {
+    "exposure": 0.1,
+    "contrast": -5,
+    "brightness": 3,
+    "saturation": -10
+  },
+  "hdr": {
+    "highlight": -15,
+    "shadow": 15,
+    "white": -5,
+    "black": 0
+  },
+  "levels": {
+    "rgb": { "inBlack": 0, "inWhite": 255, "midtone": 0, "outBlack": 0, "outWhite": 255 },
+    "r": { "inBlack": 0, "inWhite": 255, "midtone": 0, "outBlack": 0, "outWhite": 255 },
+    "g": { "inBlack": 0, "inWhite": 255, "midtone": 0, "outBlack": 0, "outWhite": 255 },
+    "b": { "inBlack": 0, "inWhite": 255, "midtone": 0, "outBlack": 0, "outWhite": 255 }
+  },
+  "curve": {
+    "rgb": [[0, 12], [128, 130], [255, 250]],
+    "luma": [[0, 0], [255, 255]],
+    "r": [[0, 0], [255, 255]],
+    "g": [[0, 0], [255, 255]],
+    "b": [[0, 14], [255, 255]]
+  },
+  "colorBalance": {
+    "master": { "hue": 0, "saturation": 0 },
+    "shadow": { "hue": 215, "saturation": 18, "lightness": 0 },
+    "midtone": { "hue": 0, "saturation": 0, "lightness": 0 },
+    "highlight": { "hue": 200, "saturation": 6, "lightness": 0 }
+  },
+  "colorEditor": {
+    "red": { "hue": 0, "saturation": 0, "lightness": 0 },
+    "orange": { "hue": 0, "saturation": 0, "lightness": 4 },
+    "yellow": { "hue": 0, "saturation": 0, "lightness": 0 },
+    "green": { "hue": 0, "saturation": 0, "lightness": 0 },
+    "cyan": { "hue": 0, "saturation": 0, "lightness": 0 },
+    "blue": { "hue": 0, "saturation": 0, "lightness": 0 },
+    "purple": { "hue": 0, "saturation": 0, "lightness": 0 },
+    "magenta": { "hue": 0, "saturation": 0, "lightness": 0 }
+  },
+  "blackWhite": {
+    "enabled": false,
+    "red": 0,
+    "yellow": 0,
+    "green": 0,
+    "cyan": 0,
+    "blue": 0,
+    "magenta": 0,
+    "highlightHue": 0,
+    "highlightSaturation": 0,
+    "shadowHue": 0,
+    "shadowSaturation": 0
+  },
+  "clarity": {
+    "method": "natural",
+    "clarity": 0,
+    "structure": 0
+  },
+  "vignetting": {
+    "amount": 0,
+    "method": "elliptic"
+  },
+  "grain": {
+    "type": "fine",
+    "impact": 0,
+    "granularity": 50,
+    "seed": 0
+  },
+  "output": {
+    "quality": 95,
+    "chromaSubsampling": "4:4:4"
+  },
+  "backup": {
+    "enabled": true,
+    "folder": "_original"
+  },
+  "skip": {
+    "pathContains": []
+  },
+  "limits": {
+    "minEdge": 400,
+    "maxMs": 2500,
+    "maxEdge": 2400
+  }
+}

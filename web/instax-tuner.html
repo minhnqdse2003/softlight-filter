@@ -587,6 +587,9 @@ function normalizeFileOptions(raw) {
     limits: {
       minEdge: Math.round(num(l.minEdge, [0, 20000, 400])),
       maxMs: Math.round(num(l.maxMs, [100, 60000, 2500])),
+      // Thu nhỏ cạnh dài trước khi xử lý khi lệnh gọi không có --max-edge (0 = giữ
+      // nguyên). Cho Post-Processing của dslrBooth, vốn chỉ truyền đường dẫn ảnh.
+      maxEdge: Math.round(num(l.maxEdge, [0, 20000, 0])),
     },
   };
 }
@@ -1353,6 +1356,10 @@ function hdrGain(o, f, H) {
     if (aS >= 0) {
       const x = -local;
       e = hdrSoft(x, 2.1) + Math.max(0, x) * (f - o);
+      // Số hạng (f - o) không bị chặn: ô gần đen (x ~ 10) nằm cạnh nền sáng hơn
+      // vài stop cho e ~ 30 EV, ảnh đen lấm tấm đốm trắng (áo đen, tóc, con
+      // ngươi). Giữ đúng giới hạn của thanh trượt: Shadow tối đa 2.1 EV.
+      if (e > 2.1) e = 2.1;
     } else {
       e = -hdrSoft(-avg, 2.1);
     }
@@ -2481,7 +2488,9 @@ function renderLook(data, w, h, stride, look, opts = {}) {
   }
   $("cfgFile").addEventListener("change", function (e) {
     var f = e.target.files[0]; e.target.value = "";
-    if (f) f.text().then(loadConfigText);
+    // Lưu lại đúng tên đã nạp: instaxlight.config.json / instaxblue.config.json
+    // (preset màu) dùng chung trang này với instax.config.json.
+    if (f) f.text().then(function (t) { if (loadConfigText(t)) setCfgName(/\.config\.json$/i.test(f.name) ? f.name : "instax.config.json"); });
   });
   $("pasteBtn").addEventListener("click", function () {
     var ta = $("jsonOut"), btn = $("pasteBtn");
@@ -2509,16 +2518,22 @@ function renderLook(data, w, h, stride, look, opts = {}) {
 
   /* Lưu file. Mở từ file trên máy: thẻ <a download>. Mở qua claude.ai: đi qua
      claude.use("downloads") để người xem xác nhận. */
-  var saveBtn = $("saveBtn"), hostSave = null;
+  var saveBtn = $("saveBtn"), hostSave = null, cfgName = "instax.config.json";
+  /** Tên file sẽ lưu = tên đã nạp; nhớ qua lần mở sau, hiện trên nút Lưu để không lưu nhầm preset. */
+  function setCfgName(n) {
+    cfgName = n || "instax.config.json";
+    saveBtn.textContent = "Lưu " + cfgName;
+    remember();
+  }
   if (window.claude && typeof window.claude.use === "function") {
     saveBtn.disabled = true;
     window.claude.use("downloads").then(function (d) { hostSave = d; saveBtn.disabled = !d; }, function () { saveBtn.disabled = true; });
   }
   saveBtn.addEventListener("click", function () {
     var text = configToJson(cfg);
-    var ok = function () { saved = clone(cfg); toast("Đã lưu instax.config.json — đặt cạnh instax.exe"); };
+    var ok = function () { saved = clone(cfg); toast("Đã lưu " + cfgName + " — đặt cạnh " + cfgName.replace(/\.config\.json$/i, ".exe")); };
     if (hostSave) {
-      hostSave.save({ filename: "instax.config.json", data: text }).then(ok, function (err) {
+      hostSave.save({ filename: cfgName, data: text }).then(ok, function (err) {
         if (err && err.code === "declined") return;
         toast("Không lưu được ở đây — dùng nút Sao chép ở tab File.");
       });
@@ -2527,7 +2542,7 @@ function renderLook(data, w, h, stride, look, opts = {}) {
     try {
       var a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
-      a.download = "instax.config.json";
+      a.download = cfgName;
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
       ok();
@@ -2564,7 +2579,7 @@ function renderLook(data, w, h, stride, look, opts = {}) {
   });
 
   function remember() {
-    try { localStorage.setItem("ix2.cfg", JSON.stringify({ cfg: cfg, style: styleName, loaded: loadedStyle, saved: saved })); } catch (e) {}
+    try { localStorage.setItem("ix2.cfg", JSON.stringify({ cfg: cfg, style: styleName, loaded: loadedStyle, saved: saved, name: cfgName })); } catch (e) {}
   }
 
   /* ═══════════════════════════════════════════════════════════════
@@ -2580,6 +2595,7 @@ function renderLook(data, w, h, stride, look, opts = {}) {
         fileOpts = normalizeFileOptions(s.cfg);
         cfg = Object.assign({ enabled: s.cfg.enabled !== false }, normalizeLook(s.cfg, base), fileOpts);
         saved = s.saved ? Object.assign({ enabled: s.saved.enabled !== false }, normalizeLook(s.saved, base), normalizeFileOptions(s.saved)) : clone(cfg);
+        if (typeof s.name === "string" && /\.config\.json$/i.test(s.name)) { cfgName = s.name; saveBtn.textContent = "Lưu " + cfgName; }
       }
     } catch (e) {}
     var t = "exposure";

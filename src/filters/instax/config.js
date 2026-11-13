@@ -80,7 +80,7 @@ const num = (v, lo, hi, dflt) => {
  * file này do người vận hành sửa tay giữa các sự kiện nên số nhập sai phải bị
  * kẹp im lặng, không được ném lỗi làm gián đoạn phiên chụp.
  */
-export function loadConfig(path = CONFIG_PATH) {
+export function loadConfig(path = CONFIG_PATH, base) {
   let raw = {};
   try {
     raw = JSON.parse(readFileSync(path, "utf8"));
@@ -91,7 +91,11 @@ export function loadConfig(path = CONFIG_PATH) {
   }
 
   const d = DEFAULTS;
-  if (raw.version === 2) return { version: 2, enabled: raw.enabled !== false, ...normalizeLook(raw), ...normalizeFileOptions(raw) };
+  // `base` có mặt = preset màu (instaxlight / instaxblue): luôn là v2, chỗ nào file
+  // không ghi thì giữ trung tính — không được rơi về look phim của instax.exe.
+  if (raw.version === 2 || base) {
+    return { version: 2, enabled: raw.enabled !== false, ...normalizeLook(raw, base), ...normalizeFileOptions(raw) };
+  }
 
   const c = { ...d.colour, ...raw.colour };
   const f = { ...d.film, ...raw.film };

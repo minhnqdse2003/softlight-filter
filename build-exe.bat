@@ -18,6 +18,8 @@ if not exist "%CSC%" (
 
 call :build softlight || exit /b 1
 call :build instax    || exit /b 1
+call :build instaxlight || exit /b 1
+call :build instaxblue  || exit /b 1
 call :build snow      || exit /b 1
 exit /b 0
 

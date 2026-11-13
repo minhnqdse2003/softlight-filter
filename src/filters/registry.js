@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { loadConfig as loadSoftLight, ROOT } from '../config.js';
 import { loadConfig as loadInstax } from './instax/config.js';
+import { neutralLook } from './instax/look.js';
 import { loadConfig as loadSnow } from './snow/config.js';
 
 /**
@@ -21,6 +22,36 @@ import { loadConfig as loadSnow } from './snow/config.js';
  * dslrBooth gọi chương trình này nhiều lần mỗi phiên cho những sự kiện không
  * đụng đến ảnh, mà nạp sharp/libvips tốn hơn 100ms mỗi lần.
  */
+/**
+ * Preset màu của máy Instax (Western Gallery: Light / Blue). Cùng công cụ chỉnh
+ * với instax.exe, nhưng KHÔNG phải look phim: dslrBooth chạy nó qua
+ * Post-Processing trên từng ảnh đơn ngay khi chụp, trước khi ghép template —
+ * nên màu preset nằm sẵn trong ảnh ghép đem in, và bản digital (instax.exe chồng
+ * chất phim lên ảnh ghép đó) ra cùng màu với tấm in. Chỗ nào file cấu hình không
+ * ghi thì trung tính, không phải bộ chuẩn cộng đồng của instax.exe.
+ */
+function instaxPreset(id, title, blurb) {
+  const configFile = `${id}.config.json`;
+  return {
+    id,
+    title,
+    blurb,
+    configFile,
+    exeFile: `${id}.exe`,
+    // Cùng trang chỉnh với instax: Nạp config <id>.config.json, chỉnh, Lưu.
+    tunerFile: 'instax-tuner.html',
+    loadConfig: (path = join(ROOT, configFile)) => loadInstax(path, neutralLook()),
+    render: async (input, cfg, opts) =>
+      (await import('./instax/pipeline.js')).renderInstax(input, cfg, opts),
+    renderComparison: async (input, cfg, maxWidth, opts) =>
+      (await import('./instax/pipeline.js')).renderComparison(input, cfg, maxWidth, opts),
+    // Bài kiểm của instax đo đúng chất phim (matte, grain…) — không áp cho preset.
+    selftest: async () => {
+      console.log(`Preset ${title} không có selftest số đo. Kiểm bằng: node src/cli.js --filter ${id} --preview <ảnh.jpg>`);
+    },
+  };
+}
+
 export const FILTERS = {
   softlight: {
     id: 'softlight',
@@ -53,6 +84,11 @@ export const FILTERS = {
     selftest: async (cfg) => (await import('./instax/pipeline.js')).selftest(cfg),
     verdicts: async (m) => (await import('./instax/pipeline.js')).verdicts(m),
   },
+
+  instaxlight: instaxPreset('instaxlight', 'Instax · Light Preset',
+    'Màu preset Light cho máy Instax: sáng, dịu tương phản, hơi ấm. dslrBooth Post-Processing, vào cả bản in.'),
+  instaxblue: instaxPreset('instaxblue', 'Instax · Blue Preset',
+    'Màu preset Blue cho máy Instax: lạnh, ám xanh ở vùng tối. dslrBooth Post-Processing, vào cả bản in.'),
 
   snow: {
     id: 'snow',
